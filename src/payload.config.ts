@@ -12,6 +12,10 @@ import sharp from 'sharp'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Sites } from './collections/Sites'
+import { Departments } from './collections/Departments'
+import { CodeClassifications } from './collections/codes/CodeClassifications'
+import { CodeGroups } from './collections/codes/CodeGroups'
+import { Codes } from './collections/codes/Codes'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -168,7 +172,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Sites],
+  collections: [Users, Media, Sites, Departments, CodeClassifications, CodeGroups, Codes],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

@@ -48,10 +48,10 @@
 
 ### Departments & codes — refs 1-14, 1-22..1-26
 
-- [ ] 1.16 `departments` tree: add top/child, name/duties/phone/fax/use-flag, drag ordering; picker popup component (reused by admins/surveys)
-- [ ] 1.17 `codeClassifications` (English-letters code) + `codeGroups` (codeId = DB column-name convention) + hierarchical `codes` (2-digit-per-depth values, tree popup editor, ordering)
+- [x] 1.16 `departments` tree: add top/child, name/duties/phone/fax/use-flag, drag ordering; picker popup component (reused by admins/surveys) (data model + cycle/delete-with-children guards only; drag ordering UI and the reusable picker popup component are deferred to a later custom-admin-component task, per Task 1B)
+- [x] 1.17 `codeClassifications` (English-letters code) + `codeGroups` (codeId = DB column-name convention) + hierarchical `codes` (2-digit-per-depth values, tree popup editor, ordering) (data model + validation hooks only; the tree popup editor UI is deferred to a later custom-admin-component task, per Task 1B)
 - [ ] 1.18 Code-search popup component (reused by boards)
-- [ ] 1.19 Seed baseline code sets from ref 1-74 (APRV_CD, ACS_VLD_USE_CD, BBS_ITEM_TYPE_CD, …)
+- [x] 1.19 Seed baseline code sets from ref 1-74 (APRV_CD, ACS_VLD_USE_CD, BBS_ITEM_TYPE_CD, …)
 
 **Exit criteria:** admin can create sites, request+approve accounts, define roles with menu grants and see navigation change accordingly; departments and codes manageable; all covered by tests.
 

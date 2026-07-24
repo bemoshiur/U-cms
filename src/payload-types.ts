@@ -70,6 +70,10 @@ export interface Config {
     users: User;
     media: Media;
     sites: Site;
+    departments: Department;
+    codeClassifications: CodeClassification;
+    codeGroups: CodeGroup;
+    codes: Code;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -80,6 +84,10 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     sites: SitesSelect<false> | SitesSelect<true>;
+    departments: DepartmentsSelect<false> | DepartmentsSelect<true>;
+    codeClassifications: CodeClassificationsSelect<false> | CodeClassificationsSelect<true>;
+    codeGroups: CodeGroupsSelect<false> | CodeGroupsSelect<true>;
+    codes: CodesSelect<false> | CodesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -241,6 +249,103 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "departments".
+ */
+export interface Department {
+  id: number;
+  /**
+   * Department name (legacy 부서명).
+   */
+  name: string;
+  /**
+   * Department duties/notes (legacy 부서업무).
+   */
+  duties?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  /**
+   * Legacy 사용여부. Inactive departments are hidden from pickers but kept (not deleted), so historical references keep resolving.
+   */
+  isActive?: boolean | null;
+  /**
+   * Parent department. Leave empty for a top-level department.
+   */
+  parent?: (number | null) | Department;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeClassifications".
+ */
+export interface CodeClassification {
+  id: number;
+  /**
+   * English-letters-only classification code, e.g. "SYS". One per sub-system.
+   */
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeGroups".
+ */
+export interface CodeGroup {
+  id: number;
+  /**
+   * Uppercase snake_case, matching the DB column name this code group backs, e.g. "APRV_CD".
+   */
+  codeId: string;
+  name: string;
+  classification: number | CodeClassification;
+  description?: string | null;
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codes".
+ */
+export interface Code {
+  id: number;
+  group: number | CodeGroup;
+  /**
+   * Concatenated 2-digit-per-depth value, e.g. "01", "0101", "010101". Must start with the parent code, if any.
+   */
+  code: string;
+  name: string;
+  /**
+   * Parent detail code. Leave empty for a top-level (depth 1) code.
+   */
+  parent?: (number | null) | Code;
+  /**
+   * Computed automatically: 1 for a top-level code, otherwise parent depth + 1.
+   */
+  depth?: number | null;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  description?: string | null;
+  /**
+   * Optional legacy code value from U-CMS v3.0 (e.g. "Y"/"I"/"N", "AVU001"), kept for audit parity.
+   */
+  legacyValue?: string | null;
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -274,6 +379,22 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'sites';
         value: number | Site;
+      } | null)
+    | ({
+        relationTo: 'departments';
+        value: number | Department;
+      } | null)
+    | ({
+        relationTo: 'codeClassifications';
+        value: number | CodeClassification;
+      } | null)
+    | ({
+        relationTo: 'codeGroups';
+        value: number | CodeGroup;
+      } | null)
+    | ({
+        relationTo: 'codes';
+        value: number | Code;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -424,6 +545,63 @@ export interface SitesSelect<T extends boolean = true> {
               show?: T;
             };
       };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "departments_select".
+ */
+export interface DepartmentsSelect<T extends boolean = true> {
+  name?: T;
+  duties?: T;
+  phone?: T;
+  fax?: T;
+  isActive?: T;
+  parent?: T;
+  order?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeClassifications_select".
+ */
+export interface CodeClassificationsSelect<T extends boolean = true> {
+  code?: T;
+  name?: T;
+  description?: T;
+  isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeGroups_select".
+ */
+export interface CodeGroupsSelect<T extends boolean = true> {
+  codeId?: T;
+  name?: T;
+  classification?: T;
+  description?: T;
+  isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codes_select".
+ */
+export interface CodesSelect<T extends boolean = true> {
+  group?: T;
+  code?: T;
+  name?: T;
+  parent?: T;
+  depth?: T;
+  order?: T;
+  description?: T;
+  legacyValue?: T;
+  isActive?: T;
   updatedAt?: T;
   createdAt?: T;
 }
