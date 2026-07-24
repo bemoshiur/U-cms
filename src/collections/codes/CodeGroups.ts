@@ -1,5 +1,7 @@
 import type { CollectionConfig, TextFieldSingleValidation } from 'payload'
 
+import { hasMenuAccessSync, menuAccessConfig } from '../../access/hasMenuAccess'
+
 /**
  * A custom `validate` REPLACES Payload's default required-checking
  * validator entirely (see the identical comment on `validateSiteId` in
@@ -28,7 +30,10 @@ export const CodeGroups: CollectionConfig = {
     group: 'System',
     useAsTitle: 'name',
     defaultColumns: ['codeId', 'name', 'classification', 'isActive'],
+    // Menu-based access control (Task 1C) — see src/access/hasMenuAccess.ts.
+    hidden: ({ user }) => !hasMenuAccessSync(user, 'system.codes.groups'),
   },
+  access: menuAccessConfig('system.codes.groups'),
   fields: [
     {
       name: 'codeId',

@@ -39,11 +39,11 @@
 
 ### Roles & permissions — refs 1-10..1-13
 
-- [ ] 1.10 `roles` collection: roleId (`^ROLE_[A-Z0-9]+$`), name, description
-- [ ] 1.11 `adminMenus` tree collection (menuKey, name, parent, order) + seed with full menu map from inventory
-- [ ] 1.12 Role↔menu grants UI: checkbox tree w/ open/close-all, apply button (ref 1-13)
-- [ ] 1.13 Role users view: list members of role, multi-select remove (ref 1-12)
-- [ ] 1.14 `hasMenuAccess()` helper wired into: collection `access`, `admin.hidden`, custom nav, custom views; SUPER bypass; privacy-role and DBA-role gates
+- [x] 1.10 `roles` collection: roleId (`^ROLE_[A-Z0-9]+$`), name, description
+- [x] 1.11 `adminMenus` tree collection (menuKey, name, parent, order) + seed with full menu map from inventory
+- [ ] 1.12 Role↔menu grants UI: checkbox tree w/ open/close-all, apply button (ref 1-13) (data model — `roles.menuGrants` — exists; Phase 1 uses the default multi-select relationship widget; the checkbox-tree UI is deferred to a later custom-admin-component task, per Task 1C)
+- [x] 1.13 Role users view: list members of role, multi-select remove (ref 1-12) (read-only `join` field showing role members; multi-select remove UI deferred to a later custom-admin-component task, per Task 1C)
+- [x] 1.14 `hasMenuAccess()` helper wired into: collection `access`, `admin.hidden`, custom nav, custom views; SUPER bypass; privacy-role and DBA-role gates (collection `access` + `admin.hidden` + SUPER bypass done, Task 1C; custom nav/custom-view wiring and the privacy-role/DBA-role gates are later-phase work — no custom nav component exists yet, and the dedicated privacy-processor/DBA roles are Phase 2/6 scope per development-plan.md §2.2)
 - [ ] 1.15 Permission-filtered navigation component (GNB 2-depth + LNB 3-depth+, breadcrumb, full-menu overlay — refs 1-9, 3-11)
 
 ### Departments & codes — refs 1-14, 1-22..1-26

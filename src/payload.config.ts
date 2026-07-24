@@ -16,6 +16,9 @@ import { Departments } from './collections/Departments'
 import { CodeClassifications } from './collections/codes/CodeClassifications'
 import { CodeGroups } from './collections/codes/CodeGroups'
 import { Codes } from './collections/codes/Codes'
+import { Roles } from './collections/Roles'
+import { AdminMenus } from './collections/AdminMenus'
+import { warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -172,11 +175,35 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media, Sites, Departments, CodeClassifications, CodeGroups, Codes],
+  collections: [
+    Users,
+    Media,
+    Sites,
+    Departments,
+    CodeClassifications,
+    CodeGroups,
+    Codes,
+    Roles,
+    AdminMenus,
+  ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
+  },
+  /**
+   * Warms the `menuKey -> adminMenus id` cache that
+   * `src/access/hasMenuAccess.ts`'s synchronous `hasMenuAccessSync` (used by
+   * every gated collection's `admin.hidden`) depends on. `getPayload()`
+   * does not hand back a usable instance until `onInit` resolves, and every
+   * request handler awaits `getPayload()` first — so by the time any
+   * request is served, this has already completed and there is no
+   * cold-cache race. See the design-decision comment at the top of
+   * hasMenuAccess.ts for the full reasoning (including why real
+   * access-control decisions never depend on this cache at all).
+   */
+  onInit: async (payload) => {
+    await warmAdminMenuKeyCache(payload)
   },
   db: postgresAdapter({
     pool: {

@@ -1,6 +1,8 @@
 import type { CollectionConfig, Field, TextFieldSingleValidation } from 'payload'
 import { APIError } from 'payload'
 
+import { hasMenuAccessSync, menuAccess } from '../access/hasMenuAccess'
+
 /**
  * Legacy 사이트 정보 관리 (Site Info Management) footer item shape — each
  * footer field is independently toggleable: 사용중 (shown) / 미사용중
@@ -63,6 +65,38 @@ export const Sites: CollectionConfig = {
     group: 'System',
     useAsTitle: 'name',
     defaultColumns: ['siteId', 'name', 'url', 'isAdminSite'],
+    // Menu-based access control (Task 1C) — see src/access/hasMenuAccess.ts.
+    // The *management* screen (this collection's list/edit views) is still
+    // gated — see the `hidden` note on `read` below.
+    hidden: ({ user }) => !hasMenuAccessSync(user, 'system.sites'),
+  },
+  // `read` deliberately does NOT use `menuAccessConfig('system.sites')` for
+  // all four ops, unlike every other gated collection — discovered via the
+  // mandatory real login+admin-flow check (Task 1C brief's "LOCKOUT SAFETY"
+  // requirement), not a hypothetical: `sites` is also the multi-tenant
+  // plugin's `tenantsSlug`, and
+  // `@payloadcms/plugin-multi-tenant/dist/providers/TenantSelectionProvider/index.js`
+  // calls `payload.find({ collection: 'sites', overrideAccess: false, user })`
+  // UNCONDITIONALLY on every single `/admin/*` page render, for every
+  // authenticated user, regardless of that user's menu grants — it wraps
+  // the whole admin layout, not just a sites-specific view. With `read`
+  // gated behind `system.sites`, that call throws an uncaught `Forbidden`
+  // for any admin lacking that one specific grant, which crashed (HTTP 500,
+  // "Application error") the *entire* admin UI for that user — not just the
+  // sites screens — verified by hitting `/admin` and
+  // `/admin/collections/departments` (not even a tenant-related collection)
+  // as a real roleless user and getting a 500 on both. So `read` is any
+  // authenticated admin (still not anonymous/public — this differs from
+  // `media`'s public-read exception in Media.ts, which is public because
+  // uploads render on the *public* site); only the actual management
+  // operations (create/update/delete) require the `system.sites` grant, and
+  // `hidden` still keeps the management screen out of the nav for anyone
+  // without it.
+  access: {
+    read: ({ req }) => Boolean(req.user),
+    create: menuAccess('system.sites'),
+    update: menuAccess('system.sites'),
+    delete: menuAccess('system.sites'),
   },
   fields: [
     {

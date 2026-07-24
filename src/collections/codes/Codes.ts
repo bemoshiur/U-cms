@@ -1,6 +1,7 @@
 import type { CollectionBeforeValidateHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
+import { hasMenuAccessSync, menuAccessConfig } from '../../access/hasMenuAccess'
 import { toRelationId } from '../utils'
 
 /**
@@ -158,7 +159,10 @@ export const Codes: CollectionConfig = {
     group: 'System',
     useAsTitle: 'name',
     defaultColumns: ['group', 'code', 'name', 'depth', 'isActive'],
+    // Menu-based access control (Task 1C) — see src/access/hasMenuAccess.ts.
+    hidden: ({ user }) => !hasMenuAccessSync(user, 'system.codes.detail'),
   },
+  access: menuAccessConfig('system.codes.detail'),
   // DB-level backstop for the `(group, code)` compound uniqueness rule
   // (see `validateAndComputeDepth` above for the friendly-error layer).
   // Payload supports native compound indexes — no hand-written migration

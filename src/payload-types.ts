@@ -74,12 +74,18 @@ export interface Config {
     codeClassifications: CodeClassification;
     codeGroups: CodeGroup;
     codes: Code;
+    roles: Role;
+    adminMenus: AdminMenu;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
   };
-  collectionsJoins: {};
+  collectionsJoins: {
+    roles: {
+      users: 'users';
+    };
+  };
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
@@ -88,6 +94,8 @@ export interface Config {
     codeClassifications: CodeClassificationsSelect<false> | CodeClassificationsSelect<true>;
     codeGroups: CodeGroupsSelect<false> | CodeGroupsSelect<true>;
     codes: CodesSelect<false> | CodesSelect<true>;
+    roles: RolesSelect<false> | RolesSelect<true>;
+    adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -133,6 +141,14 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: number;
+  /**
+   * Display name (legacy 관리자 이름). Full admin-account fields land in Task 1D.
+   */
+  name?: string | null;
+  /**
+   * Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked.
+   */
+  roles?: (number | Role)[] | null;
   tenants?:
     | {
         tenant: number | Site;
@@ -157,6 +173,63 @@ export interface User {
     | null;
   password?: string | null;
   collection: 'users';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles".
+ */
+export interface Role {
+  id: number;
+  /**
+   * e.g. "ROLE_ADMIN". Uppercase letters, digits, and underscores only.
+   */
+  roleId: string;
+  name: string;
+  description: string;
+  /**
+   * Super roles bypass all menu permission checks.
+   */
+  isSuper?: boolean | null;
+  /**
+   * Admin menus this role grants access to. Ignored for a role with isSuper checked (super roles bypass this entirely).
+   */
+  menuGrants?: (number | AdminMenu)[] | null;
+  /**
+   * Users holding this role (read-only — ref 1-12 "role users view").
+   */
+  users?: {
+    docs?: (number | User)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminMenus".
+ */
+export interface AdminMenu {
+  id: number;
+  /**
+   * PERMANENT permission key, dot-path convention (e.g. "system.sites"). Every gated collection checks against this exact string — do not rename after roles have been granted this menu.
+   */
+  menuKey: string;
+  name: string;
+  /**
+   * Parent menu node. Leave empty for a top-level (1-depth) menu.
+   */
+  parent?: (number | null) | AdminMenu;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  /**
+   * The Payload collection slug this menu node gates, if any (e.g. "sites"). Leave empty for a pure grouping/parent node with no directly bound collection.
+   */
+  collectionSlug?: string | null;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -395,6 +468,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'codes';
         value: number | Code;
+      } | null)
+    | ({
+        relationTo: 'roles';
+        value: number | Role;
+      } | null)
+    | ({
+        relationTo: 'adminMenus';
+        value: number | AdminMenu;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -443,6 +524,8 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  name?: T;
+  roles?: T;
   tenants?:
     | T
     | {
@@ -602,6 +685,33 @@ export interface CodesSelect<T extends boolean = true> {
   description?: T;
   legacyValue?: T;
   isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles_select".
+ */
+export interface RolesSelect<T extends boolean = true> {
+  roleId?: T;
+  name?: T;
+  description?: T;
+  isSuper?: T;
+  menuGrants?: T;
+  users?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminMenus_select".
+ */
+export interface AdminMenusSelect<T extends boolean = true> {
+  menuKey?: T;
+  name?: T;
+  parent?: T;
+  order?: T;
+  collectionSlug?: T;
   updatedAt?: T;
   createdAt?: T;
 }
