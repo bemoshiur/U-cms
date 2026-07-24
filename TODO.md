@@ -9,7 +9,7 @@
 ## Phase 0 — Foundations
 
 - [ ] 0.1 Confirm open decisions with owner: brand name/logo/colors, UI language(s), deferral of standardization + KWCAG modules, deployment target, demo-site design direction
-- [ ] 0.2 Scaffold Payload 3 + Next.js 15 app (`create-payload-app`, TypeScript, App Router)
+- [ ] 0.2 Scaffold Payload 3 + Next.js 16 app (`create-payload-app`, TypeScript, App Router)
 - [ ] 0.3 Postgres via Docker Compose (dev) + `@payloadcms/db-postgres`; `.env` handling and secrets convention
 - [ ] 0.4 Repo hygiene: ESLint, Prettier, tsconfig strict, husky pre-commit, GitHub Actions CI (lint + typecheck + test + build)
 - [ ] 0.5 `src/branding.ts` module (name, logos, colors, contact) + wire `admin.meta` (titleSuffix, favicons incl. dark variant) and `graphics.Logo`/`graphics.Icon`

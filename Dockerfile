@@ -1,4 +1,8 @@
-# To use this Dockerfile, you have to set `output: 'standalone'` in your next.config.mjs file.
+# next.config.ts sets `output: 'standalone'` conditionally, gated on the
+# DOCKER_BUILD env var (see below), so local `pnpm dev`/`pnpm build` +
+# `pnpm start` (used by the Playwright e2e webServer) keep producing the
+# regular `.next` output while this Dockerfile's build still gets the
+# standalone output it copies out of `.next/standalone`.
 # From https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
 
 FROM node:22.17.0-alpine AS base
@@ -24,6 +28,9 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Tells next.config.ts to set `output: 'standalone'` for this build only.
+ENV DOCKER_BUILD=1
 
 # Next.js collects completely anonymous telemetry data about general usage.
 # Learn more here: https://nextjs.org/telemetry

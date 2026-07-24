@@ -15,8 +15,68 @@ import { branding } from './branding'
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
+const smtpHost = process.env.SMTP_HOST
 const smtpUser = process.env.SMTP_USER
 const smtpPass = process.env.SMTP_PASS
+
+/**
+ * Validates `SMTP_PORT` and returns the port to use. Mirrors the fail-fast
+ * posture of `getS3StoragePlugin` below: an invalid value throws at config
+ * load rather than silently coercing to a fallback. `undefined`/empty (the
+ * expected dev/local state) resolves to Mailpit's default port; `"0"` is
+ * treated as an explicit invalid value, not "unset", since port 0 is not a
+ * usable SMTP port.
+ */
+function getSmtpPort(): number {
+  const raw = process.env.SMTP_PORT
+  if (raw === undefined || raw === '') {
+    return 1025
+  }
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`SMTP_PORT must be a positive integer if set; received: "${raw}"`)
+  }
+  return parsed
+}
+
+/**
+ * `next build` always runs with NODE_ENV=production (it's how Next.js
+ * signals its own build optimizations), but Payload's config is also
+ * evaluated during that build step (e.g. while collecting route data) —
+ * long before any real SMTP configuration is relevant. Next sets
+ * `NEXT_PHASE=phase-production-build` for the duration of `next build`
+ * only (see `next/dist/build/index.js`), so we use it to scope the
+ * fail-fast below to actual server boot (`next start` / the admin/API
+ * runtime), not the build step itself.
+ */
+const isProductionBuildPhase = process.env.NEXT_PHASE === 'phase-production-build'
+
+/**
+ * Fails fast (throws) if running in production without `SMTP_HOST`, so a
+ * production deployment can never silently boot against the dev-only
+ * Mailpit relay (localhost:1025) and only discover the misconfiguration at
+ * send time. Mirrors the S3 fail-fast in `getS3StoragePlugin` below.
+ * Outside production, an unset `SMTP_HOST` still falls back to Mailpit —
+ * dev/local behavior is unchanged.
+ */
+if (process.env.NODE_ENV === 'production' && !isProductionBuildPhase && !smtpHost) {
+  throw new Error(
+    'SMTP_HOST is required when NODE_ENV=production — refusing to silently fall back to the dev Mailpit relay (localhost:1025). Set SMTP_HOST (and SMTP_PORT/SMTP_USER/SMTP_PASS as needed).',
+  )
+}
+
+/**
+ * Fails fast if only one of SMTP_USER/SMTP_PASS is set, so partial auth
+ * config is never silently dropped (the previous behavior of
+ * `smtpUser && smtpPass ? { auth } : {}`).
+ */
+if ((smtpUser && !smtpPass) || (!smtpUser && smtpPass)) {
+  throw new Error(
+    'SMTP_USER and SMTP_PASS must both be set together, or both left unset — refusing to silently drop SMTP auth.',
+  )
+}
+
+const smtpPort = getSmtpPort()
 
 /**
  * Builds the S3-compatible storage plugin. Fails fast (throws) if
@@ -99,8 +159,8 @@ export default buildConfig({
     defaultFromAddress: process.env.EMAIL_FROM_ADDRESS || branding.supportEmail,
     defaultFromName: process.env.EMAIL_FROM_NAME || branding.productName,
     transportOptions: {
-      host: process.env.SMTP_HOST || 'localhost',
-      port: Number(process.env.SMTP_PORT) || 1025,
+      host: smtpHost || 'localhost',
+      port: smtpPort,
       secure: process.env.SMTP_SECURE === 'true',
       ...(smtpUser && smtpPass ? { auth: { user: smtpUser, pass: smtpPass } } : {}),
     },
