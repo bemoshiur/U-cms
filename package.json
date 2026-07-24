@@ -15,10 +15,12 @@
     "lint": "cross-env NODE_OPTIONS=--no-deprecation eslint .",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "prepare": "husky || true",
+    "seed": "tsx scripts/seed.ts",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
-    "test": "pnpm run test:int && pnpm run test:e2e",
+    "test": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts",
-    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
+    "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts --project int",
+    "test:unit": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts --project unit",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
