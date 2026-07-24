@@ -1,5 +1,6 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
+import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
@@ -10,6 +11,16 @@ import sharp from 'sharp'
 
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
+import { Sites } from './collections/Sites'
+import { Departments } from './collections/Departments'
+import { CodeClassifications } from './collections/codes/CodeClassifications'
+import { CodeGroups } from './collections/codes/CodeGroups'
+import { Codes } from './collections/codes/Codes'
+import { Roles } from './collections/Roles'
+import { AdminMenus } from './collections/AdminMenus'
+import { PasswordPolicies } from './collections/PasswordPolicies'
+import { warmAdminMenuKeyCache } from './access/hasMenuAccess'
+import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -79,6 +90,26 @@ if ((smtpUser && !smtpPass) || (!smtpUser && smtpPass)) {
 const smtpPort = getSmtpPort()
 
 /**
+ * Absolute base URL Payload uses to build every security-sensitive
+ * absolute link it generates itself — most notably the password-reset
+ * link in `renderForgotPasswordEmail` (`src/email/authEmails.ts`). Setting
+ * this explicitly is what makes `req.payload.config.serverURL` available
+ * and authoritative there, so link-building never needs to (and must not)
+ * fall back to the caller-controllable `Origin` request header — see
+ * `.superpowers/sdd/TODO/phase1-final-review.md` I-1 (CWE-640 host/
+ * reset-link poisoning): an attacker could otherwise send
+ * `POST /api/find-password` with a spoofed `Origin` header and have a
+ * genuine reset email delivered with a reset link pointing at an
+ * attacker-controlled host, leaking the valid reset token if clicked.
+ * Defaults to `localhost:3000` for local dev only; always set
+ * `PAYLOAD_PUBLIC_SERVER_URL` explicitly outside local development.
+ */
+const serverURL = (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(
+  /\/$/,
+  '',
+)
+
+/**
  * Builds the S3-compatible storage plugin. Fails fast (throws) if
  * `STORAGE_DRIVER=s3` but any required S3 env var is missing, so a
  * misconfigured deployment never silently falls back to local storage.
@@ -118,7 +149,29 @@ function getS3StoragePlugin(): Plugin {
 }
 
 const storageDriver = process.env.STORAGE_DRIVER === 's3' ? 's3' : 'local'
-const plugins: Plugin[] = storageDriver === 's3' ? [getS3StoragePlugin()] : []
+const plugins: Plugin[] = [
+  ...(storageDriver === 's3' ? [getS3StoragePlugin()] : []),
+  /**
+   * Multi-tenant foundation (plan §2.1). `sites` is the tenants collection
+   * (legacy 사이트 정보 관리). Nothing is tenant-scoped yet — `collections`
+   * is deliberately empty. The installed plugin version (3.86.0) does NOT
+   * require at least one tenant-enabled collection to boot: it only throws
+   * if the tenants collection itself (`sites`) or an auth-enabled admin
+   * users collection is missing (see
+   * @payloadcms/plugin-multi-tenant/dist/index.js). Future tasks opt
+   * individual collections in per docs/planning/development-plan.md §2.1's
+   * tenant-scoped list (menus, boards, posts, web contents, banners,
+   * popups, notification areas, surveys, terms, statistics, members).
+   *
+   * `userHasAccessToAllTenants: () => true` — everyone is effectively
+   * super-admin until Task 1C/1D adds the roles/permission model.
+   */
+  multiTenantPlugin({
+    collections: {},
+    tenantsSlug: Sites.slug,
+    userHasAccessToAllTenants: () => true,
+  }),
+]
 
 export default buildConfig({
   admin: {
@@ -144,11 +197,43 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media],
+  collections: [
+    Users,
+    Media,
+    Sites,
+    Departments,
+    CodeClassifications,
+    CodeGroups,
+    Codes,
+    Roles,
+    AdminMenus,
+    PasswordPolicies,
+  ],
+  // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
+  // /api/account-request, /api/find-id, /api/find-password.
+  endpoints: publicAccountEndpoints,
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
+  // See the `serverURL` const above (I-1 fix) — required so that
+  // security-sensitive email links never fall back to the request Origin
+  // header.
+  serverURL,
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
+  },
+  /**
+   * Warms the `menuKey -> adminMenus id` cache that
+   * `src/access/hasMenuAccess.ts`'s synchronous `hasMenuAccessSync` (used by
+   * every gated collection's `admin.hidden`) depends on. `getPayload()`
+   * does not hand back a usable instance until `onInit` resolves, and every
+   * request handler awaits `getPayload()` first — so by the time any
+   * request is served, this has already completed and there is no
+   * cold-cache race. See the design-decision comment at the top of
+   * hasMenuAccess.ts for the full reasoning (including why real
+   * access-control decisions never depend on this cache at all).
+   */
+  onInit: async (payload) => {
+    await warmAdminMenuKeyCache(payload)
   },
   db: postgresAdapter({
     pool: {

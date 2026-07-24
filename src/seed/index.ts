@@ -1,6 +1,12 @@
 import type { Payload } from 'payload'
 
+import { adminMenusStep } from './steps/adminMenus'
+import { rolesStep } from './steps/roles'
 import { superAdminStep } from './steps/superAdmin'
+import { sitesStep } from './steps/sites'
+import { codesStep } from './steps/codes'
+import { departmentsStep } from './steps/departments'
+import { passwordPoliciesStep } from './steps/passwordPolicies'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -8,11 +14,29 @@ export type { SeedStep } from './types'
 /**
  * Ordered registry of seed steps, run sequentially by `runSeed`.
  *
- * Later phases append to this array (e.g. site records, menu tree, code
- * sets — see TODO.md Phase 7.6). Order matters: a step may depend on data
- * an earlier step created.
+ * Later phases append to this array. Order matters: a step may depend on
+ * data an earlier step created:
+ *  - `adminMenusStep` runs first — no dependencies, but per the Task 1C
+ *    brief it must precede `rolesStep` (future tasks will seed roles whose
+ *    `menuGrants` reference these menus).
+ *  - `rolesStep` runs next, before `superAdminStep` — it creates
+ *    `ROLE_ADMIN`, which `superAdminStep` looks up and assigns (LOCKOUT
+ *    SAFETY: the super-admin must never be created/left without it).
+ *  - `sitesStep` runs after `superAdminStep`, and `codesStep` runs after
+ *    `sitesStep`, per the Task 1B brief.
+ *  - `departmentsStep` has no dependency on any of the above but is
+ *    registered last to match the brief's Part 3 ordering.
+ *  - `passwordPoliciesStep` (Task 1D) has no dependencies; appended last.
  */
-export const seedSteps: SeedStep[] = [superAdminStep]
+export const seedSteps: SeedStep[] = [
+  adminMenusStep,
+  rolesStep,
+  superAdminStep,
+  sitesStep,
+  codesStep,
+  departmentsStep,
+  passwordPoliciesStep,
+]
 
 /**
  * Runs the given seed steps (defaults to the full `seedSteps` registry)

@@ -69,15 +69,35 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    sites: Site;
+    departments: Department;
+    codeClassifications: CodeClassification;
+    codeGroups: CodeGroup;
+    codes: Code;
+    roles: Role;
+    adminMenus: AdminMenu;
+    passwordPolicies: PasswordPolicy;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
   };
-  collectionsJoins: {};
+  collectionsJoins: {
+    roles: {
+      users: 'users';
+    };
+  };
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    sites: SitesSelect<false> | SitesSelect<true>;
+    departments: DepartmentsSelect<false> | DepartmentsSelect<true>;
+    codeClassifications: CodeClassificationsSelect<false> | CodeClassificationsSelect<true>;
+    codeGroups: CodeGroupsSelect<false> | CodeGroupsSelect<true>;
+    codes: CodesSelect<false> | CodesSelect<true>;
+    roles: RolesSelect<false> | RolesSelect<true>;
+    adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
+    passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -123,6 +143,52 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: number;
+  /**
+   * Legacy login ID (ref 1-15/1-16 "ID"). Distinct from the email used for authentication; shown in the account list and used by ID/PW recovery. Optional here — self-service applicants supply it via the account-request form.
+   */
+  loginId?: string | null;
+  /**
+   * Display name (legacy 관리자 이름).
+   */
+  name?: string | null;
+  /**
+   * Account lifecycle. Only "Active" accounts may log in. Approve a pending account by switching to Active; a dormant account is reactivated the same way.
+   */
+  status: 'pending' | 'active' | 'dormant' | 'locked';
+  /**
+   * Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked. Changing this field always requires the system.admins grant, even when editing your own account.
+   */
+  roles?: (number | Role)[] | null;
+  /**
+   * Department this admin belongs to (legacy 부서, picked from the tree).
+   */
+  department?: (number | null) | Department;
+  /**
+   * Duties/role description (legacy 업무내용) — shown in the org chart later.
+   */
+  duties?: string | null;
+  /**
+   * Mobile phone number (legacy 휴대전화).
+   */
+  mobile?: string | null;
+  /**
+   * Internal extension (legacy 내선번호).
+   */
+  extension?: string | null;
+  /**
+   * Profile photo (legacy 프로필 사진; jpg/jpeg/png/gif, displayed 64×64).
+   */
+  profilePhoto?: (number | null) | Media;
+  /**
+   * Last successful login. Maintained by the system; used by the dormancy sweep.
+   */
+  lastLoginAt?: string | null;
+  tenants?:
+    | {
+        tenant: number | Site;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -144,6 +210,94 @@ export interface User {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles".
+ */
+export interface Role {
+  id: number;
+  /**
+   * e.g. "ROLE_ADMIN". Uppercase letters, digits, and underscores only.
+   */
+  roleId: string;
+  name: string;
+  description: string;
+  /**
+   * Super roles bypass all menu permission checks.
+   */
+  isSuper?: boolean | null;
+  /**
+   * Admin menus this role grants access to. Ignored for a role with isSuper checked (super roles bypass this entirely).
+   */
+  menuGrants?: (number | AdminMenu)[] | null;
+  /**
+   * Users holding this role (read-only — ref 1-12 "role users view").
+   */
+  users?: {
+    docs?: (number | User)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminMenus".
+ */
+export interface AdminMenu {
+  id: number;
+  /**
+   * PERMANENT permission key, dot-path convention (e.g. "system.sites"). Every gated collection checks against this exact string — do not rename after roles have been granted this menu.
+   */
+  menuKey: string;
+  name: string;
+  /**
+   * Parent menu node. Leave empty for a top-level (1-depth) menu.
+   */
+  parent?: (number | null) | AdminMenu;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  /**
+   * The Payload collection slug this menu node gates, if any (e.g. "sites"). Leave empty for a pure grouping/parent node with no directly bound collection.
+   */
+  collectionSlug?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "departments".
+ */
+export interface Department {
+  id: number;
+  /**
+   * Department name (legacy 부서명).
+   */
+  name: string;
+  /**
+   * Department duties/notes (legacy 부서업무).
+   */
+  duties?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  /**
+   * Legacy 사용여부. Inactive departments are hidden from pickers but kept (not deleted), so historical references keep resolving.
+   */
+  isActive?: boolean | null;
+  /**
+   * Parent department. Leave empty for a top-level department.
+   */
+  parent?: (number | null) | Department;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "media".
  */
 export interface Media {
@@ -160,6 +314,159 @@ export interface Media {
   height?: number | null;
   focalX?: number | null;
   focalY?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sites".
+ */
+export interface Site {
+  id: number;
+  /**
+   * Lowercase alphanumeric identifier, e.g. "bos" or "demo".
+   */
+  siteId: string;
+  name: string;
+  /**
+   * Full URL starting with http:// or https://
+   */
+  url: string;
+  /**
+   * Marks this site as the admin back-office (legacy "bos") rather than a user-facing site.
+   */
+  isAdminSite?: boolean | null;
+  satisfactionEnabled?: boolean | null;
+  dataManagerEnabled?: boolean | null;
+  /**
+   * Web accessibility validation usage (operates only in local/dev environments per legacy behavior).
+   */
+  accessibilityValidation?: ('off' | 'popup' | 'db' | 'popup_db') | null;
+  /**
+   * Require a Google OTP code after login for this admin site.
+   */
+  twoFactorEnabled?: boolean | null;
+  /**
+   * Allow admin account applications from the login page for this admin site.
+   */
+  accountApplicationEnabled?: boolean | null;
+  /**
+   * Homepage logo. Allowed types: jpg, jpeg, png, gif.
+   */
+  logo?: (number | null) | Media;
+  footer?: {
+    orgName?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    addressPostalCode?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    addressLine1?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    addressLine2?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    phone?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    fax?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    copyright?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeClassifications".
+ */
+export interface CodeClassification {
+  id: number;
+  /**
+   * English-letters-only classification code, e.g. "SYS". One per sub-system.
+   */
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeGroups".
+ */
+export interface CodeGroup {
+  id: number;
+  /**
+   * Uppercase snake_case, matching the DB column name this code group backs, e.g. "APRV_CD".
+   */
+  codeId: string;
+  name: string;
+  classification: number | CodeClassification;
+  description?: string | null;
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codes".
+ */
+export interface Code {
+  id: number;
+  group: number | CodeGroup;
+  /**
+   * Concatenated 2-digit-per-depth value, e.g. "01", "0101", "010101". Must start with the parent code, if any.
+   */
+  code: string;
+  name: string;
+  /**
+   * Parent detail code. Leave empty for a top-level (depth 1) code.
+   */
+  parent?: (number | null) | Code;
+  /**
+   * Computed automatically: 1 for a top-level code, otherwise parent depth + 1.
+   */
+  depth?: number | null;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  description?: string | null;
+  /**
+   * Optional legacy code value from U-CMS v3.0 (e.g. "Y"/"I"/"N", "AVU001"), kept for audit parity.
+   */
+  legacyValue?: string | null;
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "passwordPolicies".
+ */
+export interface PasswordPolicy {
+  id: number;
+  /**
+   * Human-readable password rule shown to users (legacy 비밀번호 규칙). Note: this text is informational — enforcement is fixed in code (src/auth/validatePassword.ts).
+   */
+  ruleText: string;
+  /**
+   * Legacy 사용여부. The most recently created policy among those marked active is the one displayed to users.
+   */
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -192,6 +499,38 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'sites';
+        value: number | Site;
+      } | null)
+    | ({
+        relationTo: 'departments';
+        value: number | Department;
+      } | null)
+    | ({
+        relationTo: 'codeClassifications';
+        value: number | CodeClassification;
+      } | null)
+    | ({
+        relationTo: 'codeGroups';
+        value: number | CodeGroup;
+      } | null)
+    | ({
+        relationTo: 'codes';
+        value: number | Code;
+      } | null)
+    | ({
+        relationTo: 'roles';
+        value: number | Role;
+      } | null)
+    | ({
+        relationTo: 'adminMenus';
+        value: number | AdminMenu;
+      } | null)
+    | ({
+        relationTo: 'passwordPolicies';
+        value: number | PasswordPolicy;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -240,6 +579,22 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  loginId?: T;
+  name?: T;
+  status?: T;
+  roles?: T;
+  department?: T;
+  duties?: T;
+  mobile?: T;
+  extension?: T;
+  profilePhoto?: T;
+  lastLoginAt?: T;
+  tenants?:
+    | T
+    | {
+        tenant?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -274,6 +629,164 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sites_select".
+ */
+export interface SitesSelect<T extends boolean = true> {
+  siteId?: T;
+  name?: T;
+  url?: T;
+  isAdminSite?: T;
+  satisfactionEnabled?: T;
+  dataManagerEnabled?: T;
+  accessibilityValidation?: T;
+  twoFactorEnabled?: T;
+  accountApplicationEnabled?: T;
+  logo?: T;
+  footer?:
+    | T
+    | {
+        orgName?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        addressPostalCode?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        addressLine1?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        addressLine2?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        phone?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        fax?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        copyright?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "departments_select".
+ */
+export interface DepartmentsSelect<T extends boolean = true> {
+  name?: T;
+  duties?: T;
+  phone?: T;
+  fax?: T;
+  isActive?: T;
+  parent?: T;
+  order?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeClassifications_select".
+ */
+export interface CodeClassificationsSelect<T extends boolean = true> {
+  code?: T;
+  name?: T;
+  description?: T;
+  isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codeGroups_select".
+ */
+export interface CodeGroupsSelect<T extends boolean = true> {
+  codeId?: T;
+  name?: T;
+  classification?: T;
+  description?: T;
+  isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "codes_select".
+ */
+export interface CodesSelect<T extends boolean = true> {
+  group?: T;
+  code?: T;
+  name?: T;
+  parent?: T;
+  depth?: T;
+  order?: T;
+  description?: T;
+  legacyValue?: T;
+  isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles_select".
+ */
+export interface RolesSelect<T extends boolean = true> {
+  roleId?: T;
+  name?: T;
+  description?: T;
+  isSuper?: T;
+  menuGrants?: T;
+  users?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminMenus_select".
+ */
+export interface AdminMenusSelect<T extends boolean = true> {
+  menuKey?: T;
+  name?: T;
+  parent?: T;
+  order?: T;
+  collectionSlug?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "passwordPolicies_select".
+ */
+export interface PasswordPoliciesSelect<T extends boolean = true> {
+  ruleText?: T;
+  isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

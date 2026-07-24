@@ -1,0 +1,78 @@
+import type { PayloadRequest } from 'payload'
+
+import { renderEmail } from './renderEmail'
+
+/**
+ * Branded email bodies for the admin-account auth flows (Task 1D). All build
+ * on the shared `renderEmail` shell (`src/email/renderEmail.ts`).
+ */
+
+/**
+ * Derives the server origin for building absolute links in emails.
+ *
+ * SECURITY (CWE-640 host/reset-link poisoning — see
+ * `.superpowers/sdd/TODO/phase1-final-review.md` I-1): this deliberately
+ * does NOT consult the request's `Origin` header. `req` is the *caller's*
+ * request — Payload passes it straight into `generateEmailHTML` (see
+ * `payload/dist/auth/operations/forgotPassword.js`) — so an `Origin`
+ * fallback here would let an unauthenticated caller of the public
+ * `POST /api/find-password` endpoint choose the host embedded in a
+ * password-reset link sent to a victim's inbox. `config.serverURL` (set
+ * explicitly in `src/payload.config.ts` from `PAYLOAD_PUBLIC_SERVER_URL`)
+ * is the only trusted, server-controlled source of truth; the final
+ * fallback below is for the rare case `req.payload` isn't populated and is
+ * itself server-side config, never request-derived.
+ */
+function resolveServerURL(req?: Partial<PayloadRequest>): string {
+  const fromConfig = req?.payload?.config?.serverURL
+  if (fromConfig) {
+    return fromConfig.replace(/\/$/, '')
+  }
+  return (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
+}
+
+/**
+ * Password-reset email HTML (wired into `users.auth.forgotPassword`
+ * `generateEmailHTML` — Payload passes `{ token, req, user }`). Links to
+ * Payload's built-in admin reset page (`/admin/reset/<token>`).
+ */
+export function renderForgotPasswordEmail(args: {
+  req?: PayloadRequest
+  token?: string
+  user?: unknown
+}): string {
+  const { req, token } = args
+  const serverURL = resolveServerURL(req)
+  const resetUrl = `${serverURL}/admin/reset/${token ?? ''}`
+
+  return renderEmail({
+    preheader: 'Reset your Pulse CMS administrator password.',
+    heading: 'Reset your password',
+    bodyHtml:
+      '<p>We received a request to reset the password for your Pulse CMS administrator account.</p>' +
+      '<p>Click the button below to choose a new password. If you did not request this, you can safely ignore this email — your password will not change.</p>',
+    ctaLabel: 'Reset password',
+    ctaUrl: resetUrl,
+  })
+}
+
+/** ID-recovery email HTML (ref 1-3 Find ID → email the account's login ID). */
+export function renderFindIdEmail(loginId: string): string {
+  return renderEmail({
+    preheader: 'Your Pulse CMS administrator login ID.',
+    heading: 'Your login ID',
+    bodyHtml:
+      '<p>You requested to recover the login ID for your Pulse CMS administrator account.</p>' +
+      `<p>Your login ID is: <strong>${escapeHtml(loginId)}</strong></p>` +
+      '<p>If you did not request this, you can safely ignore this email.</p>',
+  })
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}

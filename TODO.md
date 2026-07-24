@@ -24,34 +24,34 @@
 
 ### Sites (multi-site) — refs 1-17, 1-18, 1-19
 
-- [ ] 1.1 `sites` collection: siteId, name, URL (http-prefixed validation), isAdminSite flag, satisfaction toggle, data-manager toggle, accessibility-validation mode, 2FA toggle, account-application toggle, logo upload (1 file, jpg/jpeg/png/gif)
-- [ ] 1.2 Footer config group: org name, address (3 parts + postal lookup), phone, fax, copyright — each with show/hide
-- [ ] 1.3 Install/configure `@payloadcms/plugin-multi-tenant`; decide tenant-scoped vs global collections (per plan §2.1)
+- [x] 1.1 `sites` collection: siteId, name, URL (http-prefixed validation), isAdminSite flag, satisfaction toggle, data-manager toggle, accessibility-validation mode, 2FA toggle, account-application toggle, logo upload (1 file, jpg/jpeg/png/gif)
+- [x] 1.2 Footer config group: org name, address (3 parts + postal lookup), phone, fax, copyright — each with show/hide (data model only; postal-lookup popup is a frontend concern for a later task)
+- [x] 1.3 Install/configure `@payloadcms/plugin-multi-tenant`; decide tenant-scoped vs global collections (per plan §2.1)
 
 ### Admin accounts & auth — refs 1-1, 1-2, 1-3, 1-15, 1-16
 
-- [ ] 1.4 `admins` auth collection: id/email (unique + dup-check UX), name, mobile (country code from code mgmt), extension, department rel, duties, profile photo (1 file, 64×64 display, rotate/reorder controls), roles hasMany (saveToJWT), status (승인대기/정상/장기미로그인/locked)
-- [ ] 1.5 Approval workflow: self-service account request form (public route) → pending state → approve/reject in admin; login blocked until 정상
-- [ ] 1.6 Password policy enforcement (active policy from `passwordPolicies`): ≥10 chars w/ 2 of 3 classes OR ≥8 w/ 3 classes; block sequential/ID-similar; 6-month rotation prompt
-- [ ] 1.7 Login page (custom view): branded logo from site config, save-ID checkbox, conditional Account-Request + ID/PW-Find buttons (site toggles), lockout messaging; `maxLoginAttempts`/`lockTime`
-- [ ] 1.8 ID/PW recovery: find-ID (name+email → email ID), find-PW (ID+email → issue new password) — approved accounts only
-- [ ] 1.9 Long-inactivity job: auto-transition to 장기 미로그인 (blocks login until re-approved)
+- [x] 1.4 `admins` auth collection: `loginId` (unique) + email (unique), name, mobile, extension, department rel, duties, profile photo (upload→media), roles hasMany (saveToJWT), status (승인대기/정상/장기미로그인/locked) — Task 1D. (Deferred custom UI: dup-check UX, mobile country-code-from-code-mgmt, 64×64 display + rotate/reorder controls — later admin-component task.)
+- [x] 1.5 Approval workflow: self-service account request (`POST /api/account-request`) → `status: pending` (client status/roles force-stripped) → approve by editing `status` in admin (field-gated on system.admins); login blocked until `active` (beforeLogin) — Task 1D.
+- [x] 1.6 Password policy enforcement (`src/auth/validatePassword.ts`, beforeValidate hook): ≥10 chars w/ 2 of 3 classes OR ≥8 w/ 3 classes; block sequences/login-ID-similar — Task 1D. (`passwordPolicies` collection holds display text/history; enforcement is fixed in code — code/DB split. 6-month rotation is advisory text only, not mechanically enforced.)
+- [~] 1.7 `maxLoginAttempts: 5` / `lockTime: 10m` set; public account-request + ID/PW-find endpoints exposed — Task 1D. Custom login VIEW (branded logo, save-ID, conditional buttons, lockout messaging) DEFERRED to Phase 2's 2FA login rework, per the Task 1D brief.
+- [x] 1.8 ID/PW recovery: find-ID (`POST /api/find-id`, name+email → emails login ID), find-PW (`POST /api/find-password`, id+email → Payload forgotPassword reset email) — approved/active accounts only, generic responses (no enumeration) — Task 1D.
+- [x] 1.9 Long-inactivity job: `markDormantAccounts()` + `scripts/mark-dormant.ts` (`pnpm dormancy:sweep`) auto-transition active→장기 미로그인 (dormant); blocks login until an admin re-activates — Task 1D.
 
 ### Roles & permissions — refs 1-10..1-13
 
-- [ ] 1.10 `roles` collection: roleId (`^ROLE_[A-Z0-9]+$`), name, description
-- [ ] 1.11 `adminMenus` tree collection (menuKey, name, parent, order) + seed with full menu map from inventory
-- [ ] 1.12 Role↔menu grants UI: checkbox tree w/ open/close-all, apply button (ref 1-13)
-- [ ] 1.13 Role users view: list members of role, multi-select remove (ref 1-12)
-- [ ] 1.14 `hasMenuAccess()` helper wired into: collection `access`, `admin.hidden`, custom nav, custom views; SUPER bypass; privacy-role and DBA-role gates
-- [ ] 1.15 Permission-filtered navigation component (GNB 2-depth + LNB 3-depth+, breadcrumb, full-menu overlay — refs 1-9, 3-11)
+- [x] 1.10 `roles` collection: roleId (`^ROLE_[A-Z0-9]+$`), name, description
+- [x] 1.11 `adminMenus` tree collection (menuKey, name, parent, order) + seed with full menu map from inventory
+- [~] 1.12 Role↔menu grants UI: checkbox tree w/ open/close-all, apply button (ref 1-13) (data model — `roles.menuGrants` — exists; Phase 1 uses the default multi-select relationship widget; the checkbox-tree UI is deferred to a later custom-admin-component task, per Task 1C)
+- [x] 1.13 Role users view: list members of role, multi-select remove (ref 1-12) (read-only `join` field showing role members; multi-select remove UI deferred to a later custom-admin-component task, per Task 1C)
+- [x] 1.14 `hasMenuAccess()` helper wired into: collection `access`, `admin.hidden`, custom nav, custom views; SUPER bypass; privacy-role and DBA-role gates (collection `access` + `admin.hidden` + SUPER bypass done, Task 1C; custom nav/custom-view wiring and the privacy-role/DBA-role gates are later-phase work — no custom nav component exists yet, and the dedicated privacy-processor/DBA roles are Phase 2/6 scope per development-plan.md §2.2)
+- [~] 1.15 Permission-filtered navigation component (GNB 2-depth + LNB 3-depth+, breadcrumb, full-menu overlay — refs 1-9, 3-11)
 
 ### Departments & codes — refs 1-14, 1-22..1-26
 
-- [ ] 1.16 `departments` tree: add top/child, name/duties/phone/fax/use-flag, drag ordering; picker popup component (reused by admins/surveys)
-- [ ] 1.17 `codeClassifications` (English-letters code) + `codeGroups` (codeId = DB column-name convention) + hierarchical `codes` (2-digit-per-depth values, tree popup editor, ordering)
-- [ ] 1.18 Code-search popup component (reused by boards)
-- [ ] 1.19 Seed baseline code sets from ref 1-74 (APRV_CD, ACS_VLD_USE_CD, BBS_ITEM_TYPE_CD, …)
+- [x] 1.16 `departments` tree: add top/child, name/duties/phone/fax/use-flag, drag ordering; picker popup component (reused by admins/surveys) (data model + cycle/delete-with-children guards only; drag ordering UI and the reusable picker popup component are deferred to a later custom-admin-component task, per Task 1B)
+- [x] 1.17 `codeClassifications` (English-letters code) + `codeGroups` (codeId = DB column-name convention) + hierarchical `codes` (2-digit-per-depth values, tree popup editor, ordering) (data model + validation hooks only; the tree popup editor UI is deferred to a later custom-admin-component task, per Task 1B)
+- [~] 1.18 Code-search popup component (reused by boards)
+- [x] 1.19 Seed baseline code sets from ref 1-74 (APRV_CD, ACS_VLD_USE_CD, BBS_ITEM_TYPE_CD, …)
 
 **Exit criteria:** admin can create sites, request+approve accounts, define roles with menu grants and see navigation change accordingly; departments and codes manageable; all covered by tests.
 

@@ -13,6 +13,18 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     setupFiles: ['./vitest.setup.ts'],
+    /**
+     * Every `int` spec boots its own `Payload` instance against the same
+     * shared dev Postgres DB, and each boot runs Payload's dev
+     * schema-push. Two int spec files booting concurrently (the default —
+     * Vitest runs separate test files in parallel workers) race the same
+     * DDL (e.g. both issuing `CREATE TYPE ... AS ENUM`), and Postgres
+     * rejects the loser with "type already exists" / "relation already
+     * exists". Serializing file execution avoids that race. Surfaced when
+     * `tests/int/sites.int.spec.ts` became the second int spec file
+     * (Task 1A) — with only one int file this was never observable.
+     */
+    fileParallelism: false,
     projects: [
       {
         extends: true,

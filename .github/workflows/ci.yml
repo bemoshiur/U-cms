@@ -112,10 +112,18 @@ jobs:
 
       # This job's Postgres service starts with no schema, and `next start`
       # runs in production mode where Payload's dev-mode schema push is
-      # disabled (see @payloadcms/db-postgres connect.js). Seeding here
-      # pushes the schema (the seed script runs via tsx, i.e. not
-      # production mode) and creates the super-admin the e2e smoke spec
-      # expects to exist before `pnpm start` boots the server under test.
+      # disabled (see @payloadcms/db-postgres connect.js). Schema now comes
+      # from committed migrations (src/migrations), not seed side effects —
+      # run them before seeding.
+      - name: Run migrations
+        run: pnpm migrate
+        env:
+          DATABASE_URI: postgresql://pulse:pulse@localhost:5432/pulse_cms
+          PAYLOAD_SECRET: ci-secret-not-real
+
+      # Creates the super-admin and the two seed `sites` records the e2e
+      # smoke spec expects to exist before `pnpm start` boots the server
+      # under test.
       - name: Seed database
         run: pnpm seed
         env:
