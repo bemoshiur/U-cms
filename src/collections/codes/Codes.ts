@@ -1,45 +1,42 @@
 import type { CollectionBeforeValidateHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
-/**
- * A relationship field's submitted value can be either the raw ID or (when
- * the caller already has a populated doc in hand) an object containing one.
- * Normalizes either shape down to the bare ID, or `undefined` for
- * null/empty.
- */
-function toRelationId(value: unknown): string | number | undefined {
-  if (value === null || value === undefined) {
-    return undefined
-  }
-  if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
-    return (value as { id: string | number }).id
-  }
-  return value as string | number
-}
+import { toRelationId } from '../utils'
 
 /**
  * Computes `depth` and enforces every structural business rule for detail
  * codes (ref 1-24): code values are concatenated 2-digit segments per depth
  * (01 -> 0101 -> 010101…), a child's code must start with its parent's
  * code, a child's parent must belong to the same code group, and (group,
- * code) must be unique — Payload has no native compound-unique constraint,
- * so it's enforced here via a lookup.
+ * code) must be unique.
+ *
+ * Uniqueness has two deliberate layers: this hook's `find` lookup below
+ * gives a fast, friendly "already exists" error in the common case, and the
+ * collection's `indexes` config below (a real Postgres composite unique
+ * index on `(group_id, code)`) is the correctness backstop for the race
+ * where two requests pass this lookup concurrently. A violation of that
+ * index surfaces as a normal `ValidationError` ("Value must be unique"),
+ * not a raw 500 — Payload's Postgres adapter generically catches unique-
+ * constraint violations (error code `23505`) for *any* index, not just
+ * single-field ones, and converts them
+ * (`@payloadcms/drizzle/dist/upsertRow/handleUpsertError.js`). No custom
+ * error handling was needed here as a result.
  *
  * All of this runs in a single `beforeValidate` collection hook rather than
  * split across beforeValidate/beforeChange. Payload's real operation order
- * (payload/dist/collections/operations/create.js) is: "beforeValidate -
- * Fields" (per-field `validate()`, which is what enforces plain `required`
- * below) → "beforeValidate - Collections" → "beforeChange - Collection" →
- * "beforeChange - Fields". `depth` must be known *before* the code-length
- * check can run, and a `beforeChange` hook runs too late to gate validation
- * on it — so this hook computes `depth` first, validates against it, and
- * writes it onto `data` so it's what actually gets persisted.
- *
- * `code`/`name`/`group` are plain `required` fields (see field defs below)
- * with no custom `validate` — Payload's default field validators already
- * reject `undefined`/empty-string when `required` is set, so there's
- * nothing here that needs to re-implement that check by hand (same
- * reasoning as `Departments.name`).
+ * (`payload/dist/collections/operations/create.js`) is: "beforeValidate -
+ * Fields" (runs each field's `field.hooks.beforeValidate[]` array — *not*
+ * its `validate()` function) → "beforeValidate - Collections" (this hook)
+ * → "beforeChange - Collection" → "beforeChange - Fields" (**this** is
+ * where `field.validate()` actually runs and enforces plain `required` —
+ * see `payload/dist/fields/hooks/beforeChange/promise.js`). So this hook
+ * runs *before* the `code`/`group` fields' own required checks have fired
+ * — hence the early-return guard right below when either is missing,
+ * rather than assuming they're already known-valid. `depth` must be known
+ * before the code-length check can run, and a later `beforeChange` hook
+ * would run too late to gate validation on a freshly-computed value — so
+ * this hook computes `depth` first, validates against it, and writes it
+ * onto `data` so it's what actually gets persisted.
  */
 const validateAndComputeDepth: CollectionBeforeValidateHook = async ({
   data,
@@ -117,6 +114,8 @@ const validateAndComputeDepth: CollectionBeforeValidateHook = async ({
     )
   }
 
+  // Friendly-error layer — see the DB-backstop `indexes` config at the
+  // bottom of this file for the race-condition-proof layer.
   const duplicate = await req.payload.find({
     collection: 'codes',
     where: {
@@ -160,6 +159,12 @@ export const Codes: CollectionConfig = {
     useAsTitle: 'name',
     defaultColumns: ['group', 'code', 'name', 'depth', 'isActive'],
   },
+  // DB-level backstop for the `(group, code)` compound uniqueness rule
+  // (see `validateAndComputeDepth` above for the friendly-error layer).
+  // Payload supports native compound indexes — no hand-written migration
+  // SQL needed; `pnpm migrate:create` generates the real Postgres unique
+  // index from this config.
+  indexes: [{ fields: ['group', 'code'], unique: true }],
   fields: [
     {
       name: 'group',

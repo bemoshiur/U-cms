@@ -1,5 +1,6 @@
 import * as migration_20260724_195445_initial from './20260724_195445_initial';
 import * as migration_20260724_204204_departments_and_codes from './20260724_204204_departments_and_codes';
+import * as migration_20260724_205851_codes_compound_unique from './20260724_205851_codes_compound_unique';
 
 export const migrations = [
   {
@@ -10,6 +11,11 @@ export const migrations = [
   {
     up: migration_20260724_204204_departments_and_codes.up,
     down: migration_20260724_204204_departments_and_codes.down,
-    name: '20260724_204204_departments_and_codes'
+    name: '20260724_204204_departments_and_codes',
+  },
+  {
+    up: migration_20260724_205851_codes_compound_unique.up,
+    down: migration_20260724_205851_codes_compound_unique.down,
+    name: '20260724_205851_codes_compound_unique'
   },
 ];

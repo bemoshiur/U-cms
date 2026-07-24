@@ -257,6 +257,46 @@ describe('code management collections', () => {
         }),
       ).rejects.toThrow()
     })
+
+    it('DB backstop: concurrent creates for the same (group, code) — exactly one wins, the other gets a clean error, not a raw 500', async () => {
+      // The `beforeValidate` hook's `find`-based duplicate check (see
+      // Codes.ts) is racy by construction: two concurrent requests can both
+      // pass that lookup before either has committed its insert. This test
+      // fires two real concurrent `create`s for the same (group, code) to
+      // exercise that race against the actual DB — the composite unique
+      // index (`indexes: [{ fields: ['group', 'code'], unique: true }]` in
+      // Codes.ts) is what must catch whichever one the app-level lookup
+      // doesn't. Whichever layer wins, the loser must surface as a clean
+      // 400-status validation-style error (Payload's generic Postgres
+      // unique-constraint handler converts a raw `23505` into a
+      // `ValidationError`), never an unhandled 500.
+      const attempt = () =>
+        payload.create({
+          collection: 'codes',
+          data: { group: groupAId, code: '09', name: 'Concurrent race' },
+          overrideAccess: true,
+        })
+
+      const [first, second] = await Promise.allSettled([attempt(), attempt()])
+      const results = [first, second]
+
+      const fulfilled = results.filter((r) => r.status === 'fulfilled')
+      const rejected = results.filter((r) => r.status === 'rejected')
+
+      expect(fulfilled).toHaveLength(1)
+      expect(rejected).toHaveLength(1)
+
+      const reason = (rejected[0] as PromiseRejectedResult).reason as {
+        message?: unknown
+        status?: unknown
+      }
+      // A raw, unhandled driver/DB error would not carry Payload's
+      // `status` field at all (or would carry 500) — assert it's a clean
+      // 400 rather than asserting on message text, which differs between
+      // the two possible catching layers (app-level "already exists" vs.
+      // the DB-backstop's "Value must be unique").
+      expect(reason.status).toBe(400)
+    })
   })
 
   describe('baseline code seed', () => {

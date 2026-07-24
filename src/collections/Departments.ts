@@ -5,21 +5,7 @@ import type {
 } from 'payload'
 import { APIError } from 'payload'
 
-/**
- * A relationship field's submitted value can be either the raw ID or (when
- * the caller already has a populated doc in hand) an object containing one.
- * Normalizes either shape down to the bare ID, or `undefined` for
- * null/empty.
- */
-function toRelationId(value: unknown): string | number | undefined {
-  if (value === null || value === undefined) {
-    return undefined
-  }
-  if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
-    return (value as { id: string | number }).id
-  }
-  return value as string | number
-}
+import { toRelationId } from './utils'
 
 /**
  * Rejects setting `parent` to the department itself or to any of its own
