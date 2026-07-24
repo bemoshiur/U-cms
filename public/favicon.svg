@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!--
+    Pulse CMS favicon. Colors mirror `branding.colors.primary` / `primaryDark` from
+    src/branding.ts (kept in sync by hand — SVG can't import the TS module). Adapts to the
+    OS/browser color scheme via `prefers-color-scheme` so it stays legible in dark browser
+    chrome/tab bars.
+  -->
+  <style>
+    .pulse-favicon-bg {
+      fill: #0f62fe;
+    }
+    @media (prefers-color-scheme: dark) {
+      .pulse-favicon-bg {
+        fill: #4589ff;
+      }
+    }
+  </style>
+  <rect class="pulse-favicon-bg" width="24" height="24" rx="6" />
+  <path
+    d="M4 13h3.2l1.8-5.5L12.4 17l2.2-4h5.4"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

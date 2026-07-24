@@ -1,0 +1,46 @@
+// ---------------------------------------------------------------------------
+// Admin brand layer
+// ---------------------------------------------------------------------------
+// This file exists to swap Payload's default neutral admin accent for our
+// product's brand color, without redesigning the admin panel. Colors below
+// mirror `branding.colors.primary` / `branding.colors.primaryDark` in
+// src/branding.ts (kept in sync by hand — SCSS can't import the TS module).
+//
+// What we found inspecting node_modules/@payloadcms/ui/dist/scss (v3.86.0):
+// - There is no `--theme-brand-*` custom property in this Payload version.
+// - `--theme-elevation-*` is the neutral gray scale everything defaults to;
+//   it inverts between themes (see scss/vars.scss) and isn't a "brand" hook.
+// - `--theme-success-*` happens to render as blue in Payload's default
+//   palette and drives things like checkboxes, focus rings, and pills — but
+//   it's semantically "success", not "brand". Re-pointing it to our brand
+//   color would recolor unrelated success/confirmation UI, which is a
+//   redesign, not a brand layer, so we deliberately leave it alone.
+// - The actual "primary action" hook is `.btn--style-primary`, which the
+//   Button component defines as local custom properties
+//   (see @payloadcms/ui/dist/elements/Button/index.scss) that otherwise fall
+//   back to the neutral elevation scale. This is the button used for
+//   "Login", "Save", "Publish", and "Create New" — the most visible
+//   interactive surface in the admin — so overriding it here is the highest
+//   -leverage, lowest-risk way to make the brand color show up everywhere it
+//   matters.
+//
+// Set once per theme, since the brand blue does not flip between light/dark
+// the way Payload's neutral elevation tokens do.
+
+html[data-theme='light'] {
+  .btn--style-primary {
+    --bg-color: #0f62fe; // branding.colors.primary
+    --color: #ffffff;
+    --hover-bg: #0043ce; // one step darker, for hover contrast on a light canvas
+    --hover-color: #ffffff;
+  }
+}
+
+html[data-theme='dark'] {
+  .btn--style-primary {
+    --bg-color: #4589ff; // branding.colors.primaryDark — brighter, reads better on a dark canvas
+    --color: #051530;
+    --hover-bg: #78a9ff; // one step lighter, for hover contrast on a dark canvas
+    --hover-color: #051530;
+  }
+}
