@@ -90,6 +90,26 @@ if ((smtpUser && !smtpPass) || (!smtpUser && smtpPass)) {
 const smtpPort = getSmtpPort()
 
 /**
+ * Absolute base URL Payload uses to build every security-sensitive
+ * absolute link it generates itself — most notably the password-reset
+ * link in `renderForgotPasswordEmail` (`src/email/authEmails.ts`). Setting
+ * this explicitly is what makes `req.payload.config.serverURL` available
+ * and authoritative there, so link-building never needs to (and must not)
+ * fall back to the caller-controllable `Origin` request header — see
+ * `.superpowers/sdd/TODO/phase1-final-review.md` I-1 (CWE-640 host/
+ * reset-link poisoning): an attacker could otherwise send
+ * `POST /api/find-password` with a spoofed `Origin` header and have a
+ * genuine reset email delivered with a reset link pointing at an
+ * attacker-controlled host, leaking the valid reset token if clicked.
+ * Defaults to `localhost:3000` for local dev only; always set
+ * `PAYLOAD_PUBLIC_SERVER_URL` explicitly outside local development.
+ */
+const serverURL = (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(
+  /\/$/,
+  '',
+)
+
+/**
  * Builds the S3-compatible storage plugin. Fails fast (throws) if
  * `STORAGE_DRIVER=s3` but any required S3 env var is missing, so a
  * misconfigured deployment never silently falls back to local storage.
@@ -194,6 +214,10 @@ export default buildConfig({
   endpoints: publicAccountEndpoints,
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
+  // See the `serverURL` const above (I-1 fix) — required so that
+  // security-sensitive email links never fall back to the request Origin
+  // header.
+  serverURL,
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },

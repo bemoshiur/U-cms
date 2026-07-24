@@ -53,8 +53,13 @@ const validateAndComputeDepth: CollectionBeforeValidateHook = async ({
   const groupValue: unknown = 'group' in data ? data.group : originalDoc?.group
   const parentValue: unknown = 'parent' in data ? data.parent : originalDoc?.parent
 
-  // If either is genuinely missing, the fields' own `required` validators
-  // already reject the request — nothing useful to cross-check here yet.
+  // If either is genuinely missing, there's nothing useful to cross-check
+  // yet. This does NOT mean the fields' own `required` validators have
+  // already rejected the request — this hook runs in "beforeValidate -
+  // Collections", which fires *before* "beforeChange - Fields" (where
+  // `field.validate()` actually enforces plain `required` — see the
+  // top-of-function doc comment above for the full operation-order
+  // citation). Return early rather than assuming the data is known-valid.
   if (
     typeof codeValue !== 'string' ||
     codeValue.length === 0 ||

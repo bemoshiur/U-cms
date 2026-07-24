@@ -7,15 +7,26 @@ import { renderEmail } from './renderEmail'
  * on the shared `renderEmail` shell (`src/email/renderEmail.ts`).
  */
 
-/** Derives the server origin for building absolute links in emails. */
+/**
+ * Derives the server origin for building absolute links in emails.
+ *
+ * SECURITY (CWE-640 host/reset-link poisoning — see
+ * `.superpowers/sdd/TODO/phase1-final-review.md` I-1): this deliberately
+ * does NOT consult the request's `Origin` header. `req` is the *caller's*
+ * request — Payload passes it straight into `generateEmailHTML` (see
+ * `payload/dist/auth/operations/forgotPassword.js`) — so an `Origin`
+ * fallback here would let an unauthenticated caller of the public
+ * `POST /api/find-password` endpoint choose the host embedded in a
+ * password-reset link sent to a victim's inbox. `config.serverURL` (set
+ * explicitly in `src/payload.config.ts` from `PAYLOAD_PUBLIC_SERVER_URL`)
+ * is the only trusted, server-controlled source of truth; the final
+ * fallback below is for the rare case `req.payload` isn't populated and is
+ * itself server-side config, never request-derived.
+ */
 function resolveServerURL(req?: Partial<PayloadRequest>): string {
   const fromConfig = req?.payload?.config?.serverURL
   if (fromConfig) {
     return fromConfig.replace(/\/$/, '')
-  }
-  const origin = req?.headers?.get?.('origin')
-  if (origin) {
-    return origin.replace(/\/$/, '')
   }
   return (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
 }
