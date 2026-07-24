@@ -2,7 +2,11 @@ import type { CollectionBeforeValidateHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../../access/hasMenuAccess'
+import { auditCollection } from '../../audit/auditCollection'
 import { toRelationId } from '../utils'
+
+/** Access-history audit hooks (Task 2A) for this collection's mutations. */
+const codesAudit = auditCollection('system.codes.detail')
 
 /**
  * Computes `depth` and enforces every structural business rule for detail
@@ -239,5 +243,7 @@ export const Codes: CollectionConfig = {
   ],
   hooks: {
     beforeValidate: [validateAndComputeDepth],
+    afterChange: [codesAudit.afterChange],
+    afterDelete: [codesAudit.afterDelete],
   },
 }

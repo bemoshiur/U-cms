@@ -5,6 +5,7 @@ import type {
 } from 'payload'
 import { APIError } from 'payload'
 
+import { recordLoginSuccessAudit } from '../audit/authHooks'
 import { validatePassword } from './validatePassword'
 
 /**
@@ -119,19 +120,49 @@ export const blockInactiveLogin: CollectionBeforeLoginHook = ({ user }) => {
 }
 
 /**
- * Stamps `lastLoginAt` on successful login so the dormancy sweep
- * (`markDormantAccounts`) can find long-inactive accounts. `lastLoginAt`'s
- * own field access forbids client writes, so this update uses
- * `overrideAccess: true`; it runs inside the login transaction (`req` passed
- * through) and carries no password, so `enforcePasswordPolicy` is a no-op.
+ * Successful-login hook (extended for Task 2A). Three concerns:
+ *
+ *  1. Stamps `lastLoginAt` for the dormancy sweep (`markDormantAccounts`).
+ *     `lastLoginAt`'s own field access forbids client writes, so this update
+ *     uses `overrideAccess: true`; it runs inside the login transaction (`req`
+ *     passed through) and carries no password, so `enforcePasswordPolicy` is a
+ *     no-op. `context.skipAudit` is set around this update so the audit
+ *     backbone does NOT log it as a generic `update` — the login is already
+ *     captured as a dedicated `login` event below.
+ *  2. Writes a `login` `accessLogs` row (refs 1-55/3-1).
+ *  3. Writes a success `loginHistory` row (ref 3-7).
+ *
+ * Steps 2–3 are transaction-isolated and never throw (see the audit writers),
+ * so login can never be broken by an audit failure.
  */
 export const recordLastLogin: CollectionAfterLoginHook = async ({ req, user }) => {
-  await req.payload.update({
-    collection: 'users',
-    id: user.id,
-    data: { lastLoginAt: new Date().toISOString() },
-    overrideAccess: true,
-    req,
-  })
+  const sessionLoginAt = new Date().toISOString()
+
+  const previousSkip = req.context?.skipAudit
+  if (req.context) {
+    req.context.skipAudit = true
+  }
+  try {
+    await req.payload.update({
+      collection: 'users',
+      id: user.id,
+      data: { lastLoginAt: sessionLoginAt },
+      overrideAccess: true,
+      req,
+    })
+  } finally {
+    if (req.context) {
+      req.context.skipAudit = previousSkip
+    }
+  }
+
+  // Audit the login itself (isolated + non-throwing). Defensively wrapped so a
+  // login can never be broken by the audit path, per the Task 2A contract.
+  try {
+    await recordLoginSuccessAudit(req, user as unknown as Record<string, unknown>, sessionLoginAt)
+  } catch (err) {
+    req.payload?.logger?.error?.({ err }, '[audit] login audit failed — swallowed to protect login')
+  }
+
   return user
 }

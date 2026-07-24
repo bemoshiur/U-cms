@@ -1,8 +1,20 @@
 import type { Access, CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccess, menuFieldAccess } from '../access/hasMenuAccess'
+import { auditCollection } from '../audit/auditCollection'
+import { recordLoginFailure, recordLogout } from '../audit/authHooks'
+import { journalUserRoleChanges } from '../audit/permissionJournals'
 import { blockInactiveLogin, enforcePasswordPolicy, recordLastLogin } from '../auth/userHooks'
 import { renderForgotPasswordEmail } from '../email/authEmails'
+
+/**
+ * Access-history audit hooks (Task 2A) for this collection's mutations.
+ * `linkActor: false` because a `users` mutation locks the mutated user row,
+ * which would deadlock the isolated audit write's `actor` FK when a user edits
+ * their own account (identity is still captured via `actorLabel`) — see
+ * `RecordAccessArgs.linkActor`.
+ */
+const usersAudit = auditCollection('system.admins', { linkActor: false })
 
 /**
  * `read`/`update` access for `users`: any authenticated user may always
@@ -123,8 +135,20 @@ export const Users: CollectionConfig = {
     beforeValidate: [enforcePasswordPolicy],
     // Only `status: active` accounts may authenticate (ref 1-16).
     beforeLogin: [blockInactiveLogin],
-    // Stamp `lastLoginAt` for the dormancy sweep (ref 1-16 장기 미로그인).
+    // Stamp `lastLoginAt` (dormancy sweep) + write the `login` accessLog and a
+    // success `loginHistory` row (Task 2A, refs 1-55/3-7). See `recordLastLogin`.
     afterLogin: [recordLastLogin],
+    // Task 2A: journal any `roles` change (ref 3-2 권한 변경 이력), then record
+    // the mutation itself in the access history (ref 1-55/3-1). The login-time
+    // `lastLoginAt` stamp is suppressed via `context.skipAudit` to avoid
+    // double-logging alongside the dedicated `login` event.
+    afterChange: [journalUserRoleChanges, usersAudit.afterChange],
+    afterDelete: [usersAudit.afterDelete],
+    // Failed-login capture (ref 3-6 로그인 실패 이력) — the only Payload 3.86 seam
+    // that fires on a rejected password (see `recordLoginFailure`).
+    afterError: [recordLoginFailure],
+    // Logout capture (ref 1-55).
+    afterLogout: [recordLogout],
   },
   fields: [
     // Email added by default

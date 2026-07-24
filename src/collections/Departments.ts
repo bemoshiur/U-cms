@@ -2,7 +2,11 @@ import type { CollectionBeforeDeleteHook, CollectionConfig } from 'payload'
 import { APIError } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../access/hasMenuAccess'
+import { auditCollection } from '../audit/auditCollection'
 import { preventSelfReferentialCycle } from './utils'
+
+/** Access-history audit hooks (Task 2A) for this collection's mutations. */
+const departmentsAudit = auditCollection('system.departments')
 
 /**
  * Legacy allows deleting only leaf departments (inference from the manual —
@@ -112,5 +116,7 @@ export const Departments: CollectionConfig = {
   hooks: {
     beforeChange: [preventSelfReferentialCycle('departments')],
     beforeDelete: [blockDeleteWithChildren],
+    afterChange: [departmentsAudit.afterChange],
+    afterDelete: [departmentsAudit.afterDelete],
   },
 }

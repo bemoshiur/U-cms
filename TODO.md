@@ -71,10 +71,10 @@
 
 ### Audit logging — refs 1-55, 3-1..3-3, 3-5..3-7
 
-- [ ] 2.7 `accessLogs` collection + hook/middleware capture: actor, menu, action verb, URL, IP, event ts, session-login ts; date+keyword search views
-- [ ] 2.8 `loginHistory`: success/fail, geo-IP overseas flag, UA mobile flag; masked-ID master list + pre-filtered views (overseas, mobile, failures); empty-state
-- [ ] 2.9 `permissionChangeLogs` (user↔role, w/ actor+IP) and `menuPermissionLogs` (per-save added/removed menu enumeration + role-member snapshot)
-- [ ] 2.10 PII masking utilities (IDs `ha***g`, names) applied to all log list views
+- [x] 2.7 `accessLogs` collection + hook/middleware capture: actor, menu, action verb, URL, IP, event ts, session-login ts; date+keyword search views (Task 2A — append-only/immutable collection + `recordAccess`/`auditCollection` mutation capture + login/logout; date/keyword search is Payload's built-in list filtering. Read/list auditing deferred — see task-2A-report.md)
+- [x] 2.8 `loginHistory`: success/fail, geo-IP overseas flag, UA mobile flag; masked-ID master list + pre-filtered views (overseas, mobile, failures); empty-state (Task 2A — one collection; overseas/mobile/failure are documented saved-filter queries; geo is a `geoLookup` stub defaulting domestic)
+- [x] 2.9 `permissionChangeLogs` (user↔role, w/ actor+IP) and `menuPermissionLogs` (per-save added/removed menu enumeration + role-member snapshot) (Task 2A — afterChange diff hooks on users/roles)
+- [x] 2.10 PII masking utilities (IDs `ha***g`, names) applied to all log list views (Task 2A — `src/lib/mask.ts` + `MaskedCell` on accessLogs.actorLabel, loginHistory.userLabel/loginId)
 
 **Exit criteria:** 2FA round-trip works; non-allowlisted IP blocked from admin; every admin action and login lands in the correct log with correct flags.
 

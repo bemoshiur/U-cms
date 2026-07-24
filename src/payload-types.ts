@@ -77,6 +77,10 @@ export interface Config {
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
+    accessLogs: AccessLog;
+    loginHistory: LoginHistory;
+    permissionChangeLogs: PermissionChangeLog;
+    menuPermissionLogs: MenuPermissionLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -98,6 +102,10 @@ export interface Config {
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
+    accessLogs: AccessLogsSelect<false> | AccessLogsSelect<true>;
+    loginHistory: LoginHistorySelect<false> | LoginHistorySelect<true>;
+    permissionChangeLogs: PermissionChangeLogsSelect<false> | PermissionChangeLogsSelect<true>;
+    menuPermissionLogs: MenuPermissionLogsSelect<false> | MenuPermissionLogsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -470,6 +478,167 @@ export interface PasswordPolicy {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "accessLogs".
+ */
+export interface AccessLog {
+  id: number;
+  /**
+   * The acting admin (null for anonymous/system events).
+   */
+  actor?: (number | null) | User;
+  /**
+   * Denormalized "name(id)" snapshot — survives deletion of the user.
+   */
+  actorLabel?: string | null;
+  /**
+   * The adminMenu menuKey touched, if any.
+   */
+  menuKey?: string | null;
+  menuLabel?: string | null;
+  action: 'login' | 'logout' | 'list' | 'view' | 'create' | 'update' | 'delete';
+  url: string;
+  /**
+   * Raw client IP (IPv4/IPv6), captured as-is.
+   */
+  ipAddress?: string | null;
+  /**
+   * The session's login timestamp, for session reconstruction.
+   */
+  sessionLoginAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "loginHistory".
+ */
+export interface LoginHistory {
+  id: number;
+  /**
+   * The user display name (legacy 이름). Masked in the list view.
+   */
+  userLabel?: string | null;
+  /**
+   * The attempted/real login identifier (legacy 아이디). Masked in the list view.
+   */
+  loginId?: string | null;
+  /**
+   * Whether the login succeeded (legacy 로그인 성공여부). Failure view filters on false.
+   */
+  success?: boolean | null;
+  /**
+   * Reason a failed login was rejected, if known.
+   */
+  failReason?: string | null;
+  /**
+   * Raw client IP (IPv4/IPv6), captured as-is.
+   */
+  ipAddress?: string | null;
+  /**
+   * Geo-IP overseas flag (legacy 해외여부). Default domestic until a GeoIP provider is wired.
+   */
+  isOverseas?: boolean | null;
+  /**
+   * Mobile-device flag (legacy 모바일여부), from User-Agent parsing.
+   */
+  isMobile?: boolean | null;
+  userAgent?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "permissionChangeLogs".
+ */
+export interface PermissionChangeLog {
+  id: number;
+  /**
+   * The user whose roles changed (legacy 이름).
+   */
+  targetUserLabel?: string | null;
+  targetUserId?: string | null;
+  /**
+   * The affected user’s email (legacy 이메일주소).
+   */
+  targetUserEmail?: string | null;
+  /**
+   * e.g. "roles: [ROLE_AA] → [ROLE_AA, ROLE_BB]" (legacy 권한변경 요약).
+   */
+  changeSummary?: string | null;
+  /**
+   * Who made the change (legacy 변경자).
+   */
+  actorLabel?: string | null;
+  /**
+   * The actor’s IP (legacy 변경IP).
+   */
+  ipAddress?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menuPermissionLogs".
+ */
+export interface MenuPermissionLog {
+  id: number;
+  /**
+   * The role whose menu grants changed (legacy 권한명).
+   */
+  roleLabel?: string | null;
+  /**
+   * The role code (legacy 권한코드), e.g. "ROLE_CC".
+   */
+  roleId?: string | null;
+  /**
+   * Menu labels granted in this event (legacy 메뉴 권한 등록).
+   */
+  addedMenus?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Menu labels revoked in this event (legacy 메뉴 권한 제거).
+   */
+  removedMenus?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Actor-label snapshot of users in the role at change time (legacy 소속 사용자).
+   */
+  roleMemberSnapshot?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Who made the change (legacy 변경자).
+   */
+  actorLabel?: string | null;
+  /**
+   * The actor’s IP (legacy 변경IP).
+   */
+  ipAddress?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -531,6 +700,22 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'passwordPolicies';
         value: number | PasswordPolicy;
+      } | null)
+    | ({
+        relationTo: 'accessLogs';
+        value: number | AccessLog;
+      } | null)
+    | ({
+        relationTo: 'loginHistory';
+        value: number | LoginHistory;
+      } | null)
+    | ({
+        relationTo: 'permissionChangeLogs';
+        value: number | PermissionChangeLog;
+      } | null)
+    | ({
+        relationTo: 'menuPermissionLogs';
+        value: number | MenuPermissionLog;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -785,6 +970,67 @@ export interface AdminMenusSelect<T extends boolean = true> {
 export interface PasswordPoliciesSelect<T extends boolean = true> {
   ruleText?: T;
   isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "accessLogs_select".
+ */
+export interface AccessLogsSelect<T extends boolean = true> {
+  actor?: T;
+  actorLabel?: T;
+  menuKey?: T;
+  menuLabel?: T;
+  action?: T;
+  url?: T;
+  ipAddress?: T;
+  sessionLoginAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "loginHistory_select".
+ */
+export interface LoginHistorySelect<T extends boolean = true> {
+  userLabel?: T;
+  loginId?: T;
+  success?: T;
+  failReason?: T;
+  ipAddress?: T;
+  isOverseas?: T;
+  isMobile?: T;
+  userAgent?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "permissionChangeLogs_select".
+ */
+export interface PermissionChangeLogsSelect<T extends boolean = true> {
+  targetUserLabel?: T;
+  targetUserId?: T;
+  targetUserEmail?: T;
+  changeSummary?: T;
+  actorLabel?: T;
+  ipAddress?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menuPermissionLogs_select".
+ */
+export interface MenuPermissionLogsSelect<T extends boolean = true> {
+  roleLabel?: T;
+  roleId?: T;
+  addedMenus?: T;
+  removedMenus?: T;
+  roleMemberSnapshot?: T;
+  actorLabel?: T;
+  ipAddress?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -2,6 +2,10 @@ import type { CollectionConfig, Field, TextFieldSingleValidation } from 'payload
 import { APIError } from 'payload'
 
 import { hasMenuAccessSync, menuAccess } from '../access/hasMenuAccess'
+import { auditCollection } from '../audit/auditCollection'
+
+/** Access-history audit hooks (Task 2A) for this collection's mutations. */
+const sitesAudit = auditCollection('system.sites')
 
 /**
  * Legacy 사이트 정보 관리 (Site Info Management) footer item shape — each
@@ -242,5 +246,7 @@ export const Sites: CollectionConfig = {
         return data
       },
     ],
+    afterChange: [sitesAudit.afterChange],
+    afterDelete: [sitesAudit.afterDelete],
   },
 }

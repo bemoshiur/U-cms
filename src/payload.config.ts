@@ -19,6 +19,10 @@ import { Codes } from './collections/codes/Codes'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
+import { AccessLogs } from './collections/AccessLogs'
+import { LoginHistory } from './collections/LoginHistory'
+import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
+import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
 import { warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { branding } from './branding'
@@ -208,6 +212,12 @@ export default buildConfig({
     Roles,
     AdminMenus,
     PasswordPolicies,
+    // Audit & logging backbone (Task 2A) — append-only, immutable, gated on
+    // the privacy.* menuKeys. Written by src/audit/* via overrideAccess.
+    AccessLogs,
+    LoginHistory,
+    PermissionChangeLogs,
+    MenuPermissionLogs,
   ],
   // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
   // /api/account-request, /api/find-id, /api/find-password.
