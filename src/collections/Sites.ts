@@ -1,4 +1,4 @@
-import type { CollectionConfig, Field } from 'payload'
+import type { CollectionConfig, Field, TextFieldSingleValidation } from 'payload'
 import { APIError } from 'payload'
 
 /**
@@ -27,6 +27,36 @@ function footerItem(name: string): Field {
 /** Image mimetypes the legacy site logo upload accepts (jpg, jpeg, png, gif). */
 const ALLOWED_LOGO_MIMETYPES = ['image/jpeg', 'image/png', 'image/gif']
 
+/**
+ * A custom `validate` on a field REPLACES Payload's default validator for
+ * that field type entirely — including the required-empty check — rather
+ * than layering on top of it (payload/dist/fields/config/sanitize.js only
+ * auto-wraps the type's default validator, which is what enforces
+ * `required`, when `field.validate` is `undefined`). Since these two
+ * fields need custom format validation, `required` is threaded through
+ * `options.required` and enforced by hand here — otherwise `''` would
+ * satisfy Postgres's NOT NULL constraint and silently pass.
+ */
+const validateSiteId: TextFieldSingleValidation = (value, { required }) => {
+  if (required && (typeof value !== 'string' || value.length === 0)) {
+    return 'Site ID is required.'
+  }
+  if (typeof value === 'string' && value.length > 0 && !/^[a-z0-9]+$/.test(value)) {
+    return 'Site ID must contain only lowercase letters and numbers (a-z, 0-9), e.g. "bos" or "demo".'
+  }
+  return true
+}
+
+const validateUrl: TextFieldSingleValidation = (value, { required }) => {
+  if (required && (typeof value !== 'string' || value.length === 0)) {
+    return 'URL is required.'
+  }
+  if (typeof value === 'string' && value.length > 0 && !/^https?:\/\//.test(value)) {
+    return 'URL must start with http:// or https://'
+  }
+  return true
+}
+
 export const Sites: CollectionConfig = {
   slug: 'sites',
   admin: {
@@ -43,16 +73,7 @@ export const Sites: CollectionConfig = {
       admin: {
         description: 'Lowercase alphanumeric identifier, e.g. "bos" or "demo".',
       },
-      validate: (value: string | null | undefined) => {
-        if (typeof value !== 'string' || value.length === 0) {
-          // Let `required` report the empty case.
-          return true
-        }
-        if (!/^[a-z0-9]+$/.test(value)) {
-          return 'Site ID must contain only lowercase letters and numbers (a-z, 0-9), e.g. "bos" or "demo".'
-        }
-        return true
-      },
+      validate: validateSiteId,
     },
     {
       name: 'name',
@@ -66,15 +87,7 @@ export const Sites: CollectionConfig = {
       admin: {
         description: 'Full URL starting with http:// or https://',
       },
-      validate: (value: string | null | undefined) => {
-        if (typeof value !== 'string' || value.length === 0) {
-          return true
-        }
-        if (!/^https?:\/\//.test(value)) {
-          return 'URL must start with http:// or https://'
-        }
-        return true
-      },
+      validate: validateUrl,
     },
     {
       name: 'isAdminSite',

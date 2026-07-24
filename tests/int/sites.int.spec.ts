@@ -51,6 +51,34 @@ describe('sites collection', () => {
     ).rejects.toThrow()
   })
 
+  // A custom field `validate` replaces Payload's default required-checking
+  // validator entirely (see the comment on validateSiteId/validateUrl in
+  // src/collections/Sites.ts) — these two guard against silently accepting
+  // an empty string or a missing key, which Postgres NOT NULL alone would
+  // not catch (an empty string still satisfies NOT NULL).
+  it('rejects an empty-string siteId', async () => {
+    await expect(
+      payload.create({
+        collection: 'sites',
+        data: { siteId: '', name: 'Empty Site ID', url: 'https://example.com' },
+        overrideAccess: true,
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects a missing siteId', async () => {
+    await expect(
+      payload.create({
+        collection: 'sites',
+        // Intentionally omits the required `siteId` — TS would normally
+        // block this, but a real REST/GraphQL caller isn't type-checked,
+        // so the runtime guard must still catch it.
+        data: { name: 'Missing Site ID', url: 'https://example.com' } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+        overrideAccess: true,
+      }),
+    ).rejects.toThrow()
+  })
+
   it('rejects a url with no scheme', async () => {
     await expect(
       payload.create({
@@ -60,6 +88,28 @@ describe('sites collection', () => {
           name: 'No Scheme Site',
           url: 'example.com',
         },
+        overrideAccess: true,
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects an empty-string url', async () => {
+    await expect(
+      payload.create({
+        collection: 'sites',
+        data: { siteId: uniqueSiteId('emptyurl'), name: 'Empty URL Site', url: '' },
+        overrideAccess: true,
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects a missing url', async () => {
+    await expect(
+      payload.create({
+        collection: 'sites',
+        // Intentionally omits the required `url` — see the missing-siteId
+        // test above for why this needs a cast.
+        data: { siteId: uniqueSiteId('nourlkey'), name: 'Missing URL' } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
         overrideAccess: true,
       }),
     ).rejects.toThrow()
