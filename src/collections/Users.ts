@@ -1,6 +1,8 @@
-import type { Access, CollectionConfig } from 'payload'
+import type { Access, CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccess, menuFieldAccess } from '../access/hasMenuAccess'
+import { blockInactiveLogin, enforcePasswordPolicy, recordLastLogin } from '../auth/userHooks'
+import { renderForgotPasswordEmail } from '../email/authEmails'
 
 /**
  * `read`/`update` access for `users`: any authenticated user may always
@@ -45,10 +47,39 @@ function selfOrMenuAccess(menuKey: string): Access {
 }
 
 /**
- * Legacy 관리자 계정 관리 (Admin Account Management) — refs 1-15/1-16. Full
- * admin-account fields (status workflow, 2FA reset, profile photo, etc.)
- * land in Task 1D; this task adds only what the permission backbone needs:
- * `roles` (which roles this admin holds) and a placeholder `name`.
+ * A custom `validate` REPLACES Payload's default required-checking validator
+ * (see `validateSiteId` in src/collections/Sites.ts) — since `loginId` is
+ * optional at the collection level (self-service applicants supply it via the
+ * account-request endpoint; the seeded super-admin and Local-API-created test
+ * users may not have one), this only enforces a format on non-empty values.
+ */
+const validateLoginId: TextFieldSingleValidation = (value) => {
+  if (typeof value === 'string' && value.length > 0 && !/^[a-z0-9][a-z0-9._-]{3,}$/.test(value)) {
+    return 'Login ID must be at least 4 characters: lowercase letters, digits, and . _ - only, starting with a letter or digit.'
+  }
+  return true
+}
+
+/**
+ * Legacy 관리자 계정 관리 (Admin Account Management) — refs 1-15/1-16. Task 1D
+ * completes the admin-account lifecycle on top of Task 1C's `roles`/`name`:
+ * approval `status`, profile fields (`department`, `duties`, `mobile`,
+ * `extension`, `profilePhoto`), a legacy login `loginId`, and login gating.
+ *
+ * ## Two independent "locked" concepts (kept separate on purpose)
+ *
+ *  - Payload-native lock (`maxLoginAttempts`/`lockTime` → `loginAttempts`/
+ *    `lockUntil`): a *transient* brute-force lock that Payload sets and clears
+ *    itself after `lockTime`. We enable it (5 attempts / 10 min).
+ *  - `status` (this collection's business lifecycle): `pending` → `active`
+ *    (approval), `active` → `dormant` (long inactivity), plus a manual
+ *    `locked`. This is admin-managed and does NOT auto-clear.
+ *
+ * They are deliberately NOT wired together (the brief calls this out): an
+ * auto-lock from failed attempts must not stomp the `dormant`/`pending`
+ * lifecycle, and reactivation from `dormant` is an admin action, not a
+ * time-based unlock. `blockInactiveLogin` (beforeLogin) enforces the `status`
+ * gate; the native lock is enforced by Payload before that hook runs.
  *
  * `auth.depth: 1` is load-bearing, not cosmetic — see the design-decision
  * comment at the top of `src/access/hasMenuAccess.ts` for why the
@@ -59,12 +90,13 @@ export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
     useAsTitle: 'email',
+    defaultColumns: ['email', 'loginId', 'name', 'status'],
     // Menu-based access control (Task 1C) — see src/access/hasMenuAccess.ts.
     // Deliberately does NOT special-case self here: hiding the collection
     // from the nav for a roleless self-service user is a presentational
     // gap only (they can still self-read/update via direct API/URL per the
     // access config below) — a dedicated "my profile" surface for such
-    // users is Task 1D scope.
+    // users is a later task.
     hidden: ({ user }) => !hasMenuAccessSync(user, 'system.admins'),
   },
   access: {
@@ -75,15 +107,68 @@ export const Users: CollectionConfig = {
   },
   auth: {
     depth: 1,
+    // Native transient brute-force lock (ref 1-1 "계정이 잠긴 상태"). Distinct
+    // from the `status` lifecycle — see the collection doc comment above.
+    maxLoginAttempts: 5,
+    lockTime: 10 * 60 * 1000, // 10 minutes
+    // Password recovery email (ref 1-3 Find PW) uses the branded template.
+    forgotPassword: {
+      generateEmailSubject: () => 'Reset your Pulse CMS password',
+      generateEmailHTML: (args) => renderForgotPasswordEmail(args ?? {}),
+    },
+  },
+  hooks: {
+    // Password composition policy (ref 3-9) — runs while `data.password` is
+    // still plaintext, on both create and update. See `enforcePasswordPolicy`.
+    beforeValidate: [enforcePasswordPolicy],
+    // Only `status: active` accounts may authenticate (ref 1-16).
+    beforeLogin: [blockInactiveLogin],
+    // Stamp `lastLoginAt` for the dormancy sweep (ref 1-16 장기 미로그인).
+    afterLogin: [recordLastLogin],
   },
   fields: [
     // Email added by default
     {
+      name: 'loginId',
+      type: 'text',
+      unique: true,
+      validate: validateLoginId,
+      admin: {
+        description:
+          'Legacy login ID (ref 1-15/1-16 "ID"). Distinct from the email used for authentication; shown in the account list and used by ID/PW recovery. Optional here — self-service applicants supply it via the account-request form.',
+      },
+    },
+    {
       name: 'name',
       type: 'text',
       admin: {
+        description: 'Display name (legacy 관리자 이름).',
+      },
+    },
+    {
+      name: 'status',
+      type: 'select',
+      required: true,
+      defaultValue: 'pending',
+      options: [
+        { label: 'Pending approval (승인대기)', value: 'pending' },
+        { label: 'Active (정상)', value: 'active' },
+        { label: 'Dormant — long inactivity (장기 미로그인)', value: 'dormant' },
+        { label: 'Locked', value: 'locked' },
+      ],
+      // SECURITY (mirrors `roles` below): `status` is privilege-sensitive — a
+      // user must NOT be able to self-approve. The collection-level
+      // `selfOrMenuAccess` lets a user update their own doc (name, etc.), but
+      // this field-level gate requires `system.admins` to create/change
+      // `status`, even on your own account. `overrideAccess` (seed,
+      // account-request server create) bypasses this as usual.
+      access: {
+        create: menuFieldAccess('system.admins'),
+        update: menuFieldAccess('system.admins'),
+      },
+      admin: {
         description:
-          'Display name (legacy 관리자 이름). Full admin-account fields land in Task 1D.',
+          'Account lifecycle. Only "Active" accounts may log in. Approve a pending account by switching to Active; a dormant account is reactivated the same way.',
       },
     },
     {
@@ -107,6 +192,60 @@ export const Users: CollectionConfig = {
       admin: {
         description:
           "Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked. Changing this field always requires the system.admins grant, even when editing your own account.",
+      },
+    },
+    // Profile fields (ref 1-16). All optional; `department` and `profilePhoto`
+    // are relationships (department tree / media upload).
+    {
+      name: 'department',
+      type: 'relationship',
+      relationTo: 'departments',
+      admin: {
+        description: 'Department this admin belongs to (legacy 부서, picked from the tree).',
+      },
+    },
+    {
+      name: 'duties',
+      type: 'textarea',
+      admin: {
+        description: 'Duties/role description (legacy 업무내용) — shown in the org chart later.',
+      },
+    },
+    {
+      name: 'mobile',
+      type: 'text',
+      admin: {
+        description: 'Mobile phone number (legacy 휴대전화).',
+      },
+    },
+    {
+      name: 'extension',
+      type: 'text',
+      admin: {
+        description: 'Internal extension (legacy 내선번호).',
+      },
+    },
+    {
+      name: 'profilePhoto',
+      type: 'upload',
+      relationTo: 'media',
+      admin: {
+        description: 'Profile photo (legacy 프로필 사진; jpg/jpeg/png/gif, displayed 64×64).',
+      },
+    },
+    {
+      name: 'lastLoginAt',
+      type: 'date',
+      // System-maintained (stamped by `recordLastLogin` on login via
+      // overrideAccess). Not client-writable; read-only in the admin UI. The
+      // dormancy sweep (`markDormantAccounts`) reads it.
+      access: {
+        create: () => false,
+        update: () => false,
+      },
+      admin: {
+        readOnly: true,
+        description: 'Last successful login. Maintained by the system; used by the dormancy sweep.',
       },
     },
   ],

@@ -6,6 +6,7 @@ import { superAdminStep } from './steps/superAdmin'
 import { sitesStep } from './steps/sites'
 import { codesStep } from './steps/codes'
 import { departmentsStep } from './steps/departments'
+import { passwordPoliciesStep } from './steps/passwordPolicies'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -25,6 +26,7 @@ export type { SeedStep } from './types'
  *    `sitesStep`, per the Task 1B brief.
  *  - `departmentsStep` has no dependency on any of the above but is
  *    registered last to match the brief's Part 3 ordering.
+ *  - `passwordPoliciesStep` (Task 1D) has no dependencies; appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -33,6 +35,7 @@ export const seedSteps: SeedStep[] = [
   sitesStep,
   codesStep,
   departmentsStep,
+  passwordPoliciesStep,
 ]
 
 /**

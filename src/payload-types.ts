@@ -76,6 +76,7 @@ export interface Config {
     codes: Code;
     roles: Role;
     adminMenus: AdminMenu;
+    passwordPolicies: PasswordPolicy;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -96,6 +97,7 @@ export interface Config {
     codes: CodesSelect<false> | CodesSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
+    passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -142,13 +144,45 @@ export interface UserAuthOperations {
 export interface User {
   id: number;
   /**
-   * Display name (legacy 관리자 이름). Full admin-account fields land in Task 1D.
+   * Legacy login ID (ref 1-15/1-16 "ID"). Distinct from the email used for authentication; shown in the account list and used by ID/PW recovery. Optional here — self-service applicants supply it via the account-request form.
+   */
+  loginId?: string | null;
+  /**
+   * Display name (legacy 관리자 이름).
    */
   name?: string | null;
+  /**
+   * Account lifecycle. Only "Active" accounts may log in. Approve a pending account by switching to Active; a dormant account is reactivated the same way.
+   */
+  status: 'pending' | 'active' | 'dormant' | 'locked';
   /**
    * Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked. Changing this field always requires the system.admins grant, even when editing your own account.
    */
   roles?: (number | Role)[] | null;
+  /**
+   * Department this admin belongs to (legacy 부서, picked from the tree).
+   */
+  department?: (number | null) | Department;
+  /**
+   * Duties/role description (legacy 업무내용) — shown in the org chart later.
+   */
+  duties?: string | null;
+  /**
+   * Mobile phone number (legacy 휴대전화).
+   */
+  mobile?: string | null;
+  /**
+   * Internal extension (legacy 내선번호).
+   */
+  extension?: string | null;
+  /**
+   * Profile photo (legacy 프로필 사진; jpg/jpeg/png/gif, displayed 64×64).
+   */
+  profilePhoto?: (number | null) | Media;
+  /**
+   * Last successful login. Maintained by the system; used by the dormancy sweep.
+   */
+  lastLoginAt?: string | null;
   tenants?:
     | {
         tenant: number | Site;
@@ -233,6 +267,56 @@ export interface AdminMenu {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "departments".
+ */
+export interface Department {
+  id: number;
+  /**
+   * Department name (legacy 부서명).
+   */
+  name: string;
+  /**
+   * Department duties/notes (legacy 부서업무).
+   */
+  duties?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  /**
+   * Legacy 사용여부. Inactive departments are hidden from pickers but kept (not deleted), so historical references keep resolving.
+   */
+  isActive?: boolean | null;
+  /**
+   * Parent department. Leave empty for a top-level department.
+   */
+  parent?: (number | null) | Department;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media".
+ */
+export interface Media {
+  id: number;
+  alt: string;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sites".
  */
 export interface Site {
@@ -298,56 +382,6 @@ export interface Site {
       show?: boolean | null;
     };
   };
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "media".
- */
-export interface Media {
-  id: number;
-  alt: string;
-  updatedAt: string;
-  createdAt: string;
-  url?: string | null;
-  thumbnailURL?: string | null;
-  filename?: string | null;
-  mimeType?: string | null;
-  filesize?: number | null;
-  width?: number | null;
-  height?: number | null;
-  focalX?: number | null;
-  focalY?: number | null;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "departments".
- */
-export interface Department {
-  id: number;
-  /**
-   * Department name (legacy 부서명).
-   */
-  name: string;
-  /**
-   * Department duties/notes (legacy 부서업무).
-   */
-  duties?: string | null;
-  phone?: string | null;
-  fax?: string | null;
-  /**
-   * Legacy 사용여부. Inactive departments are hidden from pickers but kept (not deleted), so historical references keep resolving.
-   */
-  isActive?: boolean | null;
-  /**
-   * Parent department. Leave empty for a top-level department.
-   */
-  parent?: (number | null) | Department;
-  /**
-   * Sibling display order (lower first).
-   */
-  order?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -419,6 +453,23 @@ export interface Code {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "passwordPolicies".
+ */
+export interface PasswordPolicy {
+  id: number;
+  /**
+   * Human-readable password rule shown to users (legacy 비밀번호 규칙). Note: this text is informational — enforcement is fixed in code (src/auth/validatePassword.ts).
+   */
+  ruleText: string;
+  /**
+   * Legacy 사용여부. The most recently created policy among those marked active is the one displayed to users.
+   */
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -476,6 +527,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'adminMenus';
         value: number | AdminMenu;
+      } | null)
+    | ({
+        relationTo: 'passwordPolicies';
+        value: number | PasswordPolicy;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -524,8 +579,16 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  loginId?: T;
   name?: T;
+  status?: T;
   roles?: T;
+  department?: T;
+  duties?: T;
+  mobile?: T;
+  extension?: T;
+  profilePhoto?: T;
+  lastLoginAt?: T;
   tenants?:
     | T
     | {
@@ -712,6 +775,16 @@ export interface AdminMenusSelect<T extends boolean = true> {
   parent?: T;
   order?: T;
   collectionSlug?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "passwordPolicies_select".
+ */
+export interface PasswordPoliciesSelect<T extends boolean = true> {
+  ruleText?: T;
+  isActive?: T;
   updatedAt?: T;
   createdAt?: T;
 }

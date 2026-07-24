@@ -55,6 +55,10 @@ export const superAdminStep: SeedStep = {
       overrideAccess: true,
     })
 
+    // Legacy login ID (Task 1D). Derived from the email local-part; only ever
+    // SET when missing (never overwrites an operator's chosen value).
+    const seededLoginId = email.split('@')[0]
+
     const existingUser = existing.docs[0]
     if (existingUser) {
       // Postgres `id` columns in this project are always integers (no UUID
@@ -65,22 +69,34 @@ export const superAdminStep: SeedStep = {
         .map(toRelationId)
         .filter((id): id is number => typeof id === 'number')
 
-      if (currentRoleIds.includes(roleAdminId)) {
+      // Heal three things idempotently (LOCKOUT SAFETY — the seeded super-admin
+      // must never be left unable to administer or log in):
+      //  - roles: ensure ROLE_ADMIN is held (additive union, never replace).
+      //  - status: ensure `active` — Task 1D's login gate blocks any non-active
+      //    account, so a super-admin left `pending`/`dormant` (or with an
+      //    undefined status predating Task 1D) would be locked out.
+      //  - loginId: backfill if missing (new Task 1D field).
+      const needsRole = !currentRoleIds.includes(roleAdminId)
+      const needsStatus = existingUser.status !== 'active'
+      const needsLoginId = !existingUser.loginId
+
+      if (!needsRole && !needsStatus && !needsLoginId) {
         payload.logger.info(`[seed:super-admin] user "${email}" already exists — skipping.`)
         return
       }
 
-      // Additive only: union, never replace — an operator may have granted
-      // (or the account may otherwise hold) other roles since it was
-      // created; this must not remove any of them.
       await payload.update({
         collection: 'users',
         id: existingUser.id,
-        data: { roles: [...currentRoleIds, roleAdminId] },
+        data: {
+          ...(needsRole ? { roles: [...currentRoleIds, roleAdminId] } : {}),
+          ...(needsStatus ? { status: 'active' } : {}),
+          ...(needsLoginId ? { loginId: seededLoginId } : {}),
+        },
         overrideAccess: true,
       })
       payload.logger.info(
-        `[seed:super-admin] user "${email}" already exists — assigned missing role "${ROLE_ADMIN_ROLE_ID}".`,
+        `[seed:super-admin] user "${email}" already exists — healed${needsRole ? ' role' : ''}${needsStatus ? ' status' : ''}${needsLoginId ? ' loginId' : ''}.`,
       )
       return
     }
@@ -95,7 +111,15 @@ export const superAdminStep: SeedStep = {
 
     await payload.create({
       collection: 'users',
-      data: { email, password, roles: [roleAdminId] },
+      data: {
+        email,
+        password,
+        roles: [roleAdminId],
+        // Active so the seeded super-admin can log in past Task 1D's status
+        // gate; loginId backfilled from the email local-part.
+        status: 'active',
+        loginId: seededLoginId,
+      },
       overrideAccess: true,
     })
 

@@ -30,12 +30,12 @@
 
 ### Admin accounts & auth — refs 1-1, 1-2, 1-3, 1-15, 1-16
 
-- [ ] 1.4 `admins` auth collection: id/email (unique + dup-check UX), name, mobile (country code from code mgmt), extension, department rel, duties, profile photo (1 file, 64×64 display, rotate/reorder controls), roles hasMany (saveToJWT), status (승인대기/정상/장기미로그인/locked)
-- [ ] 1.5 Approval workflow: self-service account request form (public route) → pending state → approve/reject in admin; login blocked until 정상
-- [ ] 1.6 Password policy enforcement (active policy from `passwordPolicies`): ≥10 chars w/ 2 of 3 classes OR ≥8 w/ 3 classes; block sequential/ID-similar; 6-month rotation prompt
-- [ ] 1.7 Login page (custom view): branded logo from site config, save-ID checkbox, conditional Account-Request + ID/PW-Find buttons (site toggles), lockout messaging; `maxLoginAttempts`/`lockTime`
-- [ ] 1.8 ID/PW recovery: find-ID (name+email → email ID), find-PW (ID+email → issue new password) — approved accounts only
-- [ ] 1.9 Long-inactivity job: auto-transition to 장기 미로그인 (blocks login until re-approved)
+- [x] 1.4 `admins` auth collection: `loginId` (unique) + email (unique), name, mobile, extension, department rel, duties, profile photo (upload→media), roles hasMany (saveToJWT), status (승인대기/정상/장기미로그인/locked) — Task 1D. (Deferred custom UI: dup-check UX, mobile country-code-from-code-mgmt, 64×64 display + rotate/reorder controls — later admin-component task.)
+- [x] 1.5 Approval workflow: self-service account request (`POST /api/account-request`) → `status: pending` (client status/roles force-stripped) → approve by editing `status` in admin (field-gated on system.admins); login blocked until `active` (beforeLogin) — Task 1D.
+- [x] 1.6 Password policy enforcement (`src/auth/validatePassword.ts`, beforeValidate hook): ≥10 chars w/ 2 of 3 classes OR ≥8 w/ 3 classes; block sequences/login-ID-similar — Task 1D. (`passwordPolicies` collection holds display text/history; enforcement is fixed in code — code/DB split. 6-month rotation is advisory text only, not mechanically enforced.)
+- [~] 1.7 `maxLoginAttempts: 5` / `lockTime: 10m` set; public account-request + ID/PW-find endpoints exposed — Task 1D. Custom login VIEW (branded logo, save-ID, conditional buttons, lockout messaging) DEFERRED to Phase 2's 2FA login rework, per the Task 1D brief.
+- [x] 1.8 ID/PW recovery: find-ID (`POST /api/find-id`, name+email → emails login ID), find-PW (`POST /api/find-password`, id+email → Payload forgotPassword reset email) — approved/active accounts only, generic responses (no enumeration) — Task 1D.
+- [x] 1.9 Long-inactivity job: `markDormantAccounts()` + `scripts/mark-dormant.ts` (`pnpm dormancy:sweep`) auto-transition active→장기 미로그인 (dormant); blocks login until an admin re-activates — Task 1D.
 
 ### Roles & permissions — refs 1-10..1-13
 

@@ -80,6 +80,13 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 3,
     collectionSlug: 'codes',
   },
+  {
+    menuKey: 'system.passwordPolicies',
+    name: 'Password Composition Rules',
+    parentMenuKey: 'system',
+    order: 7,
+    collectionSlug: 'passwordPolicies',
+  },
   { menuKey: 'content', name: 'Content Management', order: 2 },
   {
     menuKey: 'content.media',

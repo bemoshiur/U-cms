@@ -18,7 +18,9 @@ import { CodeGroups } from './collections/codes/CodeGroups'
 import { Codes } from './collections/codes/Codes'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
+import { PasswordPolicies } from './collections/PasswordPolicies'
 import { warmAdminMenuKeyCache } from './access/hasMenuAccess'
+import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -185,7 +187,11 @@ export default buildConfig({
     Codes,
     Roles,
     AdminMenus,
+    PasswordPolicies,
   ],
+  // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
+  // /api/account-request, /api/find-id, /api/find-password.
+  endpoints: publicAccountEndpoints,
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

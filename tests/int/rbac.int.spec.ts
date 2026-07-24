@@ -123,7 +123,7 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
     it('a roleless user is denied create on sites (but CAN read — see the Sites.ts access comment)', async () => {
       const roleless = await payload.create({
         collection: 'users',
-        data: { email: uniqueEmail('roleless'), password: TEST_PASSWORD },
+        data: { email: uniqueEmail('roleless'), password: TEST_PASSWORD, status: 'active' },
         overrideAccess: true,
       })
 
@@ -185,6 +185,7 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
           email: uniqueEmail('sitesuser'),
           password: TEST_PASSWORD,
           roles: [role.id],
+          status: 'active',
         },
         overrideAccess: true,
       })
@@ -242,6 +243,7 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
           email: uniqueEmail('superuser'),
           password: TEST_PASSWORD,
           roles: [superRole.id],
+          status: 'active',
         },
         overrideAccess: true,
       })
@@ -278,7 +280,12 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
     it("a roleless user can read and update their own doc, but not someone else's", async () => {
       const roleless = await payload.create({
         collection: 'users',
-        data: { email: uniqueEmail('self'), password: TEST_PASSWORD, name: 'Original Name' },
+        data: {
+          email: uniqueEmail('self'),
+          password: TEST_PASSWORD,
+          name: 'Original Name',
+          status: 'active',
+        },
         overrideAccess: true,
       })
 
@@ -301,7 +308,7 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
 
       const other = await payload.create({
         collection: 'users',
-        data: { email: uniqueEmail('other'), password: TEST_PASSWORD },
+        data: { email: uniqueEmail('other'), password: TEST_PASSWORD, status: 'active' },
         overrideAccess: true,
       })
 
@@ -332,7 +339,12 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
 
       const roleless = await payload.create({
         collection: 'users',
-        data: { email: uniqueEmail('escalate'), password: TEST_PASSWORD, name: 'Before' },
+        data: {
+          email: uniqueEmail('escalate'),
+          password: TEST_PASSWORD,
+          name: 'Before',
+          status: 'active',
+        },
         overrideAccess: true,
       })
       expect(roleless.roles ?? []).toHaveLength(0)
@@ -402,7 +414,12 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
 
       const deptUser = await payload.create({
         collection: 'users',
-        data: { email: uniqueEmail('escalatedept'), password: TEST_PASSWORD, roles: [deptRole.id] },
+        data: {
+          email: uniqueEmail('escalatedept'),
+          password: TEST_PASSWORD,
+          roles: [deptRole.id],
+          status: 'active',
+        },
         overrideAccess: true,
       })
 
@@ -455,13 +472,14 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
           email: uniqueEmail('adminsholder'),
           password: TEST_PASSWORD,
           roles: [grantRole.id],
+          status: 'active',
         },
         overrideAccess: true,
       })
 
       const targetUser = await payload.create({
         collection: 'users',
-        data: { email: uniqueEmail('assignedtarget'), password: TEST_PASSWORD },
+        data: { email: uniqueEmail('assignedtarget'), password: TEST_PASSWORD, status: 'active' },
         overrideAccess: true,
       })
 
