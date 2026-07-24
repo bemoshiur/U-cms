@@ -5,4 +5,5 @@ docs/analysis
 media
 uploads
 src/payload-types.ts
+src/migrations
 .superpowers

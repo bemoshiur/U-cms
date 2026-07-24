@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    sites: Site;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -78,6 +79,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    sites: SitesSelect<false> | SitesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -123,6 +125,12 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: number;
+  tenants?:
+    | {
+        tenant: number | Site;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -141,6 +149,76 @@ export interface User {
     | null;
   password?: string | null;
   collection: 'users';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sites".
+ */
+export interface Site {
+  id: number;
+  /**
+   * Lowercase alphanumeric identifier, e.g. "bos" or "demo".
+   */
+  siteId: string;
+  name: string;
+  /**
+   * Full URL starting with http:// or https://
+   */
+  url: string;
+  /**
+   * Marks this site as the admin back-office (legacy "bos") rather than a user-facing site.
+   */
+  isAdminSite?: boolean | null;
+  satisfactionEnabled?: boolean | null;
+  dataManagerEnabled?: boolean | null;
+  /**
+   * Web accessibility validation usage (operates only in local/dev environments per legacy behavior).
+   */
+  accessibilityValidation?: ('off' | 'popup' | 'db' | 'popup_db') | null;
+  /**
+   * Require a Google OTP code after login for this admin site.
+   */
+  twoFactorEnabled?: boolean | null;
+  /**
+   * Allow admin account applications from the login page for this admin site.
+   */
+  accountApplicationEnabled?: boolean | null;
+  /**
+   * Homepage logo. Allowed types: jpg, jpeg, png, gif.
+   */
+  logo?: (number | null) | Media;
+  footer?: {
+    orgName?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    addressPostalCode?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    addressLine1?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    addressLine2?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    phone?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    fax?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+    copyright?: {
+      value?: string | null;
+      show?: boolean | null;
+    };
+  };
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -192,6 +270,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'sites';
+        value: number | Site;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -240,6 +322,12 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  tenants?:
+    | T
+    | {
+        tenant?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -274,6 +362,70 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "sites_select".
+ */
+export interface SitesSelect<T extends boolean = true> {
+  siteId?: T;
+  name?: T;
+  url?: T;
+  isAdminSite?: T;
+  satisfactionEnabled?: T;
+  dataManagerEnabled?: T;
+  accessibilityValidation?: T;
+  twoFactorEnabled?: T;
+  accountApplicationEnabled?: T;
+  logo?: T;
+  footer?:
+    | T
+    | {
+        orgName?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        addressPostalCode?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        addressLine1?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        addressLine2?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        phone?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        fax?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+        copyright?:
+          | T
+          | {
+              value?: T;
+              show?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

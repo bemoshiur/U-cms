@@ -24,9 +24,9 @@
 
 ### Sites (multi-site) — refs 1-17, 1-18, 1-19
 
-- [ ] 1.1 `sites` collection: siteId, name, URL (http-prefixed validation), isAdminSite flag, satisfaction toggle, data-manager toggle, accessibility-validation mode, 2FA toggle, account-application toggle, logo upload (1 file, jpg/jpeg/png/gif)
-- [ ] 1.2 Footer config group: org name, address (3 parts + postal lookup), phone, fax, copyright — each with show/hide
-- [ ] 1.3 Install/configure `@payloadcms/plugin-multi-tenant`; decide tenant-scoped vs global collections (per plan §2.1)
+- [x] 1.1 `sites` collection: siteId, name, URL (http-prefixed validation), isAdminSite flag, satisfaction toggle, data-manager toggle, accessibility-validation mode, 2FA toggle, account-application toggle, logo upload (1 file, jpg/jpeg/png/gif)
+- [x] 1.2 Footer config group: org name, address (3 parts + postal lookup), phone, fax, copyright — each with show/hide (data model only; postal-lookup popup is a frontend concern for a later task)
+- [x] 1.3 Install/configure `@payloadcms/plugin-multi-tenant`; decide tenant-scoped vs global collections (per plan §2.1)
 
 ### Admin accounts & auth — refs 1-1, 1-2, 1-3, 1-15, 1-16
 

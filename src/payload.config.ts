@@ -1,5 +1,6 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
+import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
@@ -10,6 +11,7 @@ import sharp from 'sharp'
 
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
+import { Sites } from './collections/Sites'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -118,7 +120,29 @@ function getS3StoragePlugin(): Plugin {
 }
 
 const storageDriver = process.env.STORAGE_DRIVER === 's3' ? 's3' : 'local'
-const plugins: Plugin[] = storageDriver === 's3' ? [getS3StoragePlugin()] : []
+const plugins: Plugin[] = [
+  ...(storageDriver === 's3' ? [getS3StoragePlugin()] : []),
+  /**
+   * Multi-tenant foundation (plan §2.1). `sites` is the tenants collection
+   * (legacy 사이트 정보 관리). Nothing is tenant-scoped yet — `collections`
+   * is deliberately empty. The installed plugin version (3.86.0) does NOT
+   * require at least one tenant-enabled collection to boot: it only throws
+   * if the tenants collection itself (`sites`) or an auth-enabled admin
+   * users collection is missing (see
+   * @payloadcms/plugin-multi-tenant/dist/index.js). Future tasks opt
+   * individual collections in per docs/planning/development-plan.md §2.1's
+   * tenant-scoped list (menus, boards, posts, web contents, banners,
+   * popups, notification areas, surveys, terms, statistics, members).
+   *
+   * `userHasAccessToAllTenants: () => true` — everyone is effectively
+   * super-admin until Task 1C/1D adds the roles/permission model.
+   */
+  multiTenantPlugin({
+    collections: {},
+    tenantsSlug: Sites.slug,
+    userHasAccessToAllTenants: () => true,
+  }),
+]
 
 export default buildConfig({
   admin: {
@@ -144,7 +168,7 @@ export default buildConfig({
       },
     },
   },
-  collections: [Users, Media],
+  collections: [Users, Media, Sites],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {

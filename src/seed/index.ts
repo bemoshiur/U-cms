@@ -1,6 +1,7 @@
 import type { Payload } from 'payload'
 
 import { superAdminStep } from './steps/superAdmin'
+import { sitesStep } from './steps/sites'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -8,11 +9,11 @@ export type { SeedStep } from './types'
 /**
  * Ordered registry of seed steps, run sequentially by `runSeed`.
  *
- * Later phases append to this array (e.g. site records, menu tree, code
- * sets — see TODO.md Phase 7.6). Order matters: a step may depend on data
- * an earlier step created.
+ * Later phases append to this array (e.g. menu tree, code sets — see
+ * TODO.md Phase 7.6). Order matters: a step may depend on data an earlier
+ * step created — `sitesStep` runs after `superAdminStep` for that reason.
  */
-export const seedSteps: SeedStep[] = [superAdminStep]
+export const seedSteps: SeedStep[] = [superAdminStep, sitesStep]
 
 /**
  * Runs the given seed steps (defaults to the full `seedSteps` registry)
