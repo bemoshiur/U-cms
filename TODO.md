@@ -8,15 +8,15 @@
 
 ## Phase 0 — Foundations
 
-- [ ] 0.1 Confirm open decisions with owner: brand name/logo/colors, UI language(s), deferral of standardization + KWCAG modules, deployment target, demo-site design direction
-- [ ] 0.2 Scaffold Payload 3 + Next.js 16 app (`create-payload-app`, TypeScript, App Router)
-- [ ] 0.3 Postgres via Docker Compose (dev) + `@payloadcms/db-postgres`; `.env` handling and secrets convention
-- [ ] 0.4 Repo hygiene: ESLint, Prettier, tsconfig strict, husky pre-commit, GitHub Actions CI (lint + typecheck + test + build)
-- [ ] 0.5 `src/branding.ts` module (name, logos, colors, contact) + wire `admin.meta` (titleSuffix, favicons incl. dark variant) and `graphics.Logo`/`graphics.Icon`
-- [ ] 0.6 Payload theme CSS overrides using brand tokens (light + dark)
-- [ ] 0.7 Email adapter (nodemailer) with dev mailcatcher; base branded email template
-- [ ] 0.8 Storage adapter abstraction (local dev, S3-compatible for prod)
-- [ ] 0.9 Seed-script skeleton + test harness (Vitest + Playwright)
+- [x] 0.1 Confirm open decisions with owner: brand name/logo/colors, UI language(s), deferral of standardization + KWCAG modules, deployment target, demo-site design direction
+- [x] 0.2 Scaffold Payload 3 + Next.js 16 app (`create-payload-app`, TypeScript, App Router)
+- [x] 0.3 Postgres via Docker Compose (dev) + `@payloadcms/db-postgres`; `.env` handling and secrets convention
+- [x] 0.4 Repo hygiene: ESLint, Prettier, tsconfig strict, husky pre-commit, GitHub Actions CI (lint + typecheck + test + build)
+- [x] 0.5 `src/branding.ts` module (name, logos, colors, contact) + wire `admin.meta` (titleSuffix, favicons incl. dark variant) and `graphics.Logo`/`graphics.Icon`
+- [x] 0.6 Payload theme CSS overrides using brand tokens (light + dark)
+- [x] 0.7 Email adapter (nodemailer) with dev mailcatcher; base branded email template
+- [x] 0.8 Storage adapter abstraction (local dev, S3-compatible for prod)
+- [x] 0.9 Seed-script skeleton + test harness (Vitest + Playwright)
 
 **Exit criteria:** branded admin panel boots on Postgres; CI green; seed creates a super-admin.
 
