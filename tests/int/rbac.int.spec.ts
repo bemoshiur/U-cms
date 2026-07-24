@@ -316,6 +316,175 @@ describe('rbac: roles, adminMenus, and menu-based access control', () => {
     })
   })
 
+  describe('privilege escalation regression (C1 — self-assign super-admin via users.roles)', () => {
+    it('a roleless user cannot self-assign ROLE_ADMIN by PATCHing their own roles field', async () => {
+      const roleAdmin = await payload.find({
+        collection: 'roles',
+        where: { roleId: { equals: ROLE_ADMIN_ROLE_ID } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const roleAdminId = roleAdmin.docs[0]?.id
+      if (roleAdminId === undefined) {
+        throw new Error('ROLE_ADMIN not found — did the roles seed step run in beforeAll?')
+      }
+
+      const roleless = await payload.create({
+        collection: 'users',
+        data: { email: uniqueEmail('escalate'), password: TEST_PASSWORD, name: 'Before' },
+        overrideAccess: true,
+      })
+      expect(roleless.roles ?? []).toHaveLength(0)
+
+      // Self-update is allowed at the document level (selfOrMenuAccess),
+      // so this call must NOT throw — but the field-level gate on
+      // `users.roles` must silently drop the `roles` write while still
+      // applying the other (legitimate) field change in the same request,
+      // exactly like a real HTTP PATCH would behave.
+      const updateResult = await payload.update({
+        collection: 'users',
+        id: roleless.id,
+        data: { name: 'After', roles: [roleAdminId] },
+        user: roleless,
+        overrideAccess: false,
+      })
+      expect(updateResult.name).toBe('After')
+      expect(updateResult.roles ?? []).toHaveLength(0)
+
+      // Re-fetch independently (overrideAccess:true, bypassing our own
+      // access layer entirely) to prove the escalation didn't persist —
+      // not just that the mutation response looked clean.
+      const reloaded = await payload.findByID({
+        collection: 'users',
+        id: roleless.id,
+        overrideAccess: true,
+      })
+      expect(reloaded.roles ?? []).toHaveLength(0)
+      expect(reloaded.name).toBe('After')
+    })
+
+    it('a departments-only user cannot self-assign ROLE_ADMIN either', async () => {
+      const departmentsMenu = await payload.find({
+        collection: 'adminMenus',
+        where: { menuKey: { equals: 'system.departments' } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const departmentsMenuId = departmentsMenu.docs[0]?.id
+      if (departmentsMenuId === undefined) {
+        throw new Error('"system.departments" adminMenu not found — did the adminMenus seed run?')
+      }
+
+      const roleAdmin = await payload.find({
+        collection: 'roles',
+        where: { roleId: { equals: ROLE_ADMIN_ROLE_ID } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const roleAdminId = roleAdmin.docs[0]?.id
+      if (roleAdminId === undefined) {
+        throw new Error('ROLE_ADMIN not found — did the roles seed step run in beforeAll?')
+      }
+
+      const deptRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: uniqueRoleId('ESCALATEDEPT'),
+          name: 'Departments-only test role',
+          description: 'Grants system.departments only — no system.admins.',
+          menuGrants: [departmentsMenuId],
+        },
+        overrideAccess: true,
+      })
+
+      const deptUser = await payload.create({
+        collection: 'users',
+        data: { email: uniqueEmail('escalatedept'), password: TEST_PASSWORD, roles: [deptRole.id] },
+        overrideAccess: true,
+      })
+
+      const updateResult = await payload.update({
+        collection: 'users',
+        id: deptUser.id,
+        data: { roles: [deptRole.id, roleAdminId] },
+        user: deptUser,
+        overrideAccess: false,
+      })
+      const updatedRoleIds = (updateResult.roles ?? []).map(toRelationId)
+      expect(updatedRoleIds).not.toContain(roleAdminId)
+
+      const reloaded = await payload.findByID({
+        collection: 'users',
+        id: deptUser.id,
+        overrideAccess: true,
+      })
+      const reloadedRoleIds = (reloaded.roles ?? []).map(toRelationId)
+      expect(reloadedRoleIds).not.toContain(roleAdminId)
+    })
+
+    it('a system.admins-holding user CAN still assign roles to another user', async () => {
+      const adminsMenu = await payload.find({
+        collection: 'adminMenus',
+        where: { menuKey: { equals: 'system.admins' } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const adminsMenuId = adminsMenu.docs[0]?.id
+      if (adminsMenuId === undefined) {
+        throw new Error('"system.admins" adminMenu not found — did the adminMenus seed run?')
+      }
+
+      const grantRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: uniqueRoleId('GRANTROLE'),
+          name: 'Grants-only test role',
+          description: 'Some non-admin, non-relevant grant for the assigner.',
+          menuGrants: [adminsMenuId],
+        },
+        overrideAccess: true,
+      })
+
+      const adminUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: uniqueEmail('adminsholder'),
+          password: TEST_PASSWORD,
+          roles: [grantRole.id],
+        },
+        overrideAccess: true,
+      })
+
+      const targetUser = await payload.create({
+        collection: 'users',
+        data: { email: uniqueEmail('assignedtarget'), password: TEST_PASSWORD },
+        overrideAccess: true,
+      })
+
+      const assigned = await payload.update({
+        collection: 'users',
+        id: targetUser.id,
+        data: { roles: [grantRole.id] },
+        user: adminUser,
+        overrideAccess: false,
+      })
+      const assignedRoleIds = (assigned.roles ?? []).map(toRelationId)
+      expect(assignedRoleIds).toContain(grantRole.id)
+
+      const reloaded = await payload.findByID({
+        collection: 'users',
+        id: targetUser.id,
+        overrideAccess: true,
+      })
+      const reloadedRoleIds = (reloaded.roles ?? []).map(toRelationId)
+      expect(reloadedRoleIds).toContain(grantRole.id)
+    })
+  })
+
   describe('login', () => {
     it('the seeded super-admin can still log in after the RBAC wiring', async () => {
       const email = process.env.SEED_ADMIN_EMAIL || DEFAULT_SEED_ADMIN_EMAIL

@@ -146,7 +146,7 @@ export interface User {
    */
   name?: string | null;
   /**
-   * Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked.
+   * Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked. Changing this field always requires the system.admins grant, even when editing your own account.
    */
   roles?: (number | Role)[] | null;
   tenants?:

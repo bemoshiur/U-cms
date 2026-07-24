@@ -1,6 +1,6 @@
 import type { Access, CollectionConfig } from 'payload'
 
-import { hasMenuAccessSync, menuAccess } from '../access/hasMenuAccess'
+import { hasMenuAccessSync, menuAccess, menuFieldAccess } from '../access/hasMenuAccess'
 
 /**
  * `read`/`update` access for `users`: any authenticated user may always
@@ -17,6 +17,15 @@ import { hasMenuAccessSync, menuAccess } from '../access/hasMenuAccess'
  * `node_modules/payload/dist/config/types.d.ts`), and evaluates a returned
  * `Where` against a specific doc too, so this same branch also correctly
  * denies a non-self, non-granted `findByID` on someone else's doc.
+ *
+ * SECURITY: this only gates whether an update to the *document* is allowed
+ * at all — it does not, by itself, restrict which *fields* a self-editing
+ * user may change. Without a separate field-level gate, the self-access
+ * override here would let any authenticated user PATCH their own `roles`
+ * to include `ROLE_ADMIN` (`isSuper`) and grant themselves full access —
+ * see the `access` on the `roles` field below, which is what actually
+ * closes that hole. Found and fixed post-implementation via security
+ * review; see the "Fix — security review" section of task-1C-report.md.
  */
 function selfOrMenuAccess(menuKey: string): Access {
   const menuGate = menuAccess(menuKey)
@@ -83,9 +92,21 @@ export const Users: CollectionConfig = {
       relationTo: 'roles',
       hasMany: true,
       saveToJWT: true,
+      // Field-level access — see `menuFieldAccess`'s doc comment in
+      // src/access/hasMenuAccess.ts for why this is required in addition
+      // to (not covered by) the collection-level `selfOrMenuAccess` above:
+      // a user may always update the rest of their own doc (name/email/
+      // password), but changing *who holds which roles* — including their
+      // own — always requires `system.admins`, with `isSuper` honored
+      // inside `hasMenuAccess` as usual. This is what actually prevents a
+      // roleless user from self-assigning `ROLE_ADMIN`.
+      access: {
+        create: menuFieldAccess('system.admins'),
+        update: menuFieldAccess('system.admins'),
+      },
       admin: {
         description:
-          "Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked.",
+          "Roles held by this admin. Effective menu access is the union of every held role's grants, or unconditional if any held role has isSuper checked. Changing this field always requires the system.admins grant, even when editing your own account.",
       },
     },
   ],

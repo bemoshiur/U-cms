@@ -34,6 +34,16 @@ const validateRoleId: TextFieldSingleValidation = (value, { required }) => {
  * relationship widget. The `users` field below is a read-only `join` (ref
  * 1-12's "role users view") with no custom bulk-remove UI yet — that's the
  * same kind of deferred custom-component work.
+ *
+ * SECURITY NOTE: `system.roles` (this collection's own gate — see
+ * `menuAccessConfig` below) is a near-super primitive by itself: anyone
+ * holding it can mint a brand-new role with `isSuper: true`. It is
+ * deliberately *not* enough to escalate on its own, though — a role only
+ * takes effect once *assigned* to a user, and `users.roles` (see
+ * `src/collections/Users.ts`) has its own field-level gate requiring
+ * `system.admins`, independent of `system.roles`. Holding one without the
+ * other lets you create a super role but not assign it to anyone
+ * (including yourself).
  */
 export const Roles: CollectionConfig = {
   slug: 'roles',

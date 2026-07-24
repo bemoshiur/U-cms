@@ -1,4 +1,4 @@
-import type { Access, Payload, PayloadRequest } from 'payload'
+import type { Access, FieldAccess, Payload, PayloadRequest } from 'payload'
 
 import { toRelationId } from '../collections/utils'
 
@@ -272,4 +272,26 @@ export function menuAccessConfig(menuKey: string): {
 } {
   const access = menuAccess(menuKey)
   return { create: access, read: access, update: access, delete: access }
+}
+
+/**
+ * Field-level counterpart to `menuAccess`, same underlying `hasMenuAccess`
+ * predicate — needed because a collection's document-level `access.update`
+ * (e.g. `users`' self-access override) only gates whether an update to the
+ * document is allowed **at all**, not which individual fields within it may
+ * be changed. Payload only enforces a field's own write access when
+ * `field.access[operation]` is actually defined (confirmed by reading
+ * `node_modules/payload/dist/fields/hooks/beforeValidate/promise.js`:
+ * `if (field.access && field.access[operation]) { ... } ` — with no
+ * field-level `access`, a field is writable by anyone who can write *any*
+ * part of the document). `overrideAccess: true` (e.g. `registerFirstUser`)
+ * bypasses field-level checks the same way it bypasses collection-level
+ * ones, so first-user onboarding is unaffected.
+ *
+ * `FieldAccess` (unlike `Access`) can only return `boolean`, not `Where` —
+ * `hasMenuAccess` never returns anything but a boolean anyway, so this is a
+ * pure signature adapter, not new logic.
+ */
+export function menuFieldAccess(menuKey: string): FieldAccess {
+  return async ({ req }) => hasMenuAccess(req, menuKey)
 }
