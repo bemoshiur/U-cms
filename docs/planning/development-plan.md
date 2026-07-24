@@ -9,16 +9,16 @@
 
 A ground-up rebuild of **U-CMS v3.0** (a Korean enterprise/government-grade multi-site CMS by U&P) on a modern stack, re-branded as our own product. The legacy system is Java 17 / Spring Boot 2.7 / JSP / Quartz (confirmed by the manual's System Information screen). The rebuild target is:
 
-| Layer | Choice | Why |
-|---|---|---|
-| CMS / backend | **Payload CMS 3.x** (TypeScript, code-first) | Instant admin panel, auth, access control, versions, uploads, jobs queue; runs natively inside Next.js |
-| Frontend + server | **Next.js 15 (App Router)** | Payload 3 is Next.js-native; one deployable app serves admin + public site |
-| Database | **PostgreSQL** (`@payloadcms/db-postgres`) | Legacy model is deeply relational (boards, codes, audit logs, dictionaries); the standardization module must introspect a SQL schema |
-| Rich text | Lexical (`@payloadcms/richtext-lexical`) | Editor/HTML/TEXT modes map to legacy editor behavior |
-| Files | Payload uploads + S3-compatible storage adapter (local disk for dev) | Managed, access-controlled download URLs replicate the legacy `fileDown.do` security model |
-| Email | `@payloadcms/email-nodemailer` | ID/PW recovery, OTP re-issue, notifications |
-| 2FA | Custom login flow + TOTP library (`otplib`) | Payload has no built-in TOTP; custom auth strategy + custom login view |
-| Charts (admin) | Recharts (or similar) in custom admin views | Statistics dashboards |
+| Layer             | Choice                                                               | Why                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| CMS / backend     | **Payload CMS 3.x** (TypeScript, code-first)                         | Instant admin panel, auth, access control, versions, uploads, jobs queue; runs natively inside Next.js                               |
+| Frontend + server | **Next.js 15 (App Router)**                                          | Payload 3 is Next.js-native; one deployable app serves admin + public site                                                           |
+| Database          | **PostgreSQL** (`@payloadcms/db-postgres`)                           | Legacy model is deeply relational (boards, codes, audit logs, dictionaries); the standardization module must introspect a SQL schema |
+| Rich text         | Lexical (`@payloadcms/richtext-lexical`)                             | Editor/HTML/TEXT modes map to legacy editor behavior                                                                                 |
+| Files             | Payload uploads + S3-compatible storage adapter (local disk for dev) | Managed, access-controlled download URLs replicate the legacy `fileDown.do` security model                                           |
+| Email             | `@payloadcms/email-nodemailer`                                       | ID/PW recovery, OTP re-issue, notifications                                                                                          |
+| 2FA               | Custom login flow + TOTP library (`otplib`)                          | Payload has no built-in TOTP; custom auth strategy + custom login view                                                               |
+| Charts (admin)    | Recharts (or similar) in custom admin views                          | Statistics dashboards                                                                                                                |
 
 **The three legacy subsystems** and what they become:
 
@@ -41,6 +41,7 @@ The legacy "bos" (back-office) site's own settings (2FA toggle, account-applicat
 Legacy: roles (`ROLE_*`) hold a **menu-permission tree**; an admin holds N roles; the union of checked menus defines both navigation and access. Payload natively does **collection-level** access control, not menu-level.
 
 Design: keep the legacy model as data —
+
 - `roles` collection: `roleId` (validated `^ROLE_[A-Z0-9]+$`), name, description.
 - `adminMenus` collection: hierarchical menu tree (nested set via parent relationship), each node carrying `menuKey` → maps to an admin view/collection.
 - `roles.menuGrants`: relationship hasMany to `adminMenus`.
@@ -52,6 +53,7 @@ Design: keep the legacy model as data —
 ### 2.3 Board engine
 
 Two collections, mirroring the legacy single-table design (`tb_bbs`):
+
 - `boards` (config): `bbsId` (auto `B0000031`-style), name, kind (`integrated` fixed-type vs `custom`), `boardType` relationship (photo/FAQ/Q&A-answer/attachment/extended… from a `boardTypes` collection), skin, attachment settings (on/off, max count, max size, extension whitelist), editor-for-admin-only flag, comments, list/page counts, top/bottom HTML blocks, up to 3 classification-code bindings each with title/attributes/style and 5 flags (use/required/list/detail/search), per-field settings grid (built-ins + 4 extra varchar fields with chosen input type + 4 extra text areas, each with the 5 flags), independent list-column and detail-field ordering.
 - `posts`: board relationship, notice-pin flag (+pin period), title, author, department/team, rich content (Editor/HTML/TEXT), 3 category values, extraField1-4, extraContent1-4, attachments (managed uploads, representative-thumbnail designation for gallery), view count, per-site scoping. Q&A boards add an answer thread; FAQ boards render accordion-style.
 - Hooks: profanity filter (block save when active banned word matched), New-icon window, Excel export endpoints, permission-filtered dashboard widgets.
@@ -65,6 +67,7 @@ Payload's built-in **versions** cover the legacy version-control model (every sa
 ### 2.5 Audit & privacy subsystem (cross-cutting)
 
 Implemented as hooks + dedicated log collections, built **early** (Phase 2) because nearly every later feature must write to it:
+
 - `accessLogs` — every admin/user action: actor, menu, action verb (login/list/view/insert/update/delete), URL, IP, event timestamp, session-login timestamp.
 - `loginHistory` — success/fail flag, overseas flag (geo-IP), mobile flag (UA), masked-ID list views; pre-filtered menus (overseas/mobile/failures) are saved filters on one collection.
 - `permissionChangeLogs`, `menuPermissionLogs` — journaled from role/menu hooks with added/removed menu enumeration and affected-user snapshots.
@@ -81,6 +84,7 @@ Implemented as hooks + dedicated log collections, built **early** (Phase 2) beca
 ### 2.7 Deferred / descope-recommended modules
 
 Two legacy modules are Korea-specific and very expensive to replicate; recommend deferring both to a final optional phase pending owner decision:
+
 1. **공공데이터 표준화 (Public-data standardization)** — domain/word/term dictionaries with MOIS standard preloads, DBA-approved proposal workflows, live-schema conformance inspection (8 rule types), monthly self-check snapshots. Only valuable if the rebuild must serve Korean public-sector audits (감리).
 2. **KWCAG 2.2 accessibility auto-diagnosis** — in-page overlay validator + monthly reports over 33 KWCAG items. A pragmatic substitute: axe-core-based scanning in CI plus an admin report page; a full KWCAG overlay engine is a product in itself.
 
@@ -93,11 +97,12 @@ Everything else in the manual is in scope.
 Two distinct layers:
 
 **A. Product branding (ours, replacing "U-CMS v3.0"/U&P):** one `src/branding.ts` module holding product name, logo assets, color tokens, support contact — consumed by:
+
 - `admin.components.graphics.Logo` (login screen) and `.Icon` (nav) — official white-label pattern;
 - `admin.meta` (title suffix, favicon set incl. dark-mode variants, OG images);
 - Payload CSS variable overrides (`--theme-elevation-*`, brand primary) via custom SCSS;
 - custom login view text, email templates, error pages.
-Working name to confirm with owner (e.g. "Pulse CMS" for Public Pulse) — every occurrence flows from the single branding module, so renaming stays a one-file change.
+  Working name to confirm with owner (e.g. "Pulse CMS" for Public Pulse) — every occurrence flows from the single branding module, so renaming stays a one-file change.
 
 **B. Runtime per-site branding (a legacy feature, kept):** each `sites` record manages its own logo upload, footer (org name/address/phone/fax/copyright with per-item show-hide), guide menus — rendered by the public site at request time.
 
@@ -123,14 +128,14 @@ Rough total: **18–20 working weeks** for one full-time developer through Phase
 
 ## 5. Risks & mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Menu-level RBAC vs Payload's collection-level model | Single `hasMenuAccess` helper + journaled grants; spike in Phase 1 week 1 |
-| 2FA login flow replaces Payload's login view | Isolate as custom auth strategy + custom view; fallback = disable per site (legacy behavior) |
-| Board field-grid flexibility (dynamic fields) | Fixed extra-field slots exactly like legacy (4 varchar + 4 text) — avoids runtime schema mutation |
-| Statistics volume | Raw events partitioned/pruned; aggregates queried by dashboards, never raw |
-| Scope explosion (118 features) | Phase gates; §2.7 deferrals; TODO.md is the single source of truth |
-| Korean-only manual nuances | Feature inventory retains Korean terms beside translations; verification notes flag inferred-vs-documented rules |
+| Risk                                                | Mitigation                                                                                                       |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Menu-level RBAC vs Payload's collection-level model | Single `hasMenuAccess` helper + journaled grants; spike in Phase 1 week 1                                        |
+| 2FA login flow replaces Payload's login view        | Isolate as custom auth strategy + custom view; fallback = disable per site (legacy behavior)                     |
+| Board field-grid flexibility (dynamic fields)       | Fixed extra-field slots exactly like legacy (4 varchar + 4 text) — avoids runtime schema mutation                |
+| Statistics volume                                   | Raw events partitioned/pruned; aggregates queried by dashboards, never raw                                       |
+| Scope explosion (118 features)                      | Phase gates; §2.7 deferrals; TODO.md is the single source of truth                                               |
+| Korean-only manual nuances                          | Feature inventory retains Korean terms beside translations; verification notes flag inferred-vs-documented rules |
 
 ## 6. Open questions for the owner
 

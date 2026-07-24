@@ -23,11 +23,13 @@
 ## Phase 1 — Core admin platform
 
 ### Sites (multi-site) — refs 1-17, 1-18, 1-19
+
 - [ ] 1.1 `sites` collection: siteId, name, URL (http-prefixed validation), isAdminSite flag, satisfaction toggle, data-manager toggle, accessibility-validation mode, 2FA toggle, account-application toggle, logo upload (1 file, jpg/jpeg/png/gif)
 - [ ] 1.2 Footer config group: org name, address (3 parts + postal lookup), phone, fax, copyright — each with show/hide
 - [ ] 1.3 Install/configure `@payloadcms/plugin-multi-tenant`; decide tenant-scoped vs global collections (per plan §2.1)
 
 ### Admin accounts & auth — refs 1-1, 1-2, 1-3, 1-15, 1-16
+
 - [ ] 1.4 `admins` auth collection: id/email (unique + dup-check UX), name, mobile (country code from code mgmt), extension, department rel, duties, profile photo (1 file, 64×64 display, rotate/reorder controls), roles hasMany (saveToJWT), status (승인대기/정상/장기미로그인/locked)
 - [ ] 1.5 Approval workflow: self-service account request form (public route) → pending state → approve/reject in admin; login blocked until 정상
 - [ ] 1.6 Password policy enforcement (active policy from `passwordPolicies`): ≥10 chars w/ 2 of 3 classes OR ≥8 w/ 3 classes; block sequential/ID-similar; 6-month rotation prompt
@@ -36,6 +38,7 @@
 - [ ] 1.9 Long-inactivity job: auto-transition to 장기 미로그인 (blocks login until re-approved)
 
 ### Roles & permissions — refs 1-10..1-13
+
 - [ ] 1.10 `roles` collection: roleId (`^ROLE_[A-Z0-9]+$`), name, description
 - [ ] 1.11 `adminMenus` tree collection (menuKey, name, parent, order) + seed with full menu map from inventory
 - [ ] 1.12 Role↔menu grants UI: checkbox tree w/ open/close-all, apply button (ref 1-13)
@@ -44,6 +47,7 @@
 - [ ] 1.15 Permission-filtered navigation component (GNB 2-depth + LNB 3-depth+, breadcrumb, full-menu overlay — refs 1-9, 3-11)
 
 ### Departments & codes — refs 1-14, 1-22..1-26
+
 - [ ] 1.16 `departments` tree: add top/child, name/duties/phone/fax/use-flag, drag ordering; picker popup component (reused by admins/surveys)
 - [ ] 1.17 `codeClassifications` (English-letters code) + `codeGroups` (codeId = DB column-name convention) + hierarchical `codes` (2-digit-per-depth values, tree popup editor, ordering)
 - [ ] 1.18 Code-search popup component (reused by boards)
@@ -54,16 +58,19 @@
 ## Phase 2 — Security & audit backbone
 
 ### 2FA — refs 1-4, 1-5, 1-6
+
 - [ ] 2.1 TOTP secret per admin (otplib); QR issuance page shown **only on first login**; re-issue by admin (email delivery)
 - [ ] 2.2 Custom login flow: password step → OTP step (6-digit) when site 2FA enabled; guide page; account-registered-phone requirement note
 - [ ] 2.3 Admin account buttons: reset 2FA device / reset OTP code (ref 1-16)
 
 ### Network & session security — refs 1-20, 1-21, 1-7(#10)
+
 - [ ] 2.4 `adminIpRules` collection: applicant/affiliation/phone/memo, IP (wildcard `a.b.c.*`, bare-`*` warning, IPv6), allow classification, validity window, use toggle (inline flip)
 - [ ] 2.5 Default-deny middleware on admin routes: allowlist check + auto-block after validity expiry
 - [ ] 2.6 Idle auto-logout (default 30 min) with countdown + extend button in admin quick-menu
 
 ### Audit logging — refs 1-55, 3-1..3-3, 3-5..3-7
+
 - [ ] 2.7 `accessLogs` collection + hook/middleware capture: actor, menu, action verb, URL, IP, event ts, session-login ts; date+keyword search views
 - [ ] 2.8 `loginHistory`: success/fail, geo-IP overseas flag, UA mobile flag; masked-ID master list + pre-filtered views (overseas, mobile, failures); empty-state
 - [ ] 2.9 `permissionChangeLogs` (user↔role, w/ actor+IP) and `menuPermissionLogs` (per-save added/removed menu enumeration + role-member snapshot)
@@ -74,6 +81,7 @@
 ## Phase 3 — Content engine
 
 ### Board engine — refs 1-27..1-35, 1-77, 1-78, 2-5..2-8
+
 - [ ] 3.1 `boardTypes` collection (auto PG-code, name, description ≤800 chars) + seed built-ins (integrated, photo, answer/Q&A, FAQ, attachment, extended)
 - [ ] 3.2 `boards` collection — basic settings: auto bbsId, name, kind (integrated=fixed type/skin vs custom), type rel, skin, sort, admin-only editor flag, comments, excel, user-post, New-icon window, list/page counts, top/bottom HTML blocks
 - [ ] 3.3 Boards — attachment settings: on/off unlocks max count, max size (per-file), lowercase comma-separated extension whitelist
@@ -86,10 +94,12 @@
 - [ ] 3.10 Board list/detail admin views: multi-criteria search (category+codes+period+field+keyword), Excel export, configurable header notice text
 
 ### Word filters — refs 1-38..1-41
+
 - [ ] 3.11 `profanityWords`: use-flag, bulk delete; hook blocks post save containing active words
 - [ ] 3.12 `memberBannedWords`: scope (common/loginId/password); hook blocks member signup accordingly
 
 ### Display components — refs 1-45..1-53, 2-1
+
 - [ ] 3.13 `notificationAreas`: image (490×245 rec), title, internal-picker/external link (http validation), new/current window, hour-precision exposure window, 4-way ordering, inline use toggle
 - [ ] 3.14 `popups`: image (160×140 rec), geometry (w/h/top/left px), scrollbar flag, close-for-a-day cookie, exposure window
 - [ ] 3.15 `banners`: image (196×70 rec), link mode, exposure window, 4-way ordering
@@ -97,6 +107,7 @@
 - [ ] 3.17 Guide menus (top/bottom): max 5 top items after fixed defaults, internal-picker/absolute-URL rule, batch-save inline editor
 
 ### Menus, content, utilities — refs 1-42..1-44, 2-2..2-4, 2-13, 1-80
+
 - [ ] 3.18 `menus` (admin + user, per site): tree w/ drag + up/down, content types (placeholder/program/board/content/link via picker popup), new-window, use-flag (red-in-tree when off), menu-cache refresh action; user menus add person-in-charge + login-state exposure
 - [ ] 3.19 `webContents`: 1:1 menu binding, Payload versions (save = new version, one active, re-activate any) + responsible dept/person
 - [ ] 3.20 Version diff view: split + unified modes, color-coded, version picker, source download (ref 2-4)
