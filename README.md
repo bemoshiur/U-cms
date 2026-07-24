@@ -1,6 +1,6 @@
 # Pulse CMS
 
-Payload CMS 3 on Next.js 15 (App Router, TypeScript), backed by PostgreSQL.
+Payload CMS 3 on Next.js 16 (App Router, TypeScript), backed by PostgreSQL.
 
 ## Quick Start - local setup
 
