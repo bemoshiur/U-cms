@@ -1,7 +1,9 @@
 import type {
   CollectionBeforeValidateHook,
   CollectionBeforeLoginHook,
+  CollectionBeforeOperationHook,
   CollectionAfterLoginHook,
+  PayloadRequest,
 } from 'payload'
 import { APIError } from 'payload'
 
@@ -78,6 +80,93 @@ export const enforcePasswordPolicy: CollectionBeforeValidateHook = ({ data, orig
   }
 
   return data
+}
+
+/**
+ * Resolves the login identifier from a user doc fetched during a reset, for the
+ * password "must not contain the login ID" check. Mirrors {@link resolveLoginId}
+ * but reads a single loaded doc (the reset flow has no `data`/`originalDoc`
+ * pair at the `beforeOperation` seam).
+ */
+function resolveLoginIdFromUser(
+  user: Record<string, unknown> | null | undefined,
+): string | undefined {
+  for (const candidate of [user?.loginId, user?.email]) {
+    if (typeof candidate === 'string' && candidate.length > 0) {
+      return candidate.includes('@') ? candidate.split('@')[0] : candidate
+    }
+  }
+  return undefined
+}
+
+/**
+ * Best-effort login-ID lookup by reset token. A failure here must NEVER block a
+ * legitimate reset, so it degrades to skipping only the "contains login ID"
+ * sub-check — the length/character-class/sequence checks still apply.
+ */
+async function resolveResetLoginId(
+  req: PayloadRequest,
+  token: unknown,
+): Promise<string | undefined> {
+  if (typeof token !== 'string' || token.length === 0) {
+    return undefined
+  }
+  try {
+    const user = await req.payload.db.findOne({
+      collection: 'users',
+      req,
+      where: { resetPasswordToken: { equals: token } },
+    })
+    return resolveLoginIdFromUser(user as Record<string, unknown> | null)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Enforces the password policy on Payload's built-in reset-password flow
+ * (carried Phase 1 I-3 — the last open gap). The public find-password recovery
+ * path (T1D) drives exactly this flow, so without this a user resetting via the
+ * emailed link could set a policy-violating password.
+ *
+ * ## Why this is a `beforeOperation` hook, and why `enforcePasswordPolicy`
+ * (the `beforeValidate` hook) does NOT cover reset
+ *
+ * `resetPasswordOperation`
+ * (`node_modules/payload/dist/auth/operations/resetPassword.js`) hashes
+ * `data.password` into `user.hash` / `user.salt` FIRST, then runs the
+ * `beforeValidate` COLLECTION hooks with `data: user` — by which point the
+ * plaintext password is gone, so `enforcePasswordPolicy` (which keys off
+ * `data.password`) legitimately no-ops. The plaintext is only present as
+ * `args.data.password` on the INCOMING operation args, before hashing.
+ * `buildBeforeOperation` feeds those args through every `beforeOperation`
+ * collection hook (with `operation: 'resetPassword'`) at the very top of the
+ * operation — the one supported 3.86 seam where the plaintext reset password is
+ * still available. This single seam covers all reset entry points, since they
+ * all funnel through `resetPasswordOperation`: the public
+ * `/api/find-password` → forgotPassword → emailed reset link, the REST
+ * `POST /api/users/reset-password`, and the admin reset view.
+ *
+ * A no-op for every non-reset operation and when no password is supplied (the
+ * core operation raises its own "Missing required data." for that case).
+ */
+export const enforcePasswordPolicyOnReset: CollectionBeforeOperationHook = async (arg) => {
+  if (arg.operation !== 'resetPassword') {
+    return
+  }
+
+  const data = (arg.args as { data?: { password?: unknown; token?: unknown } } | undefined)?.data
+  const password = data?.password
+  if (typeof password !== 'string' || password.length === 0) {
+    return
+  }
+
+  const result = validatePassword(password, {
+    userId: await resolveResetLoginId(arg.req, data?.token),
+  })
+  if (result !== true) {
+    throw new APIError(result, 400)
+  }
 }
 
 /**
