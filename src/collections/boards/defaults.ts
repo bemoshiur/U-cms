@@ -149,6 +149,17 @@ export const BOARD_DEFAULT_FIELDS: BoardFieldConfig[] = [
     useFlag: true,
     detailFlag: true,
   }),
+  // The attachment row (ref 1-30, callout 7) — its own per-field flags,
+  // DISTINCT from the Basic-Settings `attachmentsEnabled` toggle: this row
+  // governs whether the attachment column is shown/required in list/detail/
+  // search, while the toggle governs whether uploads are accepted at all.
+  // `builtin`-style: attachments are a managed upload relationship on `posts`
+  // in Task 3B, not an extra varchar/text column.
+  field('attachment', 'Attachment', 'text', 'builtin', {
+    useFlag: false,
+    listFlag: true,
+    detailFlag: true,
+  }),
   field('extraField1', 'Extra Field 1', 'text', 'varchar', {}),
   field('extraField2', 'Extra Field 2', 'text', 'varchar', {}),
   field('extraField3', 'Extra Field 3', 'text', 'varchar', {}),

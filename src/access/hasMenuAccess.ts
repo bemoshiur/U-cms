@@ -234,6 +234,18 @@ export async function hasMenuAccess(req: PayloadRequest, menuKey: string): Promi
 }
 
 /**
+ * True iff the user holds any `isSuper` role. Synchronous — relies on the
+ * same populated-`req.user.roles` guarantee (`users.auth.depth = 1`) that
+ * `hasMenuAccessSync` documents above. The single source of truth for "is
+ * this a super-admin" across the app, reused by the tenant-access layer
+ * (`src/access/tenantAccess.ts`) so super-admins bypass tenant scoping the
+ * same way they bypass menu grants.
+ */
+export function isSuperUser(user: unknown): boolean {
+  return anySuper(extractRoles(user).filter(isPopulatedRole))
+}
+
+/**
  * Synchronous, nav-visibility-only variant — see the module doc comment for
  * why this must exist and why it's safe. Not itself a security boundary:
  * a false negative here (e.g. an unresolvable role or a still-cold cache)

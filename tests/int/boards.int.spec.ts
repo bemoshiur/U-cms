@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import config from '@/payload.config'
 import { BOARD_DEFAULT_FIELDS, INTEGRATED_BOARD_TYPE_CODE } from '@/collections/boards/defaults'
 import { runSeed } from '@/seed'
+import { adminMenusStep } from '@/seed/steps/adminMenus'
 import { boardTypesStep, SEED_BOARD_TYPES } from '@/seed/steps/boardTypes'
 import { boardsStep, SEED_BOARDS } from '@/seed/steps/boards'
 import { sitesStep } from '@/seed/steps/sites'
@@ -15,6 +16,25 @@ let payload: Payload
 function marker(label: string): string {
   return `${label}-${Date.now()}-${Math.floor(Math.random() * 100000)}`
 }
+
+/** Lowercase-alphanumeric siteId (matches the Sites.ts format validator). */
+function uniqueSiteId(label: string): string {
+  return `t${label}${Date.now()}${Math.floor(Math.random() * 10000)}`.toLowerCase()
+}
+
+/** A letters-only unique suffix for code-format-constrained fixtures. */
+function lettersOnly(): string {
+  let n = Date.now() * 1000 + Math.floor(Math.random() * 1000)
+  let out = ''
+  while (n > 0) {
+    out += String.fromCharCode(97 + (n % 26))
+    n = Math.floor(n / 26)
+  }
+  return out
+}
+
+/** Any string long enough to satisfy Payload's default password requirements. */
+const TEST_PASSWORD = 'a-long-enough-test-password-1'
 
 /** Resolves a boardType id by its PG code (built-ins are seeded in beforeAll). */
 async function boardTypeIdByCode(code: string): Promise<number> {
@@ -41,8 +61,9 @@ describe('board configuration engine (Task 3A)', () => {
     const payloadConfig = await config
     payload = await getPayload({ config: payloadConfig })
 
-    // Boards need the demo site (tenant) and the built-in board types.
-    await runSeed(payload, [sitesStep, boardTypesStep])
+    // Boards need the demo site (tenant), the built-in board types, and the
+    // content.boards admin menu (for the tenant-scoping RBAC test).
+    await runSeed(payload, [adminMenusStep, sitesStep, boardTypesStep])
 
     const demo = await payload.find({
       collection: 'sites',
@@ -215,17 +236,29 @@ describe('board configuration engine (Task 3A)', () => {
   // ── boards: categories, field grid, attachments ──────────────────────────
   describe('board categories, field grid, attachments', () => {
     it('enforces at most 3 category bindings', async () => {
-      const group = await payload.find({
-        collection: 'codeGroups',
-        limit: 1,
-        pagination: false,
+      // Seed our own codeGroup fixture (classification → group) rather than
+      // depending on unseeded external codes — matches the rest of the suite.
+      // classification.code must be letters-only; codeGroups.codeId must be
+      // uppercase snake_case — both must be unique on the persistent dev DB.
+      const suffix = lettersOnly()
+      const classification = await payload.create({
+        collection: 'codeClassifications',
+        data: { code: `catfix${suffix}`, name: 'Categories fixture classification' },
         overrideAccess: true,
       })
-      const groupId = group.docs[0]?.id
-      expect(groupId).toBeDefined()
+      const group = await payload.create({
+        collection: 'codeGroups',
+        data: {
+          codeId: `CATFIX_${suffix.toUpperCase()}`,
+          name: 'Categories fixture group',
+          classification: classification.id,
+        },
+        overrideAccess: true,
+      })
+      const groupId = group.id
 
       const fourCategories = Array.from({ length: 4 }, () => ({
-        classificationCode: groupId!,
+        classificationCode: groupId,
         useFlag: true,
       }))
 
@@ -253,6 +286,9 @@ describe('board configuration engine (Task 3A)', () => {
       const keys = (created.fields ?? []).map((f) => f.fieldKey)
       expect(created.fields).toHaveLength(BOARD_DEFAULT_FIELDS.length)
       expect(keys).toContain('title')
+      // ref 1-30: the attachment row is part of the field grid (distinct from
+      // the Basic-Settings attachmentsEnabled toggle).
+      expect(keys).toContain('attachment')
       for (let i = 1; i <= 4; i++) {
         expect(keys).toContain(`extraField${i}`)
         expect(keys).toContain(`extraContent${i}`)
@@ -291,6 +327,266 @@ describe('board configuration engine (Task 3A)', () => {
         overrideAccess: true,
       })
       expect(created.attachmentAllowedExtensions).toBe('hwp,pdf,png')
+    })
+  })
+
+  // ── M-1: system-generated IDs are not client-settable ────────────────────
+  describe('system-generated ID write protection (code / bbsId)', () => {
+    let superUser: Awaited<ReturnType<typeof payload.create>>
+
+    beforeAll(async () => {
+      const role = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_SUPER_${lettersOnly().toUpperCase()}`,
+          name: 'Test super role (field-protection)',
+          description: 'isSuper test role for field-write-protection tests.',
+          isSuper: true,
+        },
+        overrideAccess: true,
+      })
+      superUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `super-${Date.now()}-${Math.floor(Math.random() * 100000)}@example.com`,
+          password: TEST_PASSWORD,
+          roles: [role.id],
+          status: 'active',
+        },
+        overrideAccess: true,
+      })
+    })
+
+    it('ignores a client-supplied boardTypes.code and uses the server value', async () => {
+      const created = await payload.create({
+        collection: 'boardTypes',
+        // Bogus non-PG value a crafted request might send.
+        data: { name: marker('CraftedType'), kind: 'photo', code: 'HACKED9999' } as never,
+        user: superUser,
+        overrideAccess: false,
+      })
+      expect(created.code).toMatch(/^PG\d{4}$/)
+      expect(created.code).not.toBe('HACKED9999')
+
+      // An update attempting to rewrite the code is ignored (value unchanged).
+      const updated = await payload.update({
+        collection: 'boardTypes',
+        id: created.id,
+        data: { code: 'PG0000' } as never,
+        user: superUser,
+        overrideAccess: false,
+      })
+      expect(updated.code).toBe(created.code)
+    })
+
+    it('ignores a client-supplied boards.bbsId and uses the server value', async () => {
+      const created = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('CraftedBoard'),
+          boardType: photoTypeId,
+          bbsId: 'B9999999',
+        } as never,
+        user: superUser,
+        overrideAccess: false,
+      })
+      expect(created.bbsId).toMatch(/^B\d{7}$/)
+      expect(created.bbsId).not.toBe('B9999999')
+
+      const updated = await payload.update({
+        collection: 'boards',
+        id: created.id,
+        data: { bbsId: 'B0000000' } as never,
+        user: superUser,
+        overrideAccess: false,
+      })
+      expect(updated.bbsId).toBe(created.bbsId)
+    })
+  })
+
+  // ── H-1: real per-user tenant scoping (the key regression) ────────────────
+  describe('tenant scoping (per-user, overrideAccess:false)', () => {
+    let siteAId: number
+    let siteBId: number
+    let boardAId: number
+    let boardBId: number
+    let scopedUser: Awaited<ReturnType<typeof payload.create>>
+    let superUser: Awaited<ReturnType<typeof payload.create>>
+
+    beforeAll(async () => {
+      const siteA = await payload.create({
+        collection: 'sites',
+        data: { siteId: uniqueSiteId('a'), name: 'Tenant A', url: 'https://a.example.com' },
+        overrideAccess: true,
+      })
+      const siteB = await payload.create({
+        collection: 'sites',
+        data: { siteId: uniqueSiteId('b'), name: 'Tenant B', url: 'https://b.example.com' },
+        overrideAccess: true,
+      })
+      siteAId = siteA.id
+      siteBId = siteB.id
+
+      const boardA = await payload.create({
+        collection: 'boards',
+        data: { tenant: siteAId, name: marker('BoardA'), boardType: photoTypeId },
+        overrideAccess: true,
+      })
+      const boardB = await payload.create({
+        collection: 'boards',
+        data: { tenant: siteBId, name: marker('BoardB'), boardType: photoTypeId },
+        overrideAccess: true,
+      })
+      boardAId = boardA.id
+      boardBId = boardB.id
+
+      // A NON-super role granting content.boards.
+      const boardsMenu = await payload.find({
+        collection: 'adminMenus',
+        where: { menuKey: { equals: 'content.boards' } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const boardsMenuId = boardsMenu.docs[0]?.id
+      if (boardsMenuId === undefined) {
+        throw new Error('content.boards adminMenu not found — did adminMenusStep run in beforeAll?')
+      }
+
+      const scopedRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_BOARDS_${lettersOnly().toUpperCase()}`,
+          name: 'Boards-only test role',
+          description: 'Grants content.boards only (non-super).',
+          menuGrants: [boardsMenuId],
+        },
+        overrideAccess: true,
+      })
+      // Non-super user assigned ONLY to site A (multi-tenant users.tenants).
+      scopedUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `scoped-${Date.now()}-${Math.floor(Math.random() * 100000)}@example.com`,
+          password: TEST_PASSWORD,
+          roles: [scopedRole.id],
+          tenants: [{ tenant: siteAId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+
+      const superRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_SUPER_${lettersOnly().toUpperCase()}`,
+          name: 'Test super role (tenant)',
+          description: 'isSuper test role for tenant-scoping tests.',
+          isSuper: true,
+        },
+        overrideAccess: true,
+      })
+      superUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `tsuper-${Date.now()}-${Math.floor(Math.random() * 100000)}@example.com`,
+          password: TEST_PASSWORD,
+          roles: [superRole.id],
+          status: 'active',
+        },
+        overrideAccess: true,
+      })
+    })
+
+    it('a non-super user assigned to site A reads site A boards but NOT site B boards', async () => {
+      const found = await payload.find({
+        collection: 'boards',
+        user: scopedUser,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      const ids = found.docs.map((d) => d.id)
+      expect(ids).toContain(boardAId)
+      expect(ids).not.toContain(boardBId)
+    })
+
+    it('a non-super user is DENIED reading a specific site B board (cross-tenant)', async () => {
+      await expect(
+        payload.findByID({
+          collection: 'boards',
+          id: boardBId,
+          user: scopedUser,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('a non-super user can create a board on their own site A', async () => {
+      const created = await payload.create({
+        collection: 'boards',
+        data: { tenant: siteAId, name: marker('ScopedCreateA'), boardType: photoTypeId },
+        user: scopedUser,
+        overrideAccess: false,
+      })
+      expect(created.id).toBeDefined()
+    })
+
+    it('a non-super user is DENIED creating a board on site B (cross-tenant)', async () => {
+      await expect(
+        payload.create({
+          collection: 'boards',
+          data: { tenant: siteBId, name: marker('ScopedCreateB'), boardType: photoTypeId },
+          user: scopedUser,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('a non-super user is DENIED updating a site B board (cross-tenant)', async () => {
+      await expect(
+        payload.update({
+          collection: 'boards',
+          id: boardBId,
+          data: { name: marker('ScopedUpdateB') },
+          user: scopedUser,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('an isSuper user reads AND writes boards on both sites', async () => {
+      const found = await payload.find({
+        collection: 'boards',
+        user: superUser,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      const ids = found.docs.map((d) => d.id)
+      expect(ids).toContain(boardAId)
+      expect(ids).toContain(boardBId)
+
+      // Can read a specific site B board.
+      await expect(
+        payload.findByID({
+          collection: 'boards',
+          id: boardBId,
+          user: superUser,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+
+      // Can create on site B.
+      await expect(
+        payload.create({
+          collection: 'boards',
+          data: { tenant: siteBId, name: marker('SuperCreateB'), boardType: photoTypeId },
+          user: superUser,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
     })
   })
 

@@ -6,7 +6,8 @@ import type {
 } from 'payload'
 import { APIError } from 'payload'
 
-import { hasMenuAccessSync, menuAccessConfig } from '../../access/hasMenuAccess'
+import { hasMenuAccessSync, isSuperUser } from '../../access/hasMenuAccess'
+import { getAssignedTenantIds, tenantScopedMenuAccess } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
 import { toRelationId } from '../utils'
 import {
@@ -90,6 +91,23 @@ const assignBbsIdAndEnforce: CollectionBeforeValidateHook = async ({
     )
   }
 
+  // Tenant-membership enforcement on write. Payload's access layer applies the
+  // per-user tenant `Where` (src/access/tenantAccess.ts) to read/update/delete,
+  // but NOT to create — a `Where` can't constrain a not-yet-existing row — so a
+  // crafted create with another site's tenant would otherwise slip past. Guard
+  // it here for authenticated NON-super writers: the effective tenant must be
+  // one they're assigned to. System/seed writes (no `req.user`) and super-admins
+  // are exempt; the access-layer `Where` still covers update/delete.
+  if (req.user && !isSuperUser(req.user)) {
+    const effectiveTenant = toRelationId('tenant' in data ? data.tenant : originalDoc?.tenant)
+    if (effectiveTenant !== undefined) {
+      const assigned = getAssignedTenantIds(req.user)
+      if (!assigned.some((id) => String(id) === String(effectiveTenant))) {
+        throw new APIError("You are not assigned to this board's site (tenant).", 403)
+      }
+    }
+  }
+
   const isIntegrated = 'isIntegrated' in data ? data.isIntegrated : originalDoc?.isIntegrated
   if (isIntegrated) {
     const boardTypeId = toRelationId('boardType' in data ? data.boardType : originalDoc?.boardType)
@@ -157,14 +175,33 @@ export const Boards: CollectionConfig = {
     defaultColumns: ['bbsId', 'name', 'boardType', 'skin', 'attachmentsEnabled'],
     hidden: ({ user }) => !hasMenuAccessSync(user, 'content.boards'),
   },
-  // Admin-gated now; public read for the Phase 4 public site is added later.
-  access: menuAccessConfig('content.boards'),
+  // Menu-gated AND tenant-scoped: super-admins access every site's boards;
+  // a non-super admin is constrained to the boards of the site(s) assigned to
+  // them (multi-tenant `users.tenants`). Public read for the Phase 4 site
+  // comes later. See src/access/tenantAccess.ts for why this is enforced here
+  // rather than via the plugin's global `userHasAccessToAllTenants` switch.
+  access: {
+    create: tenantScopedMenuAccess('content.boards'),
+    read: tenantScopedMenuAccess('content.boards'),
+    update: tenantScopedMenuAccess('content.boards'),
+    delete: tenantScopedMenuAccess('content.boards'),
+  },
   fields: [
     // ── Basic settings (ref 1-28, 1-34) ──────────────────────────────────
     {
       name: 'bbsId',
       type: 'text',
       unique: true,
+      // System-generated, never client-set: field-level write access denies
+      // every create/update so a crafted API call can't supply or mutate the
+      // value. The beforeValidate hook sets it via the normal (non-override)
+      // data path — collection hooks run after field-access has already
+      // stripped any client-supplied `bbsId` — and seeds pass it through with
+      // overrideAccess, which bypasses field access.
+      access: {
+        create: () => false,
+        update: () => false,
+      },
       admin: {
         readOnly: true,
         description: 'System-assigned board ID (Bxxxxxxx), auto-generated on create.',

@@ -85,6 +85,16 @@ export const BoardTypes: CollectionConfig = {
       name: 'code',
       type: 'text',
       unique: true,
+      // System-generated, never client-set: field-level write access denies
+      // every create/update so a crafted API call can't supply a non-PGxxxx
+      // value or rewrite an existing code. The beforeValidate hook sets it via
+      // the normal data path (collection hooks run after field-access has
+      // stripped any client-supplied `code`); seeds pass it through with
+      // overrideAccess, which bypasses field access.
+      access: {
+        create: () => false,
+        update: () => false,
+      },
       admin: {
         readOnly: true,
         description:

@@ -183,6 +183,21 @@ const plugins: Plugin[] = [
       boards: {},
     },
     tenantsSlug: Sites.slug,
+    /**
+     * INTENTIONALLY permissive — do NOT change to an `isSuper` check. This is
+     * a SINGLE global switch that governs tenant scoping on every collection
+     * the plugin touches, including the GLOBAL `users` and `sites` collections
+     * (plan §2.1 keeps those menu-based, not tenant-scoped). Flipping it would
+     * (1) tenant-scope `users`, breaking the menu-based `system.admins`
+     * admin-manages-admin model, and (2) tenant-scope the `sites`
+     * tenants-collection read, re-triggering the admin-UI-500 lockout that
+     * Sites.ts's open-read decision fixed (phase1-final-review item 8). The
+     * REAL per-user tenant enforcement (phase1-final-review item 2) lives on
+     * each tenant-scoped collection's own `access` via
+     * `tenantScopedMenuAccess` (src/access/tenantAccess.ts) — with this flag
+     * left permissive, the plugin's `withTenantAccess` wrapper is a
+     * pass-through that returns that function's result unchanged.
+     */
     userHasAccessToAllTenants: () => true,
   }),
 ]
