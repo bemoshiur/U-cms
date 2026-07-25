@@ -71,6 +71,39 @@ export function tenantScopedMenuAccess(menuKey: string, tenantFieldName = 'tenan
 }
 
 /**
+ * Tenant-membership read/write scope WITHOUT a menu-grant gate (Task 4-zero).
+ *
+ * A leaner sibling of `tenantScopedMenuAccess` for the shared `attachments`
+ * upload pool (`src/collections/Attachments.ts`), which backs BOTH `posts` and
+ * `adminNotices` — two collections gated on DIFFERENT menuKeys (`content.posts`
+ * vs `content.adminNotices`). No single menuKey fits, so the collection-level
+ * gate is pure tenant isolation: an authenticated user sees only attachments of
+ * the sites (tenants) they are assigned to; `isSuper` sees all; anonymous is
+ * denied. The finer per-post author/secret/grant nuance is NOT expressed here —
+ * it lives in `canDownloadPost` on the ONE sanctioned fetch path
+ * (`/api/files/download`, `overrideAccess:true`). This raw-route gate only has
+ * to guarantee the confidentiality invariants: no cross-tenant read, no
+ * anonymous read (so a secret post's file is unreachable to any outsider), which
+ * tenant scoping delivers. Same permissive-plugin-flag reasoning as
+ * `tenantScopedMenuAccess` applies (the plugin wrapper is a pass-through).
+ */
+export function tenantMembershipAccess(tenantFieldName = 'tenant'): Access {
+  return ({ req }) => {
+    if (!req.user) {
+      return false
+    }
+    if (isSuperUser(req.user)) {
+      return true
+    }
+    const tenantIds = getAssignedTenantIds(req.user)
+    if (tenantIds.length === 0) {
+      return false
+    }
+    return { [tenantFieldName]: { in: tenantIds } }
+  }
+}
+
+/**
  * The reusable create-time tenant-membership guard (Task 3A pattern, extracted
  * in Task 3C so every per-site collection wires the identical rule rather than
  * re-inlining it — `boards`/`posts` predate this and keep their inline copies).

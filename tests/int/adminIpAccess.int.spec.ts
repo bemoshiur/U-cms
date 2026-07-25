@@ -208,11 +208,11 @@ describe('admin IP access control (Task 2C)', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('GUARDS both the media collection endpoint AND the media file route (B2)', async () => {
-      // B2 (phase-3-final-review §2): `/api/media/file/*` is no longer exempt —
-      // it held secret/cross-tenant board attachments, so a blocked IP must not
-      // reach it. Both the collection REST endpoints and the file route are now
-      // behind the allowlist.
+    it('GUARDS the media collection list AND every attachments route; EXEMPTS the public media file route (Task 4-zero)', async () => {
+      // Task 4-zero: `/api/media/file/*` is the deliberate PUBLIC logo path
+      // (re-exempted) — `media` holds only public assets now. The media
+      // collection list stays guarded, and the access-controlled `attachments`
+      // routes (collection + file) are guarded too.
       const collection = await evaluateAdminIpRequest({
         payload,
         pathname: '/api/media/123',
@@ -221,13 +221,29 @@ describe('admin IP access control (Task 2C)', () => {
       expect(collection.allowed).toBe(false)
       expect(collection.status).toBe(403)
 
-      const file = await evaluateAdminIpRequest({
+      const mediaFile = await evaluateAdminIpRequest({
         payload,
         pathname: '/api/media/file/logo.png',
         client: trusted('198.51.100.9'),
       })
-      expect(file.allowed).toBe(false)
-      expect(file.status).toBe(403)
+      expect(mediaFile.allowed).toBe(true)
+      expect(mediaFile.reason).toBe('exempt-path')
+
+      const attachmentsList = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/api/attachments/123',
+        client: trusted('198.51.100.9'),
+      })
+      expect(attachmentsList.allowed).toBe(false)
+      expect(attachmentsList.status).toBe(403)
+
+      const attachmentsFile = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/api/attachments/file/merger-plan.pdf',
+        client: trusted('198.51.100.9'),
+      })
+      expect(attachmentsFile.allowed).toBe(false)
+      expect(attachmentsFile.status).toBe(403)
     })
 
     it('does NOT block a disallowed IP on the public recovery/frontend endpoints', async () => {

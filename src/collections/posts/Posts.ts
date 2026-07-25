@@ -211,7 +211,7 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
         continue
       }
       const media = await req.payload.findByID({
-        collection: 'media',
+        collection: 'attachments',
         id: mediaId,
         depth: 0,
         overrideAccess: true,
@@ -450,7 +450,11 @@ export const Posts: CollectionConfig = {
           'Uploaded files. Constraints (count/size/extensions) come from the board; download via the managed endpoint (/api/files/download).',
       },
       fields: [
-        { name: 'media', type: 'upload', relationTo: 'media', required: true },
+        // Repointed media → `attachments` (Task 4-zero): board/post files live
+        // in the tenant-scoped, access-controlled `attachments` pool, not the
+        // public `media` pool. Field name kept `media` (stable column) — only
+        // the target collection changed. Fetch via /api/files/download.
+        { name: 'media', type: 'upload', relationTo: 'attachments', required: true },
         { name: 'description', type: 'text' },
         {
           name: 'isRepresentative',

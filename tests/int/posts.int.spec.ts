@@ -74,10 +74,19 @@ async function boardTypeIdByCode(code: string): Promise<number> {
   return id
 }
 
-async function createMedia(name: string, mimetype: string, data: Buffer): Promise<number> {
+// Task 4-zero: post attachments live in the tenant-scoped `attachments`
+// collection, not the public `media` pool. The multi-tenant plugin requires a
+// `tenant`; created with overrideAccess (a system write — the tenant-membership
+// guard is exempt). The download endpoint fetches them with overrideAccess.
+async function createAttachment(
+  name: string,
+  mimetype: string,
+  data: Buffer,
+  tenantId: number,
+): Promise<number> {
   const doc = await payload.create({
-    collection: 'media',
-    data: { alt: name },
+    collection: 'attachments',
+    data: { alt: name, tenant: tenantId } as never,
     file: { data, name, mimetype, size: data.length },
     overrideAccess: true,
   })
@@ -212,8 +221,8 @@ describe('posts + word filters + secure download (Task 3B)', () => {
   describe('attachment constraints', () => {
     it('rejects more attachments than the board allows', async () => {
       const boardId = await makeBoard({ attachmentsEnabled: true, attachmentMaxCount: 1 })
-      const m1 = await createMedia(`${marker('a')}.png`, 'image/png', PNG_1x1)
-      const m2 = await createMedia(`${marker('b')}.png`, 'image/png', PNG_1x1)
+      const m1 = await createAttachment(`${marker('a')}.png`, 'image/png', PNG_1x1, demoSiteId)
+      const m2 = await createAttachment(`${marker('b')}.png`, 'image/png', PNG_1x1, demoSiteId)
       await expect(
         payload.create({
           collection: 'posts',
@@ -233,7 +242,12 @@ describe('posts + word filters + secure download (Task 3B)', () => {
         attachmentMaxCount: 3,
         attachmentAllowedExtensions: 'png',
       })
-      const txt = await createMedia(`${marker('doc')}.txt`, 'text/plain', Buffer.from('hi'))
+      const txt = await createAttachment(
+        `${marker('doc')}.txt`,
+        'text/plain',
+        Buffer.from('hi'),
+        demoSiteId,
+      )
       await expect(
         payload.create({
           collection: 'posts',
@@ -249,7 +263,7 @@ describe('posts + word filters + secure download (Task 3B)', () => {
         attachmentMaxCount: 3,
         attachmentAllowedExtensions: 'png',
       })
-      const png = await createMedia(`${marker('img')}.png`, 'image/png', PNG_1x1)
+      const png = await createAttachment(`${marker('img')}.png`, 'image/png', PNG_1x1, demoSiteId)
       const post = await payload.create({
         collection: 'posts',
         data: { board: boardId, title: marker('GoodAtt'), attachments: [{ media: png }] },
@@ -261,8 +275,8 @@ describe('posts + word filters + secure download (Task 3B)', () => {
 
     it('rejects more than one representative attachment', async () => {
       const boardId = await makeBoard({ attachmentsEnabled: true, attachmentMaxCount: 3 })
-      const m1 = await createMedia(`${marker('r1')}.png`, 'image/png', PNG_1x1)
-      const m2 = await createMedia(`${marker('r2')}.png`, 'image/png', PNG_1x1)
+      const m1 = await createAttachment(`${marker('r1')}.png`, 'image/png', PNG_1x1, demoSiteId)
+      const m2 = await createAttachment(`${marker('r2')}.png`, 'image/png', PNG_1x1, demoSiteId)
       await expect(
         payload.create({
           collection: 'posts',
@@ -285,7 +299,7 @@ describe('posts + word filters + secure download (Task 3B)', () => {
         attachmentsEnabled: true,
         attachmentMaxCount: 3,
       })
-      const png = await createMedia(`${marker('g')}.png`, 'image/png', PNG_1x1)
+      const png = await createAttachment(`${marker('g')}.png`, 'image/png', PNG_1x1, demoSiteId)
       const post = await payload.create({
         collection: 'posts',
         data: { board: boardId, title: marker('AutoRep'), attachments: [{ media: png }] },
@@ -500,7 +514,7 @@ describe('posts + word filters + secure download (Task 3B)', () => {
       let postId: number
 
       beforeAll(async () => {
-        const png = await createMedia(`${marker('dl')}.png`, 'image/png', PNG_1x1)
+        const png = await createAttachment(`${marker('dl')}.png`, 'image/png', PNG_1x1, siteAId)
         const post = await payload.create({
           collection: 'posts',
           data: {

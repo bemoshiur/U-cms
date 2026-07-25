@@ -11,6 +11,7 @@ import sharp from 'sharp'
 
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
+import { Attachments } from './collections/Attachments'
 import { Sites } from './collections/Sites'
 import { Departments } from './collections/Departments'
 import { CodeClassifications } from './collections/codes/CodeClassifications'
@@ -216,6 +217,11 @@ const plugins: Plugin[] = [
       menus: {},
       webContents: {},
       shortUrls: {},
+      // Access-controlled file pool (Task 4-zero) — board/post + admin-notice
+      // attachments. Tenant-scoped so a Site-B admin cannot read Site-A's
+      // (incl. secret) files; `media` is left as the PUBLIC display-asset pool.
+      // See src/collections/Attachments.ts.
+      attachments: {},
     },
     tenantsSlug: Sites.slug,
     /**
@@ -299,6 +305,9 @@ export default buildConfig({
   collections: [
     Users,
     Media,
+    // Tenant-scoped, access-controlled file pool (Task 4-zero): board/post +
+    // admin-notice attachments live here, NOT in the public `media` pool.
+    Attachments,
     Sites,
     Departments,
     CodeClassifications,

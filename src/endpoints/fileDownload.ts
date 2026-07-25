@@ -22,27 +22,31 @@ import type { Post } from '../payload-types'
  *      resolving the file by attachment reference — the direct storage path is
  *      never exposed.
  *
- * ## SECURITY — the /api/media/file gap (interim gate applied; full fix Phase 4)
+ * ## SECURITY — the /api/media/file gap (CLOSED, Task 4-zero)
  *
  * Previously `media.read` was public AND `/api/media/file/*` was IP-exempt, so a
  * board attachment was reachable UNAUTHENTICATED at `/api/media/file/<filename>`,
- * bypassing this endpoint's access checks. B2 (phase-3-final-review §2) closed
- * the unauthenticated vector: `media.read` now requires `req.user` and the file
- * route is no longer IP-exempt (see src/collections/Media.ts +
- * src/security/adminIpEnforcement.ts). Board-attachment privacy is still only
- * FULLY closed once (a) downloads route exclusively through here AND (b) the
- * Phase-4 T-zero pass makes `media.read` tenant/secret-aware (or moves board
- * uploads to signed URLs / a scoped collection). Until then, the
- * cross-tenant-among-authenticated-admins vector remains open.
+ * bypassing this endpoint's access checks; and any authenticated admin could
+ * list every tenant's (and secret posts') files via `/api/media`. Task 4-zero
+ * closes this FULLY: board/post + admin-notice attachments were moved out of the
+ * public `media` pool into the tenant-scoped `attachments` collection
+ * (`src/collections/Attachments.ts`, opted into the multi-tenant plugin, read
+ * gated by tenant membership). So `/api/attachments` and `/api/attachments/file`
+ * deny cross-tenant and anonymous callers, and `/api/media/file` (re-opened as
+ * the deliberate public logo path) can no longer serve any attachment because
+ * none live in `media` anymore. This endpoint remains the ONE sanctioned
+ * attachment-fetch path and the raw attachment route never diverges from it into
+ * a public hole.
  *
  * ## IP guard / public reachability (Phase-4 seam)
  *
  * `/api/files/download` is under `/api/*`, so it is currently GUARDED by the
- * Task 2C admin IP allowlist (fine for Phase 3 — only admins consume it). When
- * Phase 4 adds public board/post read, this path must be added to
- * `EXEMPT_API_PREFIXES` (exactly like `/api/media/file`), with this endpoint's
- * own access check (extended to allow anonymous read of non-secret posts on
- * public boards) as the sole gate.
+ * Task 2C admin IP allowlist (fine for Phase 3/4-zero — only admins consume it).
+ * When Phase 4 adds public board/post read, this path must be added to
+ * `EXEMPT_API_PREFIXES`, with this endpoint's own access check (extended to
+ * allow anonymous read of non-secret posts on public boards) as the sole gate.
+ * `/api/attachments/file` MUST stay guarded (not exempt) — only the download
+ * endpoint's `canDownloadPost` gate is the sanctioned public seam.
  *
  * ## S3 storage (documented limitation)
  *
@@ -104,7 +108,7 @@ export async function canDownloadPost(args: {
 }
 
 /** Resolves the local upload dir for a collection (default staticDir = slug). */
-function resolveStaticDir(payload: Payload, collectionSlug: 'media'): string {
+function resolveStaticDir(payload: Payload, collectionSlug: 'attachments'): string {
   const collection = payload.collections?.[collectionSlug]
   const upload = collection?.config?.upload
   const staticDir =
@@ -172,8 +176,13 @@ export async function handleFileDownload(args: {
   if (mediaId === undefined) {
     return json(404, 'File not found.')
   }
+  // Attachments live in the tenant-scoped `attachments` collection (Task
+  // 4-zero), NOT the public `media` pool. `overrideAccess:true` here is safe:
+  // the visibility decision was already made by `canDownloadPost` above (the
+  // ONE sanctioned, secret/tenant-aware fetch path); this fetch only resolves
+  // bytes for an already-authorized request.
   const media = (await payload.findByID({
-    collection: 'media',
+    collection: 'attachments',
     id: mediaId,
     depth: 0,
     overrideAccess: true,
@@ -186,7 +195,7 @@ export async function handleFileDownload(args: {
 
   // Resolve the byte path with a strict traversal guard (mirrors Payload's own
   // getFileHandler): the resolved path must stay inside the upload dir.
-  const dir = resolveStaticDir(payload, 'media')
+  const dir = resolveStaticDir(payload, 'attachments')
   const filePath = path.resolve(dir, media.filename)
   if (
     filePath !== path.join(dir, path.basename(media.filename)) ||

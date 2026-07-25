@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    attachments: Attachment;
     sites: Site;
     departments: Department;
     codeClassifications: CodeClassification;
@@ -109,6 +110,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
     sites: SitesSelect<false> | SitesSelect<true>;
     departments: DepartmentsSelect<false> | DepartmentsSelect<true>;
     codeClassifications: CodeClassificationsSelect<false> | CodeClassificationsSelect<true>;
@@ -450,6 +452,26 @@ export interface Site {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments".
+ */
+export interface Attachment {
+  id: number;
+  tenant?: (number | null) | Site;
+  alt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "codeClassifications".
  */
 export interface CodeClassification {
@@ -764,7 +786,7 @@ export interface Post {
    */
   attachments?:
     | {
-        media: number | Media;
+        media: number | Attachment;
         description?: string | null;
         /**
          * The gallery thumbnail (photo boards). At most one per post.
@@ -1054,7 +1076,7 @@ export interface AdminNotice {
    */
   attachments?:
     | {
-        media: number | Media;
+        media: number | Attachment;
         /**
          * Attachment description (첨부파일 설명).
          */
@@ -1556,6 +1578,10 @@ export interface PayloadLockedDocument {
         value: number | Media;
       } | null)
     | ({
+        relationTo: 'attachments';
+        value: number | Attachment;
+      } | null)
+    | ({
         relationTo: 'sites';
         value: number | Site;
       } | null)
@@ -1755,6 +1781,25 @@ export interface UsersSelect<T extends boolean = true> {
  * via the `definition` "media_select".
  */
 export interface MediaSelect<T extends boolean = true> {
+  alt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments_select".
+ */
+export interface AttachmentsSelect<T extends boolean = true> {
+  tenant?: T;
   alt?: T;
   updatedAt?: T;
   createdAt?: T;
