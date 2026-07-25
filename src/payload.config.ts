@@ -16,6 +16,20 @@ import { Departments } from './collections/Departments'
 import { CodeClassifications } from './collections/codes/CodeClassifications'
 import { CodeGroups } from './collections/codes/CodeGroups'
 import { Codes } from './collections/codes/Codes'
+import { BoardTypes } from './collections/boards/BoardTypes'
+import { Boards } from './collections/boards/Boards'
+import { Posts } from './collections/posts/Posts'
+import { ProfanityWords } from './collections/ProfanityWords'
+import { MemberBannedWords } from './collections/MemberBannedWords'
+import { NotificationAreas } from './collections/display/NotificationAreas'
+import { Popups } from './collections/display/Popups'
+import { Banners } from './collections/display/Banners'
+import { AdminNotices } from './collections/display/AdminNotices'
+import { GuideMenus } from './collections/display/GuideMenus'
+import { Menus } from './collections/Menus'
+import { WebContents } from './collections/WebContents'
+import { ShortUrls } from './collections/ShortUrls'
+import { HelpEntries } from './collections/HelpEntries'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
@@ -24,9 +38,11 @@ import { AccessLogs } from './collections/AccessLogs'
 import { LoginHistory } from './collections/LoginHistory'
 import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
-import { warmAdminMenuKeyCache } from './access/hasMenuAccess'
+import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
+import { fileEndpoints } from './endpoints/fileDownload'
+import { shortUrlRedirectEndpoint } from './endpoints/shortUrlRedirect'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -173,8 +189,70 @@ const plugins: Plugin[] = [
    * super-admin until Task 1C/1D adds the roles/permission model.
    */
   multiTenantPlugin({
-    collections: {},
+    // `boards` (Task 3A) is the first tenant-scoped collection: the plugin
+    // adds a required `tenant` relationship → `sites`, so every board belongs
+    // to exactly one site. Future tasks opt in posts, menus, web contents,
+    // etc. per docs/planning/development-plan.md §2.1.
+    collections: {
+      boards: {},
+      // Posts (Task 3B) — tenant-scoped like boards; a post's tenant is DERIVED
+      // from its board's site in Posts.ts's beforeValidate. Real per-user
+      // enforcement lives on the collection's own `access`
+      // (tenantScopedMenuAccess) + the create-time membership guard, exactly
+      // like boards — see src/access/tenantAccess.ts.
+      posts: {},
+      // Per-site display components (Task 3C) — notification areas, popups,
+      // banners, admin notices, and guide menus are all tenant-scoped (ref 2-1:
+      // the demo-site versions are per-site instances of the same programs).
+      // Each reuses tenantScopedMenuAccess + tenantMembershipGuard.
+      notificationAreas: {},
+      popups: {},
+      banners: {},
+      adminNotices: {},
+      guideMenus: {},
+      // Menus + versioned web contents + short URLs (Task 3D) — all
+      // tenant-scoped (per-site). `helpEntries` is GLOBAL (admin-system help,
+      // plan §2.1) so it is deliberately NOT opted in here.
+      menus: {},
+      webContents: {},
+      shortUrls: {},
+    },
     tenantsSlug: Sites.slug,
+    /**
+     * SECURITY — gate writes to the plugin-added `users.tenants` array on
+     * `system.admins`, exactly like the `roles` and `status` fields in
+     * Users.ts. `users.update` is `selfOrMenuAccess`, so a user may PATCH
+     * their own doc; without this field-level gate a non-super admin could
+     * add any site to their OWN `tenants` and thereby self-grant access to
+     * that site's boards — the same self-escalation hole that `roles`'
+     * field-access closes (see task-1C-report.md), reopened for `tenants`.
+     * `menuFieldAccess` honors `isSuper`; `overrideAccess` (seeds, the
+     * account-request server create) bypasses it as usual. Users can still
+     * edit their own name/email/password — only `tenants` is locked. `read`
+     * is left default (a user may see their own tenant assignment, and the
+     * plugin reads it for scoping).
+     */
+    tenantsArrayField: {
+      arrayFieldAccess: {
+        create: menuFieldAccess('system.admins'),
+        update: menuFieldAccess('system.admins'),
+      },
+    },
+    /**
+     * INTENTIONALLY permissive — do NOT change to an `isSuper` check. This is
+     * a SINGLE global switch that governs tenant scoping on every collection
+     * the plugin touches, including the GLOBAL `users` and `sites` collections
+     * (plan §2.1 keeps those menu-based, not tenant-scoped). Flipping it would
+     * (1) tenant-scope `users`, breaking the menu-based `system.admins`
+     * admin-manages-admin model, and (2) tenant-scope the `sites`
+     * tenants-collection read, re-triggering the admin-UI-500 lockout that
+     * Sites.ts's open-read decision fixed (phase1-final-review item 8). The
+     * REAL per-user tenant enforcement (phase1-final-review item 2) lives on
+     * each tenant-scoped collection's own `access` via
+     * `tenantScopedMenuAccess` (src/access/tenantAccess.ts) — with this flag
+     * left permissive, the plugin's `withTenantAccess` wrapper is a
+     * pass-through that returns that function's result unchanged.
+     */
     userHasAccessToAllTenants: () => true,
   }),
 ]
@@ -226,6 +304,26 @@ export default buildConfig({
     CodeClassifications,
     CodeGroups,
     Codes,
+    // Board engine (Task 3A): global board types + tenant-scoped boards.
+    BoardTypes,
+    Boards,
+    // Content engine (Task 3B): tenant-scoped posts + global word-filter lists.
+    Posts,
+    ProfanityWords,
+    MemberBannedWords,
+    // Per-site display components (Task 3C): notification areas, popups,
+    // banners, admin notices, and guide menus — all tenant-scoped.
+    NotificationAreas,
+    Popups,
+    Banners,
+    AdminNotices,
+    GuideMenus,
+    // Menus + versioned web content + short URLs (Task 3D): tenant-scoped;
+    // helpEntries is global.
+    Menus,
+    WebContents,
+    ShortUrls,
+    HelpEntries,
     Roles,
     AdminMenus,
     PasswordPolicies,
@@ -243,7 +341,15 @@ export default buildConfig({
   // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B
   // Google-OTP enrolment endpoints: /api/2fa/enroll, /api/2fa/verify-enroll,
   // /api/2fa/guide.
-  endpoints: [...publicAccountEndpoints, ...twoFactorEndpoints],
+  endpoints: [
+    ...publicAccountEndpoints,
+    ...twoFactorEndpoints,
+    ...fileEndpoints,
+    // Public short-URL redirect (Task 3D): GET /api/s/:code (also served at the
+    // pretty /s/:code via the (frontend) route handler). `/api/s` is exempt from
+    // the admin IP guard — see src/security/adminIpEnforcement.ts.
+    shortUrlRedirectEndpoint,
+  ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   // See the `serverURL` const above (I-1 fix) — required so that

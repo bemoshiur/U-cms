@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import type { PayloadRequest } from 'payload'
 import React from 'react'
 
+import { safeRedirect } from '@/security/safeRedirect'
+
 import { Logo } from '../branding/Logo'
 import { LoginForm } from './LoginForm'
 
@@ -24,15 +26,6 @@ type LoginViewProps = {
     req?: PayloadRequest
   }
   searchParams?: Record<string, string | string[] | undefined>
-}
-
-/** Only allow same-origin relative redirects, defaulting to the admin root. */
-function safeRedirect(raw: string | string[] | undefined, adminRoute: string): string {
-  const value = Array.isArray(raw) ? raw[0] : raw
-  if (typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')) {
-    return value
-  }
-  return adminRoute
 }
 
 export async function LoginView(props: LoginViewProps): Promise<React.ReactElement> {

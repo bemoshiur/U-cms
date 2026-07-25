@@ -103,6 +103,113 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 1,
     collectionSlug: 'media',
   },
+  // Board engine (Task 3A; refs 1-27..1-35, 1-77/1-78). `boardTypes` is
+  // global; `boards` is tenant-scoped (per-site).
+  {
+    menuKey: 'content.boardTypes',
+    name: 'Board Type Management',
+    parentMenuKey: 'content',
+    order: 2,
+    collectionSlug: 'boardTypes',
+  },
+  {
+    menuKey: 'content.boards',
+    name: 'Board Management',
+    parentMenuKey: 'content',
+    order: 3,
+    collectionSlug: 'boards',
+  },
+  // Content engine (Task 3B; refs 1-7, 1-28..1-41, 2-5..2-8). `posts` is
+  // tenant-scoped (per-site); the two word-filter lists are global.
+  {
+    menuKey: 'content.posts',
+    name: 'Post Management',
+    parentMenuKey: 'content',
+    order: 4,
+    collectionSlug: 'posts',
+  },
+  {
+    menuKey: 'content.profanityWords',
+    name: 'Profanity Word Management',
+    parentMenuKey: 'content',
+    order: 5,
+    collectionSlug: 'profanityWords',
+  },
+  {
+    menuKey: 'content.memberBannedWords',
+    name: 'Member Banned-Word Management',
+    parentMenuKey: 'content',
+    order: 6,
+    collectionSlug: 'memberBannedWords',
+  },
+  // Per-site display components (Task 3C; refs 1-45..1-53, 2-1). All
+  // tenant-scoped (per-site).
+  {
+    menuKey: 'content.notificationAreas',
+    name: 'Notification Area Management',
+    parentMenuKey: 'content',
+    order: 7,
+    collectionSlug: 'notificationAreas',
+  },
+  {
+    menuKey: 'content.popups',
+    name: 'Popup Management',
+    parentMenuKey: 'content',
+    order: 8,
+    collectionSlug: 'popups',
+  },
+  {
+    menuKey: 'content.banners',
+    name: 'Banner Management',
+    parentMenuKey: 'content',
+    order: 9,
+    collectionSlug: 'banners',
+  },
+  {
+    menuKey: 'content.adminNotices',
+    name: 'Administrator Notice Management',
+    parentMenuKey: 'content',
+    order: 10,
+    collectionSlug: 'adminNotices',
+  },
+  {
+    menuKey: 'content.guideMenus',
+    name: 'Guide Menu Management',
+    parentMenuKey: 'content',
+    order: 11,
+    collectionSlug: 'guideMenus',
+  },
+  // Menus + versioned web content + short URLs + site help (Task 3D; refs
+  // 1-44/2-13, 2-2..2-4, 1-42/1-43, 1-80). menus/webContents/shortUrls are
+  // tenant-scoped (per-site); helpEntries is global.
+  {
+    menuKey: 'content.menus',
+    name: 'Menu Management',
+    parentMenuKey: 'content',
+    order: 12,
+    collectionSlug: 'menus',
+  },
+  {
+    menuKey: 'content.webContents',
+    name: 'Web Content Management',
+    parentMenuKey: 'content',
+    order: 13,
+    collectionSlug: 'webContents',
+  },
+  {
+    menuKey: 'content.shortUrls',
+    name: 'Short URL Management',
+    parentMenuKey: 'content',
+    order: 14,
+    collectionSlug: 'shortUrls',
+  },
+  {
+    menuKey: 'content.help',
+    name: 'Site Help Management',
+    parentMenuKey: 'content',
+    order: 15,
+    collectionSlug: 'helpEntries',
+  },
   // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
   // logging backbone: access history, login history, and the two permission
   // journals. `privacy.permissionLogs` gates BOTH permission-journal

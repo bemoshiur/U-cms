@@ -208,7 +208,11 @@ describe('admin IP access control (Task 2C)', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('GUARDS the media collection endpoint but EXEMPTS the media file route', async () => {
+    it('GUARDS both the media collection endpoint AND the media file route (B2)', async () => {
+      // B2 (phase-3-final-review §2): `/api/media/file/*` is no longer exempt —
+      // it held secret/cross-tenant board attachments, so a blocked IP must not
+      // reach it. Both the collection REST endpoints and the file route are now
+      // behind the allowlist.
       const collection = await evaluateAdminIpRequest({
         payload,
         pathname: '/api/media/123',
@@ -222,7 +226,8 @@ describe('admin IP access control (Task 2C)', () => {
         pathname: '/api/media/file/logo.png',
         client: trusted('198.51.100.9'),
       })
-      expect(file.allowed).toBe(true)
+      expect(file.allowed).toBe(false)
+      expect(file.status).toBe(403)
     })
 
     it('does NOT block a disallowed IP on the public recovery/frontend endpoints', async () => {

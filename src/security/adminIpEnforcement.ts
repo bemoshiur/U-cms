@@ -82,14 +82,18 @@ const EXEMPT_ADMIN_PREFIXES = [
 /**
  * API paths that MUST stay reachable regardless of IP: the public
  * account/recovery endpoints (Task 1D), Payload's built-in password
- * reset/unlock, the public media FILE-serving route used by the FRONTEND site,
- * and the static 2FA setup guide.
+ * reset/unlock, and the static 2FA setup guide.
  *
- * SECURITY (review fix, MEDIUM): only `/api/media/file/*` (the static file
- * route the public site loads `<img>`s from — see `next.config.ts`
- * `localPatterns`) is exempt. The `media` COLLECTION REST endpoints
- * (`/api/media`, `/api/media/<id>`) stay GUARDED so a blocked IP cannot list or
- * read upload metadata through the API.
+ * SECURITY (B2, phase-3-final-review §2): `/api/media/file/*` is NO LONGER
+ * exempt. It previously was so the public frontend could load `<img>`s, but in
+ * Phase 3 `media` also holds secret + cross-tenant board attachments, so an
+ * exempt (off-allowlist) file route + a public `media.read` let anyone fetch
+ * them unauthenticated. Combined with the interim `media.read` auth gate (see
+ * src/collections/Media.ts), the file route is now behind BOTH the admin IP
+ * guard and authentication (belt-and-suspenders). Phase 4 (T-zero) will
+ * re-open a DELIBERATE public path with a tenant/secret-aware split before any
+ * public read ships; until then nothing in the app needs an anonymous media
+ * read (the frontend scaffold renders no upload).
  */
 const EXEMPT_API_PREFIXES = [
   '/api/account-request',
@@ -98,8 +102,15 @@ const EXEMPT_API_PREFIXES = [
   '/api/users/forgot-password',
   '/api/users/reset-password',
   '/api/users/unlock',
-  '/api/media/file',
   '/api/2fa/guide',
+  // Public short-URL redirect (Task 3D; refs 1-42/1-43). `GET /api/s/:code`
+  // 302s an anonymous visitor to the stored (re-validated) target, so it must
+  // stay reachable regardless of the admin IP allowlist — like the public
+  // account-request flow. The pretty `GET /s/:code` path (the Next.js route
+  // handler) is already outside `/admin`/`/api` and thus never guarded; this
+  // exempts the `/api` variant. The redirect re-validates its target, so
+  // exempting it cannot become an open redirect. See src/endpoints/shortUrlRedirect.ts.
+  '/api/s',
 ]
 
 export type PathClassification = 'guard' | 'exempt'

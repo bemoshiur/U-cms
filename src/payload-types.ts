@@ -74,6 +74,20 @@ export interface Config {
     codeClassifications: CodeClassification;
     codeGroups: CodeGroup;
     codes: Code;
+    boardTypes: BoardType;
+    boards: Board;
+    posts: Post;
+    profanityWords: ProfanityWord;
+    memberBannedWords: MemberBannedWord;
+    notificationAreas: NotificationArea;
+    popups: Popup;
+    banners: Banner;
+    adminNotices: AdminNotice;
+    guideMenus: GuideMenu;
+    menus: Menu;
+    webContents: WebContent;
+    shortUrls: ShortUrl;
+    helpEntries: HelpEntry;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -100,6 +114,20 @@ export interface Config {
     codeClassifications: CodeClassificationsSelect<false> | CodeClassificationsSelect<true>;
     codeGroups: CodeGroupsSelect<false> | CodeGroupsSelect<true>;
     codes: CodesSelect<false> | CodesSelect<true>;
+    boardTypes: BoardTypesSelect<false> | BoardTypesSelect<true>;
+    boards: BoardsSelect<false> | BoardsSelect<true>;
+    posts: PostsSelect<false> | PostsSelect<true>;
+    profanityWords: ProfanityWordsSelect<false> | ProfanityWordsSelect<true>;
+    memberBannedWords: MemberBannedWordsSelect<false> | MemberBannedWordsSelect<true>;
+    notificationAreas: NotificationAreasSelect<false> | NotificationAreasSelect<true>;
+    popups: PopupsSelect<false> | PopupsSelect<true>;
+    banners: BannersSelect<false> | BannersSelect<true>;
+    adminNotices: AdminNoticesSelect<false> | AdminNoticesSelect<true>;
+    guideMenus: GuideMenusSelect<false> | GuideMenusSelect<true>;
+    menus: MenusSelect<false> | MenusSelect<true>;
+    webContents: WebContentsSelect<false> | WebContentsSelect<true>;
+    shortUrls: ShortUrlsSelect<false> | ShortUrlsSelect<true>;
+    helpEntries: HelpEntriesSelect<false> | HelpEntriesSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -488,6 +516,786 @@ export interface Code {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boardTypes".
+ */
+export interface BoardType {
+  id: number;
+  /**
+   * System-assigned board type code (PGxxxx), auto-generated on create — not user-editable.
+   */
+  code?: string | null;
+  name: string;
+  /**
+   * Behavioral kind — drives post rendering/behavior in Task 3B (integrated/photo/qna/faq/attachment/extended).
+   */
+  kind: 'integrated' | 'photo' | 'qna' | 'faq' | 'attachment' | 'extended';
+  /**
+   * Informational: legacy stored every board type in one physical table (tb_bbs). The rebuild likewise stores every board type in the single `posts` collection — this field is retained for legacy/audit parity and is not a live table switch.
+   */
+  tableName?: string | null;
+  /**
+   * Board type detail (게시판유형상세). Max 800 characters.
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boards".
+ */
+export interface Board {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * System-assigned board ID (Bxxxxxxx), auto-generated on create.
+   */
+  bbsId?: string | null;
+  name: string;
+  /**
+   * The board's type (from Board Type Management). Locked to the integrated type when Integrated board is checked.
+   */
+  boardType: number | BoardType;
+  /**
+   * Integrated board — locks board type to PG0001 and skin to common (ref 1-27).
+   */
+  isIntegrated?: boolean | null;
+  /**
+   * Skin choice only. React rendering resolves this in Phase 4 (legacy JSP path mapping deferred).
+   */
+  skin?: ('common' | 'site') | null;
+  /**
+   * Board form — list or thumbnail (gallery) layout (ref 1-28 callout 4).
+   */
+  boardForm?: ('list' | 'thumbnail') | null;
+  sortOrder?: ('latest' | 'oldest') | null;
+  /**
+   * Rich-text editor is available to admins only; end users never get it (ref 1-28).
+   */
+  editorForAdminOnly?: boolean | null;
+  commentsEnabled?: boolean | null;
+  prevNextEnabled?: boolean | null;
+  excelExport?: boolean | null;
+  userPostAllowed?: boolean | null;
+  /**
+   * Allow public/private (secret) posts (공개/비공개, ref 1-28).
+   */
+  secretPostAllowed?: boolean | null;
+  /**
+   * Days a post shows the New icon after registration (ref 1-28 New icon toggle).
+   */
+  newIconWindow?: number | null;
+  listCount?: number | null;
+  pageCount?: number | null;
+  /**
+   * Raw HTML rendered above the board. Sanitize on render in Phase 4 (XSS).
+   */
+  topContent?: string | null;
+  /**
+   * Raw HTML rendered below the board. Sanitize on render in Phase 4 (XSS).
+   */
+  bottomContent?: string | null;
+  /**
+   * Configurable notice banner shown at the top of the board (ref 2-7).
+   */
+  headerNotice?: string | null;
+  attachmentsEnabled?: boolean | null;
+  attachmentMaxCount?: number | null;
+  /**
+   * 10 MByte recommended (legacy hint).
+   */
+  attachmentMaxSizeMB?: number | null;
+  /**
+   * Lowercase, comma-separated, no spaces — e.g. "hwp,pdf,png".
+   */
+  attachmentAllowedExtensions?: string | null;
+  /**
+   * Up to 3 classification-code bindings. Each binds a pre-existing code GROUP (분류코드) — see report for the codeGroups-vs-codes decision.
+   */
+  categories?:
+    | {
+        /**
+         * The bound classification code group (must pre-exist in Code Management — popup selection only in legacy).
+         */
+        classificationCode: number | CodeGroup;
+        /**
+         * Display label for this category.
+         */
+        title?: string | null;
+        /**
+         * Value for the HTML title attribute.
+         */
+        htmlTitleAttr?: string | null;
+        /**
+         * Injected HTML attributes, e.g. data="12".
+         */
+        attributeValue?: string | null;
+        /**
+         * Inline CSS for the rendered input.
+         */
+        style?: string | null;
+        useFlag?: boolean | null;
+        requiredFlag?: boolean | null;
+        listFlag?: boolean | null;
+        detailFlag?: boolean | null;
+        searchFlag?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Per-field config for every post column. Defaults to the built-in fields + extraField1-4 (varchar) + extraContent1-4 (text). Drives the posts schema in Task 3B.
+   */
+  fields?:
+    | {
+        /**
+         * Stable key, e.g. 'title', 'extraField1'.
+         */
+        fieldKey: string;
+        label?: string | null;
+        htmlTitleAttr?: string | null;
+        /**
+         * e.g. data="12".
+         */
+        attributeValue?: string | null;
+        style?: string | null;
+        /**
+         * HTML input element the field renders as (ref 1-30 Type selector).
+         */
+        inputType?: ('text' | 'textarea' | 'date' | 'email' | 'select' | 'number') | null;
+        useFlag?: boolean | null;
+        requiredFlag?: boolean | null;
+        listFlag?: boolean | null;
+        detailFlag?: boolean | null;
+        searchFlag?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Ordered fieldKeys for the LIST view columns (ref 1-31). Drag-drop UI is later.
+   */
+  listFieldOrder?: string[] | null;
+  /**
+   * Ordered fieldKeys for the DETAIL view (ref 1-32). Independent of list order.
+   */
+  detailFieldOrder?: string[] | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "posts".
+ */
+export interface Post {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * The board this post belongs to — determines the post's config/kind.
+   */
+  board: number | Board;
+  /**
+   * Denormalized board kind (auto-set from the board's type on save).
+   */
+  boardKind?: string | null;
+  title: string;
+  /**
+   * Display name of the author (legacy stored a free-text name).
+   */
+  author?: string | null;
+  /**
+   * The admin/user who authored this post, if applicable.
+   */
+  authorUser?: (number | null) | User;
+  department?: (number | null) | Department;
+  team?: string | null;
+  /**
+   * Post body (Editor mode). HTML/TEXT input modes + sanitize-on-render are a Phase-4 concern.
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Read count; incremented on detail view in Phase 4.
+   */
+  viewCount?: number | null;
+  /**
+   * Pinned notice post (공지). Optionally scoped to a date range below.
+   */
+  isNotice?: boolean | null;
+  noticeFrom?: string | null;
+  noticeTo?: string | null;
+  /**
+   * Secret (비공개) post — only its author + admins may view it.
+   */
+  isSecret?: boolean | null;
+  /**
+   * Category 1 value — a detail code from the group bound to the board's category slot 1.
+   */
+  category1?: (number | null) | Code;
+  /**
+   * Category 2 value — a detail code from the group bound to the board's category slot 2.
+   */
+  category2?: (number | null) | Code;
+  /**
+   * Category 3 value — a detail code from the group bound to the board's category slot 3.
+   */
+  category3?: (number | null) | Code;
+  extraField1?: string | null;
+  extraField2?: string | null;
+  extraField3?: string | null;
+  extraField4?: string | null;
+  extraContent1?: string | null;
+  extraContent2?: string | null;
+  extraContent3?: string | null;
+  extraContent4?: string | null;
+  /**
+   * Uploaded files. Constraints (count/size/extensions) come from the board; download via the managed endpoint (/api/files/download).
+   */
+  attachments?:
+    | {
+        media: number | Media;
+        description?: string | null;
+        /**
+         * The gallery thumbnail (photo boards). At most one per post.
+         */
+        isRepresentative?: boolean | null;
+        /**
+         * Per-post file sequence, auto-assigned.
+         */
+        fileSn?: number | null;
+        /**
+         * Managed-download counter (see fileDownload.ts).
+         */
+        downloadCount?: number | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Admin's answer to a Q&A question. Presence sets isAnswered.
+   */
+  answer?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  answeredBy?: (number | null) | User;
+  answeredAt?: string | null;
+  /**
+   * Derived: true once an answer is present.
+   */
+  isAnswered?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "profanityWords".
+ */
+export interface ProfanityWord {
+  id: number;
+  /**
+   * A forbidden word. Matching is case-insensitive substring.
+   */
+  word: string;
+  /**
+   * Only active words are enforced against new posts.
+   */
+  isActive?: boolean | null;
+  /**
+   * The admin who registered this word (auto-set on create).
+   */
+  registrant?: (number | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "memberBannedWords".
+ */
+export interface MemberBannedWord {
+  id: number;
+  /**
+   * A banned word. Matching is case-insensitive substring.
+   */
+  word: string;
+  /**
+   * Where the word is banned: common (everywhere), loginId, or password (ref 1-41).
+   */
+  scope: 'common' | 'loginId' | 'password';
+  /**
+   * Only active words are enforced at signup.
+   */
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "notificationAreas".
+ */
+export interface NotificationArea {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display image (uploads to Media). Recommended size 490 x 245 px; allowed types jpg/jpeg/png/gif (legacy note).
+   */
+  image: number | Media;
+  title: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Link mode (링크 방식): open in a new window (새창/Y) vs the current page (N).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  /**
+   * Exposure start (hour precision). Empty = no lower bound.
+   */
+  exposeFrom?: string | null;
+  /**
+   * Exposure end (hour precision). Empty = no upper bound. Outside the window the item is not live.
+   */
+  exposeTo?: string | null;
+  /**
+   * Exposure order (노출순서) — lower shows first. The 4-way drag UI is deferred to Phase 4.
+   */
+  displayOrder?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "popups".
+ */
+export interface Popup {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display image (uploads to Media). Recommended size 160 x 140 px; allowed types jpg/jpeg/png/gif (legacy note).
+   */
+  image: number | Media;
+  title: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  /**
+   * Exposure start (hour precision). Empty = no lower bound.
+   */
+  exposeFrom?: string | null;
+  /**
+   * Exposure end (hour precision). Empty = no upper bound. Outside the window the item is not live.
+   */
+  exposeTo?: string | null;
+  /**
+   * Width (넓이) in px (popup window geometry, ref 1-48).
+   */
+  width?: number | null;
+  /**
+   * Height (높이) in px (popup window geometry, ref 1-48).
+   */
+  height?: number | null;
+  /**
+   * Top position (팝업위치 TOP) in px (popup window geometry, ref 1-48).
+   */
+  top?: number | null;
+  /**
+   * Left position (팝업위치 LEFT) in px (popup window geometry, ref 1-48).
+   */
+  left?: number | null;
+  /**
+   * Scrollbar use (스크롤사용여부) — whether the popup window shows scrollbars.
+   */
+  showScrollbar?: boolean | null;
+  /**
+   * Close-for-a-day (하루닫기) — lets a viewer suppress the popup for one day (cookie behavior; frontend concern, the flag is stored here).
+   */
+  closeForDay?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "banners".
+ */
+export interface Banner {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display image (uploads to Media). Recommended size 196 x 70 px; allowed types jpg/jpeg/png/gif (legacy note).
+   */
+  image: number | Media;
+  /**
+   * Representative banner file (대표 배너파일) — the primary banner for the site.
+   */
+  isRepresentative?: boolean | null;
+  title: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Link mode (링크 방식): open in a new window (새창/Y) vs the current page (N).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  /**
+   * Exposure start (hour precision). Empty = no lower bound.
+   */
+  exposeFrom?: string | null;
+  /**
+   * Exposure end (hour precision). Empty = no upper bound. Outside the window the item is not live.
+   */
+  exposeTo?: string | null;
+  /**
+   * Exposure order (노출순서) — lower shows first. The 4-way drag UI is deferred to Phase 4.
+   */
+  displayOrder?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminNotices".
+ */
+export interface AdminNotice {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Pinned notices sort above general ones (ref 1-49).
+   */
+  noticeType: 'pinned' | 'general';
+  /**
+   * Pin-period start — applies only to pinned notices (ref 1-50 callout 1).
+   */
+  pinFrom?: string | null;
+  /**
+   * Pin-period end — applies only to pinned notices.
+   */
+  pinTo?: string | null;
+  title: string;
+  department?: (number | null) | Department;
+  /**
+   * Team name (팀명).
+   */
+  team?: string | null;
+  /**
+   * Author display name (작성자).
+   */
+  author?: string | null;
+  /**
+   * Notice body (Editor mode). HTML/TEXT input modes + sanitize-on-render are a Phase-4 concern (as with posts).
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Up to 5 image files (png/gif/jpg), each with an optional description (ref 1-50).
+   */
+  attachments?:
+    | {
+        media: number | Media;
+        /**
+         * Attachment description (첨부파일 설명).
+         */
+        description?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "guideMenus".
+ */
+export interface GuideMenu {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Which utility bar this menu appears in (max 5 for top, ref 1-53).
+   */
+  position: 'top' | 'bottom';
+  /**
+   * Menu name (메뉴명).
+   */
+  name: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Link mode (링크 방식): open in a new window (새창/Y) vs the current page (N).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Exposure order (노출순서) — lower shows first. The 4-way drag UI is deferred to Phase 4.
+   */
+  displayOrder?: number | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menus".
+ */
+export interface Menu {
+  id: number;
+  tenant?: (number | null) | Site;
+  name: string;
+  /**
+   * System-assigned per-site menu number (legacy menuSn), used in public URLs. Unique within a site.
+   */
+  menuNumber?: number | null;
+  /**
+   * Parent menu (same site). Leave empty for a top-level menu.
+   */
+  parent?: (number | null) | Menu;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  /**
+   * What this menu points at (ref 1-44). Drives which fields below apply.
+   */
+  contentType?: ('placeholder' | 'program' | 'board' | 'content' | 'link') | null;
+  /**
+   * The board this menu opens (when content type is Board).
+   */
+  board?: (number | null) | Board;
+  /**
+   * Site-relative path (/bos/… or ?menuSn=…) or an absolute http(s) URL (when content type is Link).
+   */
+  linkUrl?: string | null;
+  /**
+   * Open the target in a new window (링크 방식: 새창).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Active (사용). Inactive menus are hidden from the public nav (shown red in the admin tree — Phase-4 UI).
+   */
+  active?: boolean | null;
+  /**
+   * Data manager (담당자) — a user or department. Surfaces on the PUBLIC site only when the site’s dataManagerEnabled toggle is on (Phase 1 sites).
+   */
+  personInCharge?:
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null)
+    | ({
+        relationTo: 'departments';
+        value: number | Department;
+      } | null);
+  /**
+   * Menu visibility by session state (ref 2-13 노출조건).
+   */
+  exposureCondition?: ('always' | 'loggedInOnly' | 'loggedOutOnly') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "webContents".
+ */
+export interface WebContent {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * The menu this content is bound to (1:1). Content exists only for a created menu (ref 2-2).
+   */
+  menu: number | Menu;
+  /**
+   * Internal name (legacy 컨텐츠명).
+   */
+  name?: string | null;
+  /**
+   * Display title of the page.
+   */
+  title?: string | null;
+  /**
+   * The page body. Versioned — every save creates a new version; the published version is the active one.
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Responsible department (담당부서, optional — ref 2-2).
+   */
+  responsibleDept?: (number | null) | Department;
+  /**
+   * Responsible person (담당자, optional — ref 2-2).
+   */
+  responsiblePerson?: string | null;
+  /**
+   * Informational only — legacy served content via a controller URL; the rebuild renders in Phase 4.
+   */
+  contentUrl?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "shortUrls".
+ */
+export interface ShortUrl {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display name (링크명).
+   */
+  linkName: string;
+  /**
+   * The destination the short link redirects to (absolute http(s) URL or /path).
+   */
+  originalUrl: string;
+  /**
+   * Optional notes (비고).
+   */
+  remarks?: string | null;
+  /**
+   * Auto-generated globally-unique short code (used in /s/:code).
+   */
+  code?: string | null;
+  /**
+   * Best-effort redirect hit counter.
+   */
+  hitCount?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "helpEntries".
+ */
+export interface HelpEntry {
+  id: number;
+  name: string;
+  /**
+   * Parent help node. Leave empty for a top-level entry.
+   */
+  parent?: (number | null) | HelpEntry;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  /**
+   * The help body shown by the ⓘ button.
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * How this help is matched to a screen. Menu binding wins over service when both match (ref 1-80).
+   */
+  bindType?: ('service' | 'menu') | null;
+  /**
+   * Screen URL to match (when Service). Supports a "*" wildcard, e.g. /bos/board/*.
+   */
+  urlPattern?: string | null;
+  /**
+   * The menu number to bind to (when Menu) — matched against the current menu.
+   */
+  menuNumber?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "passwordPolicies".
  */
 export interface PasswordPolicy {
@@ -768,6 +1576,62 @@ export interface PayloadLockedDocument {
         value: number | Code;
       } | null)
     | ({
+        relationTo: 'boardTypes';
+        value: number | BoardType;
+      } | null)
+    | ({
+        relationTo: 'boards';
+        value: number | Board;
+      } | null)
+    | ({
+        relationTo: 'posts';
+        value: number | Post;
+      } | null)
+    | ({
+        relationTo: 'profanityWords';
+        value: number | ProfanityWord;
+      } | null)
+    | ({
+        relationTo: 'memberBannedWords';
+        value: number | MemberBannedWord;
+      } | null)
+    | ({
+        relationTo: 'notificationAreas';
+        value: number | NotificationArea;
+      } | null)
+    | ({
+        relationTo: 'popups';
+        value: number | Popup;
+      } | null)
+    | ({
+        relationTo: 'banners';
+        value: number | Banner;
+      } | null)
+    | ({
+        relationTo: 'adminNotices';
+        value: number | AdminNotice;
+      } | null)
+    | ({
+        relationTo: 'guideMenus';
+        value: number | GuideMenu;
+      } | null)
+    | ({
+        relationTo: 'menus';
+        value: number | Menu;
+      } | null)
+    | ({
+        relationTo: 'webContents';
+        value: number | WebContent;
+      } | null)
+    | ({
+        relationTo: 'shortUrls';
+        value: number | ShortUrl;
+      } | null)
+    | ({
+        relationTo: 'helpEntries';
+        value: number | HelpEntry;
+      } | null)
+    | ({
         relationTo: 'roles';
         value: number | Role;
       } | null)
@@ -1022,6 +1886,322 @@ export interface CodesSelect<T extends boolean = true> {
   description?: T;
   legacyValue?: T;
   isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boardTypes_select".
+ */
+export interface BoardTypesSelect<T extends boolean = true> {
+  code?: T;
+  name?: T;
+  kind?: T;
+  tableName?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boards_select".
+ */
+export interface BoardsSelect<T extends boolean = true> {
+  tenant?: T;
+  bbsId?: T;
+  name?: T;
+  boardType?: T;
+  isIntegrated?: T;
+  skin?: T;
+  boardForm?: T;
+  sortOrder?: T;
+  editorForAdminOnly?: T;
+  commentsEnabled?: T;
+  prevNextEnabled?: T;
+  excelExport?: T;
+  userPostAllowed?: T;
+  secretPostAllowed?: T;
+  newIconWindow?: T;
+  listCount?: T;
+  pageCount?: T;
+  topContent?: T;
+  bottomContent?: T;
+  headerNotice?: T;
+  attachmentsEnabled?: T;
+  attachmentMaxCount?: T;
+  attachmentMaxSizeMB?: T;
+  attachmentAllowedExtensions?: T;
+  categories?:
+    | T
+    | {
+        classificationCode?: T;
+        title?: T;
+        htmlTitleAttr?: T;
+        attributeValue?: T;
+        style?: T;
+        useFlag?: T;
+        requiredFlag?: T;
+        listFlag?: T;
+        detailFlag?: T;
+        searchFlag?: T;
+        id?: T;
+      };
+  fields?:
+    | T
+    | {
+        fieldKey?: T;
+        label?: T;
+        htmlTitleAttr?: T;
+        attributeValue?: T;
+        style?: T;
+        inputType?: T;
+        useFlag?: T;
+        requiredFlag?: T;
+        listFlag?: T;
+        detailFlag?: T;
+        searchFlag?: T;
+        id?: T;
+      };
+  listFieldOrder?: T;
+  detailFieldOrder?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "posts_select".
+ */
+export interface PostsSelect<T extends boolean = true> {
+  tenant?: T;
+  board?: T;
+  boardKind?: T;
+  title?: T;
+  author?: T;
+  authorUser?: T;
+  department?: T;
+  team?: T;
+  content?: T;
+  viewCount?: T;
+  isNotice?: T;
+  noticeFrom?: T;
+  noticeTo?: T;
+  isSecret?: T;
+  category1?: T;
+  category2?: T;
+  category3?: T;
+  extraField1?: T;
+  extraField2?: T;
+  extraField3?: T;
+  extraField4?: T;
+  extraContent1?: T;
+  extraContent2?: T;
+  extraContent3?: T;
+  extraContent4?: T;
+  attachments?:
+    | T
+    | {
+        media?: T;
+        description?: T;
+        isRepresentative?: T;
+        fileSn?: T;
+        downloadCount?: T;
+        id?: T;
+      };
+  answer?: T;
+  answeredBy?: T;
+  answeredAt?: T;
+  isAnswered?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "profanityWords_select".
+ */
+export interface ProfanityWordsSelect<T extends boolean = true> {
+  word?: T;
+  isActive?: T;
+  registrant?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "memberBannedWords_select".
+ */
+export interface MemberBannedWordsSelect<T extends boolean = true> {
+  word?: T;
+  scope?: T;
+  isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "notificationAreas_select".
+ */
+export interface NotificationAreasSelect<T extends boolean = true> {
+  tenant?: T;
+  image?: T;
+  title?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  newWindow?: T;
+  active?: T;
+  exposeFrom?: T;
+  exposeTo?: T;
+  displayOrder?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "popups_select".
+ */
+export interface PopupsSelect<T extends boolean = true> {
+  tenant?: T;
+  image?: T;
+  title?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  active?: T;
+  exposeFrom?: T;
+  exposeTo?: T;
+  width?: T;
+  height?: T;
+  top?: T;
+  left?: T;
+  showScrollbar?: T;
+  closeForDay?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "banners_select".
+ */
+export interface BannersSelect<T extends boolean = true> {
+  tenant?: T;
+  image?: T;
+  isRepresentative?: T;
+  title?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  newWindow?: T;
+  active?: T;
+  exposeFrom?: T;
+  exposeTo?: T;
+  displayOrder?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminNotices_select".
+ */
+export interface AdminNoticesSelect<T extends boolean = true> {
+  tenant?: T;
+  noticeType?: T;
+  pinFrom?: T;
+  pinTo?: T;
+  title?: T;
+  department?: T;
+  team?: T;
+  author?: T;
+  content?: T;
+  attachments?:
+    | T
+    | {
+        media?: T;
+        description?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "guideMenus_select".
+ */
+export interface GuideMenusSelect<T extends boolean = true> {
+  tenant?: T;
+  position?: T;
+  name?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  newWindow?: T;
+  displayOrder?: T;
+  active?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menus_select".
+ */
+export interface MenusSelect<T extends boolean = true> {
+  tenant?: T;
+  name?: T;
+  menuNumber?: T;
+  parent?: T;
+  order?: T;
+  contentType?: T;
+  board?: T;
+  linkUrl?: T;
+  newWindow?: T;
+  active?: T;
+  personInCharge?: T;
+  exposureCondition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "webContents_select".
+ */
+export interface WebContentsSelect<T extends boolean = true> {
+  tenant?: T;
+  menu?: T;
+  name?: T;
+  title?: T;
+  content?: T;
+  responsibleDept?: T;
+  responsiblePerson?: T;
+  contentUrl?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "shortUrls_select".
+ */
+export interface ShortUrlsSelect<T extends boolean = true> {
+  tenant?: T;
+  linkName?: T;
+  originalUrl?: T;
+  remarks?: T;
+  code?: T;
+  hitCount?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "helpEntries_select".
+ */
+export interface HelpEntriesSelect<T extends boolean = true> {
+  name?: T;
+  parent?: T;
+  order?: T;
+  content?: T;
+  bindType?: T;
+  urlPattern?: T;
+  menuNumber?: T;
   updatedAt?: T;
   createdAt?: T;
 }
