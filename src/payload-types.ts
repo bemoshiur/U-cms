@@ -201,6 +201,14 @@ export interface User {
    */
   totpEnrolledAt?: string | null;
   /**
+   * Consecutive failed OTP codes. Resets on a successful code.
+   */
+  totpFailedAttempts?: number | null;
+  /**
+   * When set to a future time, the OTP step is locked out (too many failed codes). Auto-clears on expiry / a successful code.
+   */
+  totpLockUntil?: string | null;
+  /**
    * Admin action: clear this user’s 2FA enrolment so they must set up a new device on next login. The user is emailed. Requires the system.admins grant.
    */
   resetTwoFactorDevice?: boolean | null;
@@ -794,6 +802,8 @@ export interface UsersSelect<T extends boolean = true> {
   totpSecret?: T;
   totpConfirmed?: T;
   totpEnrolledAt?: T;
+  totpFailedAttempts?: T;
+  totpLockUntil?: T;
   resetTwoFactorDevice?: T;
   regenerateTwoFactorSecret?: T;
   tenants?:

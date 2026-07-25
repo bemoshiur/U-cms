@@ -11,6 +11,7 @@ import {
   processTwoFactorAdminReset,
   require2FA,
   revokeSessionsOnStatusChange,
+  throttleTwoFactorFailure,
 } from '../auth/twoFactorHooks'
 import { renderForgotPasswordEmail } from '../email/authEmails'
 
@@ -165,8 +166,10 @@ export const Users: CollectionConfig = {
     ],
     afterDelete: [usersAudit.afterDelete],
     // Failed-login capture (ref 3-6 로그인 실패 이력) — the only Payload 3.86 seam
-    // that fires on a rejected password (see `recordLoginFailure`).
-    afterError: [recordLoginFailure],
+    // that fires on a rejected password (see `recordLoginFailure`). Task 2B
+    // appends the OTP brute-force throttle, which counts wrong codes here (post
+    // transaction-kill, so its user-row write can't deadlock).
+    afterError: [recordLoginFailure, throttleTwoFactorFailure],
     // Logout capture (ref 1-55).
     afterLogout: [recordLogout],
   },
@@ -336,6 +339,36 @@ export const Users: CollectionConfig = {
       admin: {
         readOnly: true,
         description: 'When two-factor authentication was confirmed. Null until first enrolment.',
+      },
+    },
+    // OTP brute-force throttle state (Task 2B fix). System-managed: incremented
+    // by `throttleTwoFactorFailure` (afterError) on a wrong code, reset by
+    // `require2FA` on a correct one. Admin-readable for support, never
+    // client-writable.
+    {
+      name: 'totpFailedAttempts',
+      type: 'number',
+      defaultValue: 0,
+      access: {
+        create: () => false,
+        update: () => false,
+      },
+      admin: {
+        readOnly: true,
+        description: 'Consecutive failed OTP codes. Resets on a successful code.',
+      },
+    },
+    {
+      name: 'totpLockUntil',
+      type: 'date',
+      access: {
+        create: () => false,
+        update: () => false,
+      },
+      admin: {
+        readOnly: true,
+        description:
+          'When set to a future time, the OTP step is locked out (too many failed codes). Auto-clears on expiry / a successful code.',
       },
     },
     // Admin-only reset ACTIONS (ref 1-16). One-shot checkboxes gated on

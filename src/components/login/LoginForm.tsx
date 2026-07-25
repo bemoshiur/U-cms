@@ -6,6 +6,7 @@ import { branding } from '../../branding'
 import {
   TWO_FACTOR_ENROLL_REQUIRED_MESSAGE,
   TWO_FACTOR_INVALID_MESSAGE,
+  TWO_FACTOR_LOCKED_MESSAGE,
   TWO_FACTOR_REQUIRED_MESSAGE,
 } from '../../auth/twoFactorMessages'
 
@@ -79,6 +80,11 @@ export function LoginForm({
       if (message === TWO_FACTOR_INVALID_MESSAGE) {
         setStep('otp')
         setError('That code is not valid. Check your authenticator app and try again.')
+        return
+      }
+      if (message === TWO_FACTOR_LOCKED_MESSAGE) {
+        setStep('otp')
+        setError(message)
         return
       }
       if (message === TWO_FACTOR_ENROLL_REQUIRED_MESSAGE) {

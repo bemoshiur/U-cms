@@ -8,7 +8,21 @@ export {
   TWO_FACTOR_REQUIRED_MESSAGE,
   TWO_FACTOR_INVALID_MESSAGE,
   TWO_FACTOR_ENROLL_REQUIRED_MESSAGE,
+  TWO_FACTOR_LOCKED_MESSAGE,
 } from './twoFactorMessages'
+
+/**
+ * OTP brute-force throttle (Task 2B fix). A wrong OTP does NOT trip Payload's
+ * native `maxLoginAttempts` lock — `resetLoginAttempts` runs on a correct
+ * PASSWORD *before* the OTP gate (verified in `auth/operations/login.js`), so
+ * the native counter is wiped every attempt and can never accumulate for OTP
+ * failures. This dedicated counter (`users.totpFailedAttempts` /
+ * `totpLockUntil`) is what actually stops a password-holder from brute-forcing
+ * the 6-digit code (only ~3/1e6 codes valid per attempt with the ±1 window, so
+ * a hard cap is required per NIST 800-63B / OWASP ASVS).
+ */
+export const TWO_FACTOR_MAX_ATTEMPTS = 5
+export const TWO_FACTOR_LOCK_MS = 10 * 60 * 1000 // 10 minutes (mirrors the T1D native lockTime)
 
 /**
  * Google-OTP (TOTP) two-factor authentication primitives (Task 2B; refs 1-4,

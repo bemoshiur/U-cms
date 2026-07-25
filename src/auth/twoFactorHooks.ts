@@ -1,16 +1,22 @@
 import type {
   CollectionAfterChangeHook,
+  CollectionAfterErrorHook,
   CollectionBeforeChangeHook,
   CollectionBeforeLoginHook,
+  PayloadRequest,
 } from 'payload'
 import { APIError } from 'payload'
 
+import { extractLoginIdentifier } from '../audit/helpers'
 import { recordAccess } from '../audit/recordAccess'
 import { renderTwoFactorResetEmail } from '../email/authEmails'
 import {
   generateTotpSecret,
   siteRequiresTwoFactor,
   TWO_FACTOR_INVALID_MESSAGE,
+  TWO_FACTOR_LOCK_MS,
+  TWO_FACTOR_LOCKED_MESSAGE,
+  TWO_FACTOR_MAX_ATTEMPTS,
   TWO_FACTOR_REQUIRED_MESSAGE,
   verifyTotp,
 } from './twoFactor'
@@ -38,6 +44,8 @@ type UserRow = {
   status?: string
   totpConfirmed?: boolean | null
   totpSecret?: string | null
+  totpFailedAttempts?: number | null
+  totpLockUntil?: string | null
 }
 
 /** Reads the submitted OTP from the login request body (`otp`, then `token`). */
@@ -50,6 +58,28 @@ function extractOtp(data: unknown): string {
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
+/** True while the user's OTP step is locked out (throttle). */
+function isOtpLocked(lockUntil: string | null | undefined): boolean {
+  if (!lockUntil) {
+    return false
+  }
+  const until = new Date(lockUntil).getTime()
+  return Number.isFinite(until) && until > Date.now()
+}
+
+/** True when this request targets the login endpoint (REST/GraphQL). */
+function isLoginRequest(req: PayloadRequest | undefined): boolean {
+  let path = req?.pathname
+  if (!path && typeof req?.url === 'string') {
+    try {
+      path = new URL(req.url).pathname
+    } catch {
+      path = undefined
+    }
+  }
+  return typeof path === 'string' && /\/users\/login$/.test(path)
+}
+
 /**
  * `beforeLogin` 2FA gate. Runs after `blockInactiveLogin` (status gate), so it
  * only sees `active` users whose password already verified.
@@ -59,12 +89,14 @@ function extractOtp(data: unknown): string {
  *    ref 1-6: the QR is shown once on first login; a Phase-4 frontend gate then
  *    forces enrolment before further use — documented in task-2B-report.md).
  *  - user HAS confirmed a TOTP:
+ *      - OTP step locked     → throw `TWO_FACTOR_LOCKED_MESSAGE` (429) even for
+ *        a correct code (brute-force throttle — see `throttleTwoFactorFailure`).
  *      - no OTP supplied     → throw `TWO_FACTOR_REQUIRED_MESSAGE` (benign
  *        intermediate; `req.context.skipTwoFactorFailureLog` suppresses the
  *        failed-login audit row the `afterError` hook would otherwise write).
  *      - OTP invalid         → throw `TWO_FACTOR_INVALID_MESSAGE` (a real
- *        failure — audited as such by the existing `recordLoginFailure` hook).
- *      - OTP valid           → allow login.
+ *        failure — audited, and counted toward the throttle, by `afterError`).
+ *      - OTP valid           → reset the throttle counter and allow login.
  */
 export const require2FA: CollectionBeforeLoginHook = async ({ req, user }) => {
   const u = user as unknown as UserRow
@@ -78,6 +110,12 @@ export const require2FA: CollectionBeforeLoginHook = async ({ req, user }) => {
     return user
   }
 
+  // Throttle: refuse the OTP step entirely while locked — a correct code must
+  // NOT unlock early, or the lockout would be trivially bypassable.
+  if (isOtpLocked(u.totpLockUntil)) {
+    throw new APIError(TWO_FACTOR_LOCKED_MESSAGE, 429)
+  }
+
   const otp = extractOtp(req.data)
   if (!otp) {
     // Correct password, code not yet entered — this is the step-1 → step-2
@@ -89,10 +127,117 @@ export const require2FA: CollectionBeforeLoginHook = async ({ req, user }) => {
   }
 
   if (!verifyTotp(otp, u.totpSecret)) {
+    // The counter is incremented by `throttleTwoFactorFailure` on `afterError`,
+    // which runs AFTER the login transaction is killed (so the write to this
+    // user's row can't deadlock against the login's own row lock).
     throw new APIError(TWO_FACTOR_INVALID_MESSAGE, 401)
   }
 
+  // Success: clear any accumulated failures so a user who fumbled a code (or
+  // fixed their clock) isn't dragged toward a lock. `db.updateOne` writes only
+  // these two scalar columns, inside the login transaction (via `req`), with no
+  // hooks — safe against the row lock the login already holds (same tx).
+  if (u.totpFailedAttempts || u.totpLockUntil) {
+    try {
+      await req.payload.db.updateOne({
+        collection: 'users',
+        id: u.id,
+        data: { totpFailedAttempts: 0, totpLockUntil: null },
+        req,
+        returning: false,
+      })
+    } catch (err) {
+      req.payload?.logger?.error?.(
+        { err },
+        '[2fa] reset of OTP throttle counter failed — swallowed',
+      )
+    }
+  }
+
   return user
+}
+
+/**
+ * OTP brute-force throttle (Task 2B fix). An `afterError` hook: it fires on the
+ * REST/GraphQL login path (the external attack surface) AFTER the login
+ * transaction has been killed (`killTransaction` runs inside the login
+ * operation before the error propagates — verified in
+ * `auth/operations/login.js`), so the user's row is no longer locked and this
+ * isolated write cannot deadlock (the reason the increment can't live in the
+ * `beforeLogin` gate: there the login tx still holds the row and a
+ * throw would roll the increment back anyway).
+ *
+ * Only a genuinely WRONG code (`TWO_FACTOR_INVALID_MESSAGE`) counts — not the
+ * benign "code required" intermediate, not a bad password, not a lockout bounce.
+ * At `TWO_FACTOR_MAX_ATTEMPTS` consecutive misses it sets `totpLockUntil`
+ * (`TWO_FACTOR_LOCK_MS`) and writes an accessLog; the wrong-code
+ * `loginHistory` failure row is already written by `recordLoginFailure`.
+ * The counter resets on a successful OTP (see `require2FA`).
+ */
+export const throttleTwoFactorFailure: CollectionAfterErrorHook = async ({
+  collection,
+  error,
+  req,
+}) => {
+  try {
+    if (collection?.slug !== 'users' || !isLoginRequest(req)) {
+      return undefined
+    }
+    const message = error instanceof Error ? error.message : ''
+    if (message !== TWO_FACTOR_INVALID_MESSAGE) {
+      return undefined
+    }
+
+    const identifier = extractLoginIdentifier(req)
+    if (!identifier) {
+      return undefined
+    }
+
+    const found = await req.payload.find({
+      collection: 'users',
+      where: { email: { equals: identifier } },
+      limit: 1,
+      pagination: false,
+      overrideAccess: true,
+    })
+    const target = found.docs[0] as UserRow | undefined
+    if (!target) {
+      return undefined
+    }
+
+    const current = typeof target.totpFailedAttempts === 'number' ? target.totpFailedAttempts : 0
+    const next = current + 1
+    const locking = next >= TWO_FACTOR_MAX_ATTEMPTS
+
+    // Isolated write (no `req`): the login tx is already rolled back, and the
+    // counter must persist independently of it.
+    await req.payload.db.updateOne({
+      collection: 'users',
+      id: target.id,
+      data: {
+        totpFailedAttempts: next,
+        ...(locking
+          ? { totpLockUntil: new Date(Date.now() + TWO_FACTOR_LOCK_MS).toISOString() }
+          : {}),
+      },
+      returning: false,
+    })
+
+    if (locking) {
+      await recordAccess(req.payload, {
+        req,
+        action: 'update',
+        actor: target,
+        linkActor: false,
+        menuKey: 'system.admins',
+        menuLabel: '2FA — OTP step locked (too many failed codes)',
+        url: req?.pathname,
+      })
+    }
+  } catch (err) {
+    req?.payload?.logger?.error?.({ err }, '[2fa] OTP throttle update failed — swallowed')
+  }
+  return undefined
 }
 
 /**

@@ -13,3 +13,5 @@ export const TWO_FACTOR_REQUIRED_MESSAGE = 'A one-time authentication code is re
 export const TWO_FACTOR_INVALID_MESSAGE = 'The one-time authentication code is incorrect.'
 export const TWO_FACTOR_ENROLL_REQUIRED_MESSAGE =
   'Two-factor authentication must be set up before you can sign in.'
+export const TWO_FACTOR_LOCKED_MESSAGE =
+  'Too many incorrect authentication codes. Try again later or contact an administrator.'

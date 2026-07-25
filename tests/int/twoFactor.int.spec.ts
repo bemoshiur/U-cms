@@ -9,7 +9,13 @@ import {
   enrollTwoFactorEndpoint,
   verifyEnrollTwoFactorEndpoint,
 } from '@/endpoints/twoFactorEndpoints'
-import { TWO_FACTOR_INVALID_MESSAGE, TWO_FACTOR_REQUIRED_MESSAGE } from '@/auth/twoFactorMessages'
+import { throttleTwoFactorFailure } from '@/auth/twoFactorHooks'
+import { TWO_FACTOR_MAX_ATTEMPTS } from '@/auth/twoFactor'
+import {
+  TWO_FACTOR_INVALID_MESSAGE,
+  TWO_FACTOR_LOCKED_MESSAGE,
+  TWO_FACTOR_REQUIRED_MESSAGE,
+} from '@/auth/twoFactorMessages'
 import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
 import { rolesStep } from '@/seed/steps/roles'
@@ -125,6 +131,22 @@ async function setupConfirmedUser(label: string) {
 
 async function serverRead(id: number | string) {
   return payload.findByID({ collection: 'users', id, overrideAccess: true, showHiddenFields: true })
+}
+
+/** Simulates one wrong-OTP login failure hitting the afterError throttle hook. */
+async function throttleWrongOtp(email: string): Promise<void> {
+  await throttleTwoFactorFailure({
+    collection: { slug: 'users' },
+    error: new Error(TWO_FACTOR_INVALID_MESSAGE),
+    req: {
+      payload,
+      pathname: '/api/users/login',
+      headers: new Headers(),
+      data: { email },
+      context: {},
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any)
 }
 
 describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
@@ -479,6 +501,85 @@ describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
         pagination: false,
       })
       expect(logs.docs.length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  describe('Part 6 — OTP brute-force throttle', () => {
+    it('locks the OTP step after N wrong codes, refusing even a correct code, and audits the lock', async () => {
+      await setTwoFactor(true)
+      const { user, secret } = await setupConfirmedUser('throttlelock')
+
+      for (let i = 0; i < TWO_FACTOR_MAX_ATTEMPTS; i++) {
+        await throttleWrongOtp(user.email)
+      }
+
+      const locked = await serverRead(user.id)
+      expect(locked.totpFailedAttempts).toBe(TWO_FACTOR_MAX_ATTEMPTS)
+      expect(locked.totpLockUntil).toBeTruthy()
+      expect(new Date(locked.totpLockUntil as string).getTime()).toBeGreaterThan(Date.now())
+
+      // Even a CORRECT code is refused while locked.
+      await expect(
+        payload.login({
+          collection: 'users',
+          data: { email: user.email, password: STRONG_PW },
+          req: { data: { otp: authenticator.generate(secret) } },
+        } as Parameters<typeof payload.login>[0]),
+      ).rejects.toThrow(TWO_FACTOR_LOCKED_MESSAGE)
+
+      // The lock event is audited.
+      const logs = await payload.find({
+        collection: 'accessLogs',
+        where: { menuLabel: { like: 'OTP step locked' } },
+        overrideAccess: true,
+        pagination: false,
+      })
+      expect(logs.docs.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('a successful code before the threshold resets the failed-attempt counter', async () => {
+      await setTwoFactor(true)
+      const { user, secret } = await setupConfirmedUser('throttlereset')
+
+      for (let i = 0; i < TWO_FACTOR_MAX_ATTEMPTS - 2; i++) {
+        await throttleWrongOtp(user.email)
+      }
+      expect((await serverRead(user.id)).totpFailedAttempts).toBe(TWO_FACTOR_MAX_ATTEMPTS - 2)
+
+      const ok = await payload.login({
+        collection: 'users',
+        data: { email: user.email, password: STRONG_PW },
+        req: { data: { otp: authenticator.generate(secret) } },
+      } as Parameters<typeof payload.login>[0])
+      expect(ok.token).toBeTruthy()
+
+      const after = await serverRead(user.id)
+      expect(after.totpFailedAttempts).toBe(0)
+      expect(after.totpLockUntil).toBeFalsy()
+    })
+
+    it('an expired lock lets a valid code through again (never permanently locked)', async () => {
+      await setTwoFactor(true)
+      const { user, secret } = await setupConfirmedUser('throttleexpire')
+
+      // Simulate a lock that has already elapsed.
+      await payload.update({
+        collection: 'users',
+        id: user.id,
+        data: {
+          totpFailedAttempts: TWO_FACTOR_MAX_ATTEMPTS,
+          totpLockUntil: new Date(Date.now() - 1000).toISOString(),
+        },
+        overrideAccess: true,
+      })
+
+      const ok = await payload.login({
+        collection: 'users',
+        data: { email: user.email, password: STRONG_PW },
+        req: { data: { otp: authenticator.generate(secret) } },
+      } as Parameters<typeof payload.login>[0])
+      expect(ok.token).toBeTruthy()
+      expect((await serverRead(user.id)).totpFailedAttempts).toBe(0)
     })
   })
 })
