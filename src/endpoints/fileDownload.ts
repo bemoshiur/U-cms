@@ -100,11 +100,14 @@ function json(status: number, message: string): Response {
  *    denied (the Task 4-zero confidentiality invariant). This branch is
  *    identical to before, so every prior admin/secret/cross-tenant test holds.
  *  - PUBLIC surface (logged-in MEMBER): a member may download a NON-SECRET
- *    post's attachment. SECRET posts require the admin/author branch, so a member
- *    (even a member who authored a secret post — a documented T4C refinement) is
- *    denied a secret file. ANONYMOUS (no session) is DENIED for everything —
- *    preserving Task 4-zero's "nothing fetchable unauthenticated" invariant. The
- *    policy is therefore MEMBERS-ONLY (not fully public); see task-4B-report.md.
+ *    post's attachment ON THEIR OWN SITE (member.tenant == post.tenant). A member
+ *    of site A is DENIED a site-B (or admin `bos`) attachment even when non-secret
+ *    — the member branch enforces the same tenant boundary the admin branch does.
+ *    SECRET posts require the admin/author branch, so a member (even one who
+ *    authored a secret post — a documented T4C refinement) is denied a secret
+ *    file. ANONYMOUS (no session) is DENIED for everything — preserving Task
+ *    4-zero's "nothing fetchable unauthenticated" invariant. The policy is
+ *    therefore MEMBERS-ONLY + SAME-SITE (not fully public); see task-4B-report.md.
  *
  * Because anonymous is denied here, `/api/files/download` can be safely exempted
  * from the admin IP guard (so member sessions reach it) — the gate is this
@@ -143,9 +146,24 @@ export async function canDownloadPost(args: {
     return hasMenuAccess({ payload, user } as unknown as PayloadRequest, POSTS_MENU_KEY)
   }
 
-  // Authenticated public-site MEMBER (or any non-admin authed principal):
-  // non-secret posts only. Secret posts require the admin/author branch above.
-  return post.isSecret !== true
+  // Authenticated public-site MEMBER (or any non-admin authed principal): a
+  // NON-SECRET post ON THE MEMBER'S OWN SITE (tenant) only. The tenant check is
+  // LOAD-BEARING: `/api/files/download` is IP-exempt and the post is fetched with
+  // `overrideAccess`, so this function is the ONLY tenant gate on that path.
+  // Without it a member of site A could enumerate post ids and download any
+  // non-secret attachment from ANY other tenant — another customer site, or the
+  // admin `bos` site. Mirrors the admin branch's tenant comparison. Secret posts
+  // require the admin/author branch above (member-owned-secret is a documented
+  // T4C refinement).
+  if (post.isSecret === true) {
+    return false
+  }
+  const memberTenantId = toRelationId((user as { tenant?: unknown }).tenant)
+  const postTenantId = toRelationId(post.tenant)
+  if (memberTenantId === undefined || postTenantId === undefined) {
+    return false
+  }
+  return String(memberTenantId) === String(postTenantId)
 }
 
 /** Resolves the local upload dir for a collection (default staticDir = slug). */
@@ -229,8 +247,29 @@ export async function handleFileDownload(args: {
     overrideAccess: true,
     req,
     disableErrors: true,
-  })) as { filename?: string; mimeType?: string; filesize?: number } | null
+  })) as {
+    filename?: string
+    mimeType?: string
+    filesize?: number
+    tenant?: unknown
+  } | null
   if (!media || typeof media.filename !== 'string' || media.filename.length === 0) {
+    return json(404, 'File not found.')
+  }
+
+  // Coherence: the attachment must belong to the SAME tenant (site) as its post.
+  // `canDownloadPost` gates on the POST's tenant, and attachments are normally
+  // uploaded into the post's tenant (the admin picker is tenant-filtered), so a
+  // mismatch can only arise from an overrideAccess/system write linking a
+  // cross-tenant attachment — never let that slip a foreign tenant's bytes past
+  // the post-level gate. Denies fail-closed; consistent data never trips it.
+  const postTenant = toRelationId(post.tenant)
+  const attachmentTenant = toRelationId(media.tenant)
+  if (
+    postTenant !== undefined &&
+    attachmentTenant !== undefined &&
+    String(postTenant) !== String(attachmentTenant)
+  ) {
     return json(404, 'File not found.')
   }
 

@@ -60,12 +60,15 @@ function lexical(text: string) {
 
 describe('Task 4B seams: D4 answer attribution + member download branch', () => {
   let siteId: number
+  let siteBId: number
   let adminA: Awaited<ReturnType<typeof payload.create>>
   let otherAdmin: Awaited<ReturnType<typeof payload.create>>
   let member: Awaited<ReturnType<typeof payload.create>>
   let qnaPostId: number
   let nonSecretPostId: number
   let secretPostId: number
+  let nonSecretPostBId: number
+  let bosPostId: number
 
   async function createAttachment(name: string, tenant: number): Promise<number> {
     const doc = await payload.create({
@@ -196,6 +199,73 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
       overrideAccess: true,
     })
     secretPostId = secretPost.id
+
+    // ── Cross-tenant targets (C1 regression) ──────────────────────────────
+    // A SECOND customer site with a NON-SECRET post + attachment.
+    const siteB = await payload.create({
+      collection: 'sites',
+      data: {
+        siteId: uniqueSiteId('mpb'),
+        name: 'Member Post Site B',
+        url: 'https://mpb.example.com',
+      },
+      overrideAccess: true,
+    })
+    siteBId = siteB.id
+    const boardB = await payload.create({
+      collection: 'boards',
+      data: {
+        tenant: siteBId,
+        name: marker('BoardB'),
+        boardType: qnaType.id,
+        attachmentsEnabled: true,
+        attachmentMaxCount: 3,
+      },
+      overrideAccess: true,
+    })
+    const attB = await createAttachment(`${marker('bpub')}.png`, siteBId)
+    const nonSecretPostB = await payload.create({
+      collection: 'posts',
+      data: {
+        board: boardB.id,
+        title: marker('BPublicFile'),
+        attachments: [{ media: attB, description: 'b public' }],
+      },
+      overrideAccess: true,
+    })
+    nonSecretPostBId = nonSecretPostB.id
+
+    // A NON-SECRET post + attachment on the admin `bos` site (seeded by sitesStep).
+    const bos = await payload.find({
+      collection: 'sites',
+      where: { siteId: { equals: 'bos' } },
+      limit: 1,
+      pagination: false,
+      overrideAccess: true,
+    })
+    const bosId = bos.docs[0]!.id
+    const boardBos = await payload.create({
+      collection: 'boards',
+      data: {
+        tenant: bosId,
+        name: marker('BoardBos'),
+        boardType: qnaType.id,
+        attachmentsEnabled: true,
+        attachmentMaxCount: 3,
+      },
+      overrideAccess: true,
+    })
+    const attBos = await createAttachment(`${marker('bospub')}.png`, bosId)
+    const bosPost = await payload.create({
+      collection: 'posts',
+      data: {
+        board: boardBos.id,
+        title: marker('BosPublicFile'),
+        attachments: [{ media: attBos, description: 'bos public' }],
+      },
+      overrideAccess: true,
+    })
+    bosPostId = bosPost.id
   })
 
   describe('D4 — answer attribution auto-stamp (forgery blocked)', () => {
@@ -236,12 +306,12 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
   })
 
   describe('seam #4 — member download branch', () => {
-    it('a logged-in MEMBER can download a NON-SECRET post attachment', async () => {
+    it('a logged-in MEMBER can download a NON-SECRET post attachment ON THEIR OWN SITE', async () => {
       expect(
         await canDownloadPost({
           payload,
           user: member,
-          post: { id: nonSecretPostId, isSecret: false },
+          post: { id: nonSecretPostId, isSecret: false, tenant: siteId },
         }),
       ).toBe(true)
       const res = await handleFileDownload({
@@ -252,6 +322,35 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
       })
       expect(res.status).toBe(200)
       expect(res.headers.get('content-disposition')).toContain('attachment')
+    })
+
+    it('C1: a member of site A is DENIED a NON-SECRET attachment on ANOTHER customer site', async () => {
+      // Fails WITHOUT the tenant check (the member branch would allow ANY
+      // non-secret post's attachment across every tenant).
+      expect(
+        await canDownloadPost({
+          payload,
+          user: member,
+          post: { id: nonSecretPostBId, isSecret: false, tenant: siteBId },
+        }),
+      ).toBe(false)
+      const res = await handleFileDownload({
+        payload,
+        user: member,
+        postId: String(nonSecretPostBId),
+        fileSn: 1,
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('C1: a member of site A is DENIED a NON-SECRET attachment on the admin bos site', async () => {
+      const res = await handleFileDownload({
+        payload,
+        user: member,
+        postId: String(bosPostId),
+        fileSn: 1,
+      })
+      expect(res.status).toBe(403)
     })
 
     it('a member CANNOT download a SECRET post attachment', async () => {
