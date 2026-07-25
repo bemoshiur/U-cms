@@ -41,17 +41,29 @@ import { tenantMembershipAccess, tenantMembershipGuard } from '../access/tenantA
  * belt-and-suspenders raw-route gate; the two never diverge into a public hole
  * again because neither is blanket-public.
  *
- * ## `admin.hidden`
+ * ## Visibility — MUST stay visible (do NOT set `admin.hidden: true`)
  *
- * Hidden from the nav — it is a backing store managed through the post /
- * admin-notice editors' upload fields, not browsed directly. Hiding a
- * collection does not affect the upload-field drawer or its own access control.
+ * The collection is a normal, browsable, tenant-gated collection (grouped under
+ * "Content", like `boards`/`posts`). It deliberately does NOT set
+ * `admin.hidden`: the richText `UploadFeature`'s `useEnabledRelationships` hook
+ * (@payloadcms/richtext-lexical) filters candidate upload collections on
+ * `visibleEntities` — i.e. `getVisibleEntities` / `admin.hidden` — BEFORE it
+ * applies the `enabledCollections` allowlist. A hidden collection is invisible
+ * to EVERY user (super included), so hiding this would make richText image
+ * embedding resolve to zero collections and break silently across every
+ * richText field. There is no "hidden from nav but usable in richText" option
+ * in Payload 3.86 — the two share the `admin.hidden` gate.
+ *
+ * Visibility is NOT read access: `getVisibleEntities` never consults
+ * `access.read`, so a Site-B admin sees the nav entry but `tenantMembershipAccess`
+ * still filters the LIST/read to their own tenant (cross-tenant rows stay
+ * denied). See `tests/int/attachmentAccess.int.spec.ts` (security) +
+ * `tests/int/richTextUploadScope.int.spec.ts` (visibility + upload scoping).
  */
 export const Attachments: CollectionConfig = {
   slug: 'attachments',
   admin: {
     group: 'Content',
-    hidden: true,
     useAsTitle: 'filename',
   },
   access: {

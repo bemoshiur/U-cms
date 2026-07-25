@@ -36,7 +36,8 @@ function resolvedUploadFeatureProps(
   collectionSlug: string,
   fieldName: string,
 ): { enabledCollections?: string[] } | undefined {
-  const collectionConfig = payload.collections[collectionSlug]?.config
+  const collectionConfig =
+    payload.collections[collectionSlug as keyof typeof payload.collections]?.config
   const field = (collectionConfig?.fields as Array<{ name?: string; editor?: unknown }>).find(
     (f) => f.name === fieldName,
   )
@@ -80,5 +81,60 @@ describe('Task 4-zero: richText uploads scoped to the gated `attachments` pool (
       rfm?.get('upload') as { sanitizedServerFeatureProps?: { enabledCollections?: string[] } }
     )?.sanitizedServerFeatureProps
     expect(server?.enabledCollections).toEqual(['attachments'])
+  })
+
+  /**
+   * FUNCTIONAL guard (regression the static-config check missed): the richText
+   * UploadFeature must resolve a NON-EMPTY collection set at runtime. Its client
+   * hook `useEnabledRelationships` filters on `visibleEntities`
+   * (`getVisibleEntities` = `!admin.hidden`) BEFORE the `enabledCollections`
+   * allowlist, so an `admin.hidden: true` on `attachments` makes the hook resolve
+   * `[]` and silently breaks image embedding on every richText field — while the
+   * static `enabledCollections` still reads `['attachments']`. These tests
+   * reproduce the hook's exact logic and FAIL if `attachments` is hidden again.
+   */
+  describe('richText upload embedding actually works (client enablement, not just static config)', () => {
+    // Mirrors @payloadcms/ui `getVisibleEntities`' isHidden(): a hidden
+    // collection is invisible to EVERY user.
+    const isHidden = (hidden: unknown, user: unknown): boolean =>
+      typeof hidden === 'function'
+        ? Boolean((hidden as (a: { user: unknown }) => unknown)({ user }))
+        : Boolean(hidden)
+
+    // Faithfully reproduces `useEnabledRelationships({ uploads: true })`:
+    // visibleEntities → (upload && enableRichTextRelationship) → whitelist.
+    const resolveEnabledUploadSlugs = (
+      whitelist: string[] | undefined,
+      user: unknown,
+    ): string[] => {
+      const whitelistSet = whitelist ? new Set(whitelist) : null
+      const slugs: string[] = []
+      for (const c of payload.config.collections) {
+        const admin = (c.admin ?? {}) as {
+          hidden?: unknown
+          enableRichTextRelationship?: boolean
+        }
+        if (isHidden(admin.hidden, user)) continue
+        if (!admin.enableRichTextRelationship || !(c as { upload?: unknown }).upload) continue
+        if (whitelistSet && !whitelistSet.has(c.slug)) continue
+        slugs.push(c.slug)
+      }
+      return slugs
+    }
+
+    it('`attachments` is NOT hidden — so the upload hook can see it (visible for every user)', () => {
+      const admin = payload.collections['attachments']?.config.admin as { hidden?: unknown }
+      expect(isHidden(admin?.hidden, { id: 1 })).toBe(false)
+      expect(isHidden(admin?.hidden, undefined)).toBe(false)
+    })
+
+    it('the upload hook resolves exactly [`attachments`] — embedding works AND stays scoped (never `media`)', () => {
+      // Use the REAL allowlist the client drawer receives (resolved from config).
+      const whitelist = resolvedUploadFeatureProps('posts', 'content')?.enabledCollections
+      const enabled = resolveEnabledUploadSlugs(whitelist, { id: 1 })
+      expect(enabled).toContain('attachments') // non-empty → embedding functional
+      expect(enabled).not.toContain('media') // scoped to the gated pool
+      expect(enabled).toEqual(['attachments'])
+    })
   })
 })
