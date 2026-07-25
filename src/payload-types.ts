@@ -77,6 +77,7 @@ export interface Config {
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
+    adminIpRules: AdminIpRule;
     accessLogs: AccessLog;
     loginHistory: LoginHistory;
     permissionChangeLogs: PermissionChangeLog;
@@ -102,6 +103,7 @@ export interface Config {
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
+    adminIpRules: AdminIpRulesSelect<false> | AdminIpRulesSelect<true>;
     accessLogs: AccessLogsSelect<false> | AccessLogsSelect<true>;
     loginHistory: LoginHistorySelect<false> | LoginHistorySelect<true>;
     permissionChangeLogs: PermissionChangeLogsSelect<false> | PermissionChangeLogsSelect<true>;
@@ -502,6 +504,57 @@ export interface PasswordPolicy {
   createdAt: string;
 }
 /**
+ * Default-deny admin IP allowlist. While NO rules exist the admin stays open (bootstrap safety); once any rule exists, only IPs matched by an active in-window "allow" rule may reach the admin, and any matching "block" rule wins. Recovery: set ADMIN_IP_ENFORCEMENT=off.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminIpRules".
+ */
+export interface AdminIpRule {
+  id: number;
+  /**
+   * Who requested this access rule (legacy 신청자).
+   */
+  applicantName: string;
+  /**
+   * Applicant’s organization/department (legacy 소속).
+   */
+  affiliation: string;
+  /**
+   * Applicant’s contact number (legacy 연락처).
+   */
+  phone: string;
+  /**
+   * Optional note about this rule (legacy 비고).
+   */
+  memo?: string | null;
+  /**
+   * Exact IPv4/IPv6, an IPv4 trailing wildcard (e.g. "192.168.0.*", "10.*"), or "*". WARNING: a bare "*" matches ALL IPs — an active "*" allow rule disables IP restriction entirely.
+   */
+  ipAddress: string;
+  /**
+   * Allow-list (default) or explicit block. Under default-deny, "block" wins over any "allow" match.
+   */
+  accessType: 'allow' | 'block';
+  /**
+   * Rule takes effect from this date/time (legacy 시작일).
+   */
+  validFrom: string;
+  /**
+   * Rule expires after this date/time (legacy 종료일). Expired rules stop matching automatically — no cron needed.
+   */
+  validTo: string;
+  /**
+   * Inactive rules are ignored by the guard.
+   */
+  isActive?: boolean | null;
+  /**
+   * Which admin site this rule guards (defaults to the admin back-office).
+   */
+  siteId: number | Site;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "accessLogs".
  */
@@ -520,7 +573,7 @@ export interface AccessLog {
    */
   menuKey?: string | null;
   menuLabel?: string | null;
-  action: 'login' | 'logout' | 'list' | 'view' | 'create' | 'update' | 'delete';
+  action: 'login' | 'logout' | 'list' | 'view' | 'create' | 'update' | 'delete' | 'denied';
   url: string;
   /**
    * Raw client IP (IPv4/IPv6), captured as-is.
@@ -725,6 +778,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'passwordPolicies';
         value: number | PasswordPolicy;
+      } | null)
+    | ({
+        relationTo: 'adminIpRules';
+        value: number | AdminIpRule;
       } | null)
     | ({
         relationTo: 'accessLogs';
@@ -1002,6 +1059,24 @@ export interface AdminMenusSelect<T extends boolean = true> {
 export interface PasswordPoliciesSelect<T extends boolean = true> {
   ruleText?: T;
   isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminIpRules_select".
+ */
+export interface AdminIpRulesSelect<T extends boolean = true> {
+  applicantName?: T;
+  affiliation?: T;
+  phone?: T;
+  memo?: T;
+  ipAddress?: T;
+  accessType?: T;
+  validFrom?: T;
+  validTo?: T;
+  isActive?: T;
+  siteId?: T;
   updatedAt?: T;
   createdAt?: T;
 }

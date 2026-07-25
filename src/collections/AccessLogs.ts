@@ -78,6 +78,8 @@ export const AccessLogs: CollectionConfig = {
         { label: 'Create', value: 'create' },
         { label: 'Update', value: 'update' },
         { label: 'Delete', value: 'delete' },
+        // Task 2C: an admin request refused by the IP access control.
+        { label: 'Denied (IP)', value: 'denied' },
       ],
     }),
     readOnly({

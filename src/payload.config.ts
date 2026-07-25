@@ -19,6 +19,7 @@ import { Codes } from './collections/codes/Codes'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
+import { AdminIpRules } from './collections/AdminIpRules'
 import { AccessLogs } from './collections/AccessLogs'
 import { LoginHistory } from './collections/LoginHistory'
 import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
@@ -200,6 +201,10 @@ export default buildConfig({
         Icon: '/components/branding/Icon#Icon',
         Logo: '/components/branding/Logo#Logo',
       },
+      // Task 2C Part 3: idle auto-logout. Mounted globally on authenticated
+      // admin views (actions render inside the auth/config context); a no-op on
+      // the login view. See src/components/admin/IdleLogout.tsx.
+      actions: ['/components/admin/IdleLogout#IdleLogout'],
       views: {
         // Task 2B: replace the built-in login view with a branded two-step
         // (password → Google-OTP) form that also shows the conditional
@@ -224,6 +229,9 @@ export default buildConfig({
     Roles,
     AdminMenus,
     PasswordPolicies,
+    // Admin IP access control (Task 2C) — default-deny allowlist guarding the
+    // admin back-office; enforced by src/proxy.ts via src/security/*.
+    AdminIpRules,
     // Audit & logging backbone (Task 2A) — append-only, immutable, gated on
     // the privacy.* menuKeys. Written by src/audit/* via overrideAccess.
     AccessLogs,

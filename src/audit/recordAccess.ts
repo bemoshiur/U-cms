@@ -4,13 +4,15 @@ import { toRelationId } from '../collections/utils'
 import { resolveActorLabel, resolveIpAddress, resolveSessionLoginAt } from './helpers'
 
 /**
- * The seven audit action verbs (feature-inventory ref 1-55 / 3-1 observed
- * 행동 values: 로그인/메인조회/등록처리/수정처리/삭제처리, plus logout and
- * list). Mutations are captured automatically by `auditCollection`; login/
- * logout by the auth hooks. `list`/`view` are reserved for a later read-audit
- * pass (deferred — see task-2A-report.md).
+ * The audit action verbs (feature-inventory ref 1-55 / 3-1 observed 행동
+ * values: 로그인/메인조회/등록처리/수정처리/삭제처리, plus logout and list).
+ * Mutations are captured automatically by `auditCollection`; login/logout by
+ * the auth hooks. `list`/`view` are reserved for a later read-audit pass
+ * (deferred — see task-2A-report.md). `denied` (Task 2C) records an admin
+ * request refused by the IP access control.
  */
-export type AuditAction = 'login' | 'logout' | 'list' | 'view' | 'create' | 'update' | 'delete'
+export type AuditAction =
+  'login' | 'logout' | 'list' | 'view' | 'create' | 'update' | 'delete' | 'denied'
 
 export type RecordAccessArgs = {
   action: AuditAction
@@ -33,7 +35,17 @@ export type RecordAccessArgs = {
   menuKey?: string
   /** Human-readable menu label (breadcrumb) — defaults to the collection slug at the call site. */
   menuLabel?: string
-  req: PayloadRequest
+  /**
+   * The client IP to record. Overrides the header-derived value; used by the IP
+   * access-control guard (Task 2C), which runs in the Next.js proxy with no
+   * `PayloadRequest` to resolve headers from.
+   */
+  ipAddress?: string
+  /**
+   * The originating request. Optional: auth/proxy callers (login, IP-denial)
+   * may have no `PayloadRequest`; every field derived from it degrades safely.
+   */
+  req?: PayloadRequest
   /** The session login timestamp; defaults to the actor's `lastLoginAt`. */
   sessionLoginAt?: string
   /** The request URL/path; defaults to `req.pathname`. */
@@ -87,7 +99,7 @@ export async function recordAccess(payload: Payload, args: RecordAccessArgs): Pr
         menuKey: args.menuKey,
         menuLabel: args.menuLabel,
         url: args.url ?? args.req?.pathname ?? '(local-api)',
-        ipAddress: resolveIpAddress(args.req),
+        ipAddress: args.ipAddress ?? resolveIpAddress(args.req),
         sessionLoginAt: args.sessionLoginAt ?? resolveSessionLoginAt(args.req),
       },
       overrideAccess: true,

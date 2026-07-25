@@ -6,6 +6,7 @@ import * as migration_20260724_222829_task_1d_accounts from './20260724_222829_t
 import * as migration_20260724_232634_task_2a_audit from './20260724_232634_task_2a_audit';
 import * as migration_20260725_001909_task_2b_2fa from './20260725_001909_task_2b_2fa';
 import * as migration_20260725_005333_task_2b_2fa_throttle from './20260725_005333_task_2b_2fa_throttle';
+import * as migration_20260725_013239_task_2c_ip_access from './20260725_013239_task_2c_ip_access';
 
 export const migrations = [
   {
@@ -46,6 +47,11 @@ export const migrations = [
   {
     up: migration_20260725_005333_task_2b_2fa_throttle.up,
     down: migration_20260725_005333_task_2b_2fa_throttle.down,
-    name: '20260725_005333_task_2b_2fa_throttle'
+    name: '20260725_005333_task_2b_2fa_throttle',
+  },
+  {
+    up: migration_20260725_013239_task_2c_ip_access.up,
+    down: migration_20260725_013239_task_2c_ip_access.down,
+    name: '20260725_013239_task_2c_ip_access'
   },
 ];

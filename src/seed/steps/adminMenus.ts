@@ -87,6 +87,14 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 7,
     collectionSlug: 'passwordPolicies',
   },
+  // Admin IP access control (Task 2C; refs 1-20/1-21).
+  {
+    menuKey: 'system.ipAccessControl',
+    name: 'Admin IP Access Control',
+    parentMenuKey: 'system',
+    order: 8,
+    collectionSlug: 'adminIpRules',
+  },
   { menuKey: 'content', name: 'Content Management', order: 2 },
   {
     menuKey: 'content.media',
