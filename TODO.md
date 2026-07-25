@@ -65,9 +65,9 @@
 
 ### Network & session security — refs 1-20, 1-21, 1-7(#10)
 
-- [ ] 2.4 `adminIpRules` collection: applicant/affiliation/phone/memo, IP (wildcard `a.b.c.*`, bare-`*` warning, IPv6), allow classification, validity window, use toggle (inline flip)
-- [ ] 2.5 Default-deny middleware on admin routes: allowlist check + auto-block after validity expiry
-- [ ] 2.6 Idle auto-logout (default 30 min) with countdown + extend button in admin quick-menu
+- [x] 2.4 `adminIpRules` collection: applicant/affiliation/phone/memo, IP (wildcard `a.b.c.*`, bare-`*` warning, IPv6), allow classification, validity window, use toggle (inline flip)
+- [x] 2.5 Default-deny middleware on admin routes: allowlist check + auto-block after validity expiry
+- [x] 2.6 Idle auto-logout (default 30 min) with countdown + extend button in admin quick-menu
 
 ### Audit logging — refs 1-55, 3-1..3-3, 3-5..3-7
 
