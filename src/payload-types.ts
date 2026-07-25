@@ -84,6 +84,10 @@ export interface Config {
     banners: Banner;
     adminNotices: AdminNotice;
     guideMenus: GuideMenu;
+    menus: Menu;
+    webContents: WebContent;
+    shortUrls: ShortUrl;
+    helpEntries: HelpEntry;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -120,6 +124,10 @@ export interface Config {
     banners: BannersSelect<false> | BannersSelect<true>;
     adminNotices: AdminNoticesSelect<false> | AdminNoticesSelect<true>;
     guideMenus: GuideMenusSelect<false> | GuideMenusSelect<true>;
+    menus: MenusSelect<false> | MenusSelect<true>;
+    webContents: WebContentsSelect<false> | WebContentsSelect<true>;
+    shortUrls: ShortUrlsSelect<false> | ShortUrlsSelect<true>;
+    helpEntries: HelpEntriesSelect<false> | HelpEntriesSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -1098,6 +1106,196 @@ export interface GuideMenu {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menus".
+ */
+export interface Menu {
+  id: number;
+  tenant?: (number | null) | Site;
+  name: string;
+  /**
+   * System-assigned per-site menu number (legacy menuSn), used in public URLs. Unique within a site.
+   */
+  menuNumber?: number | null;
+  /**
+   * Parent menu (same site). Leave empty for a top-level menu.
+   */
+  parent?: (number | null) | Menu;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  /**
+   * What this menu points at (ref 1-44). Drives which fields below apply.
+   */
+  contentType?: ('placeholder' | 'program' | 'board' | 'content' | 'link') | null;
+  /**
+   * The board this menu opens (when content type is Board).
+   */
+  board?: (number | null) | Board;
+  /**
+   * Site-relative path (/bos/… or ?menuSn=…) or an absolute http(s) URL (when content type is Link).
+   */
+  linkUrl?: string | null;
+  /**
+   * Open the target in a new window (링크 방식: 새창).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Active (사용). Inactive menus are hidden from the public nav (shown red in the admin tree — Phase-4 UI).
+   */
+  active?: boolean | null;
+  /**
+   * Data manager (담당자) — a user or department. Surfaces on the PUBLIC site only when the site’s dataManagerEnabled toggle is on (Phase 1 sites).
+   */
+  personInCharge?:
+    | ({
+        relationTo: 'users';
+        value: number | User;
+      } | null)
+    | ({
+        relationTo: 'departments';
+        value: number | Department;
+      } | null);
+  /**
+   * Menu visibility by session state (ref 2-13 노출조건).
+   */
+  exposureCondition?: ('always' | 'loggedInOnly' | 'loggedOutOnly') | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "webContents".
+ */
+export interface WebContent {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * The menu this content is bound to (1:1). Content exists only for a created menu (ref 2-2).
+   */
+  menu: number | Menu;
+  /**
+   * Internal name (legacy 컨텐츠명).
+   */
+  name?: string | null;
+  /**
+   * Display title of the page.
+   */
+  title?: string | null;
+  /**
+   * The page body. Versioned — every save creates a new version; the published version is the active one.
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Responsible department (담당부서, optional — ref 2-2).
+   */
+  responsibleDept?: (number | null) | Department;
+  /**
+   * Responsible person (담당자, optional — ref 2-2).
+   */
+  responsiblePerson?: string | null;
+  /**
+   * Informational only — legacy served content via a controller URL; the rebuild renders in Phase 4.
+   */
+  contentUrl?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "shortUrls".
+ */
+export interface ShortUrl {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display name (링크명).
+   */
+  linkName: string;
+  /**
+   * The destination the short link redirects to (absolute http(s) URL or /path).
+   */
+  originalUrl: string;
+  /**
+   * Optional notes (비고).
+   */
+  remarks?: string | null;
+  /**
+   * Auto-generated globally-unique short code (used in /s/:code).
+   */
+  code?: string | null;
+  /**
+   * Best-effort redirect hit counter.
+   */
+  hitCount?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "helpEntries".
+ */
+export interface HelpEntry {
+  id: number;
+  name: string;
+  /**
+   * Parent help node. Leave empty for a top-level entry.
+   */
+  parent?: (number | null) | HelpEntry;
+  /**
+   * Sibling display order (lower first).
+   */
+  order?: number | null;
+  /**
+   * The help body shown by the ⓘ button.
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * How this help is matched to a screen. Menu binding wins over service when both match (ref 1-80).
+   */
+  bindType?: ('service' | 'menu') | null;
+  /**
+   * Screen URL to match (when Service). Supports a "*" wildcard, e.g. /bos/board/*.
+   */
+  urlPattern?: string | null;
+  /**
+   * The menu number to bind to (when Menu) — matched against the current menu.
+   */
+  menuNumber?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "passwordPolicies".
  */
 export interface PasswordPolicy {
@@ -1416,6 +1614,22 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'guideMenus';
         value: number | GuideMenu;
+      } | null)
+    | ({
+        relationTo: 'menus';
+        value: number | Menu;
+      } | null)
+    | ({
+        relationTo: 'webContents';
+        value: number | WebContent;
+      } | null)
+    | ({
+        relationTo: 'shortUrls';
+        value: number | ShortUrl;
+      } | null)
+    | ({
+        relationTo: 'helpEntries';
+        value: number | HelpEntry;
       } | null)
     | ({
         relationTo: 'roles';
@@ -1922,6 +2136,72 @@ export interface GuideMenusSelect<T extends boolean = true> {
   newWindow?: T;
   displayOrder?: T;
   active?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "menus_select".
+ */
+export interface MenusSelect<T extends boolean = true> {
+  tenant?: T;
+  name?: T;
+  menuNumber?: T;
+  parent?: T;
+  order?: T;
+  contentType?: T;
+  board?: T;
+  linkUrl?: T;
+  newWindow?: T;
+  active?: T;
+  personInCharge?: T;
+  exposureCondition?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "webContents_select".
+ */
+export interface WebContentsSelect<T extends boolean = true> {
+  tenant?: T;
+  menu?: T;
+  name?: T;
+  title?: T;
+  content?: T;
+  responsibleDept?: T;
+  responsiblePerson?: T;
+  contentUrl?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "shortUrls_select".
+ */
+export interface ShortUrlsSelect<T extends boolean = true> {
+  tenant?: T;
+  linkName?: T;
+  originalUrl?: T;
+  remarks?: T;
+  code?: T;
+  hitCount?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "helpEntries_select".
+ */
+export interface HelpEntriesSelect<T extends boolean = true> {
+  name?: T;
+  parent?: T;
+  order?: T;
+  content?: T;
+  bindType?: T;
+  urlPattern?: T;
+  menuNumber?: T;
   updatedAt?: T;
   createdAt?: T;
 }

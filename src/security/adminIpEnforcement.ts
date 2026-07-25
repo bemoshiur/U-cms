@@ -100,6 +100,14 @@ const EXEMPT_API_PREFIXES = [
   '/api/users/unlock',
   '/api/media/file',
   '/api/2fa/guide',
+  // Public short-URL redirect (Task 3D; refs 1-42/1-43). `GET /api/s/:code`
+  // 302s an anonymous visitor to the stored (re-validated) target, so it must
+  // stay reachable regardless of the admin IP allowlist — like the public
+  // account-request flow. The pretty `GET /s/:code` path (the Next.js route
+  // handler) is already outside `/admin`/`/api` and thus never guarded; this
+  // exempts the `/api` variant. The redirect re-validates its target, so
+  // exempting it cannot become an open redirect. See src/endpoints/shortUrlRedirect.ts.
+  '/api/s',
 ]
 
 export type PathClassification = 'guard' | 'exempt'

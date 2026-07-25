@@ -14,6 +14,7 @@ import { postsStep } from './steps/posts'
 import { profanityWordsStep } from './steps/profanityWords'
 import { memberBannedWordsStep } from './steps/memberBannedWords'
 import { displayComponentsStep } from './steps/displayComponents'
+import { contentMenusStep } from './steps/contentMenus'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -49,6 +50,8 @@ export type { SeedStep } from './types'
  *  - `displayComponentsStep` (Task 3C) needs the admin ('bos') + demo sites
  *    (`sitesStep`) and the `content.*` display menus (`adminMenusStep`);
  *    appended last.
+ *  - `contentMenusStep` (Task 3D) needs the demo site (`sitesStep`) and the
+ *    seeded Notice board (`boardsStep`); appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -65,6 +68,7 @@ export const seedSteps: SeedStep[] = [
   memberBannedWordsStep,
   postsStep,
   displayComponentsStep,
+  contentMenusStep,
 ]
 
 /**

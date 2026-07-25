@@ -179,6 +179,37 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 11,
     collectionSlug: 'guideMenus',
   },
+  // Menus + versioned web content + short URLs + site help (Task 3D; refs
+  // 1-44/2-13, 2-2..2-4, 1-42/1-43, 1-80). menus/webContents/shortUrls are
+  // tenant-scoped (per-site); helpEntries is global.
+  {
+    menuKey: 'content.menus',
+    name: 'Menu Management',
+    parentMenuKey: 'content',
+    order: 12,
+    collectionSlug: 'menus',
+  },
+  {
+    menuKey: 'content.webContents',
+    name: 'Web Content Management',
+    parentMenuKey: 'content',
+    order: 13,
+    collectionSlug: 'webContents',
+  },
+  {
+    menuKey: 'content.shortUrls',
+    name: 'Short URL Management',
+    parentMenuKey: 'content',
+    order: 14,
+    collectionSlug: 'shortUrls',
+  },
+  {
+    menuKey: 'content.help',
+    name: 'Site Help Management',
+    parentMenuKey: 'content',
+    order: 15,
+    collectionSlug: 'helpEntries',
+  },
   // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
   // logging backbone: access history, login history, and the two permission
   // journals. `privacy.permissionLogs` gates BOTH permission-journal

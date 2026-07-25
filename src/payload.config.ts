@@ -26,6 +26,10 @@ import { Popups } from './collections/display/Popups'
 import { Banners } from './collections/display/Banners'
 import { AdminNotices } from './collections/display/AdminNotices'
 import { GuideMenus } from './collections/display/GuideMenus'
+import { Menus } from './collections/Menus'
+import { WebContents } from './collections/WebContents'
+import { ShortUrls } from './collections/ShortUrls'
+import { HelpEntries } from './collections/HelpEntries'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
@@ -38,6 +42,7 @@ import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
 import { fileEndpoints } from './endpoints/fileDownload'
+import { shortUrlRedirectEndpoint } from './endpoints/shortUrlRedirect'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -205,6 +210,12 @@ const plugins: Plugin[] = [
       banners: {},
       adminNotices: {},
       guideMenus: {},
+      // Menus + versioned web contents + short URLs (Task 3D) — all
+      // tenant-scoped (per-site). `helpEntries` is GLOBAL (admin-system help,
+      // plan §2.1) so it is deliberately NOT opted in here.
+      menus: {},
+      webContents: {},
+      shortUrls: {},
     },
     tenantsSlug: Sites.slug,
     /**
@@ -307,6 +318,12 @@ export default buildConfig({
     Banners,
     AdminNotices,
     GuideMenus,
+    // Menus + versioned web content + short URLs (Task 3D): tenant-scoped;
+    // helpEntries is global.
+    Menus,
+    WebContents,
+    ShortUrls,
+    HelpEntries,
     Roles,
     AdminMenus,
     PasswordPolicies,
@@ -324,7 +341,15 @@ export default buildConfig({
   // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B
   // Google-OTP enrolment endpoints: /api/2fa/enroll, /api/2fa/verify-enroll,
   // /api/2fa/guide.
-  endpoints: [...publicAccountEndpoints, ...twoFactorEndpoints, ...fileEndpoints],
+  endpoints: [
+    ...publicAccountEndpoints,
+    ...twoFactorEndpoints,
+    ...fileEndpoints,
+    // Public short-URL redirect (Task 3D): GET /api/s/:code (also served at the
+    // pretty /s/:code via the (frontend) route handler). `/api/s` is exempt from
+    // the admin IP guard — see src/security/adminIpEnforcement.ts.
+    shortUrlRedirectEndpoint,
+  ],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   // See the `serverURL` const above (I-1 fix) — required so that

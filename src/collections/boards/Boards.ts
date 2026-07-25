@@ -9,6 +9,7 @@ import { APIError } from 'payload'
 import { hasMenuAccessSync, isSuperUser } from '../../access/hasMenuAccess'
 import { getAssignedTenantIds, tenantScopedMenuAccess } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
+import { boardExportEndpoint } from '../../endpoints/boardExport'
 import { toRelationId } from '../utils'
 import {
   BBS_ID_PAD,
@@ -435,6 +436,10 @@ export const Boards: CollectionConfig = {
       },
     },
   ],
+  // Post EXCEL/CSV export (Task 3D / TODO 3.10, ref 2-7): GET /api/boards/:id/export.
+  // Access-gated (must read the board) + tenant-scoped; honors the board's
+  // list-field columns + the multi-criteria search — see boardExport.ts.
+  endpoints: [boardExportEndpoint],
   hooks: {
     beforeValidate: [assignBbsIdAndEnforce],
     afterChange: [boardsAudit.afterChange],
