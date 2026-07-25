@@ -15,6 +15,7 @@ import { profanityWordsStep } from './steps/profanityWords'
 import { memberBannedWordsStep } from './steps/memberBannedWords'
 import { displayComponentsStep } from './steps/displayComponents'
 import { contentMenusStep } from './steps/contentMenus'
+import { publicSiteStep } from './steps/publicSite'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -52,6 +53,9 @@ export type { SeedStep } from './types'
  *    appended last.
  *  - `contentMenusStep` (Task 3D) needs the demo site (`sitesStep`) and the
  *    seeded Notice board (`boardsStep`); appended last.
+ *  - `publicSiteStep` (Task 4A) needs the demo site + its content menus
+ *    (`contentMenusStep`); adds the demo logo/footer, a top+child section, and
+ *    guide-menu extras for the public frontend. Appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -69,6 +73,7 @@ export const seedSteps: SeedStep[] = [
   postsStep,
   displayComponentsStep,
   contentMenusStep,
+  publicSiteStep,
 ]
 
 /**

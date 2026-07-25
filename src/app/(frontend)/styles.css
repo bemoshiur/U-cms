@@ -1,5 +1,33 @@
+/*
+ * Public-site styles (Task 4A). A fresh, clean, responsive foundation under the
+ * Pulse brand palette (colors mirror src/branding.ts as design tokens). Light,
+ * minimal, and content-first — later Phase-4 tasks render into this shell.
+ * No client JS: the mobile nav is a native <details> disclosure, the desktop
+ * drop-down is CSS :hover/:focus-within.
+ */
+
 :root {
-  --font-mono: 'Roboto Mono', monospace;
+  --brand-primary: #0f62fe;
+  --brand-primary-dark: #0043ce;
+  --ink: #16181d;
+  --ink-soft: #4a4f5a;
+  --ink-faint: #6d7381;
+  --line: #e3e6eb;
+  --surface: #ffffff;
+  --surface-muted: #f5f7fa;
+  --focus: #0f62fe;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  --radius: 8px;
+  --maxw: 1120px;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -7,31 +35,32 @@
 }
 
 html {
-  font-size: 18px;
-  line-height: 32px;
-
-  background: rgb(0, 0, 0);
   -webkit-font-smoothing: antialiased;
-}
-
-html,
-body,
-#app {
-  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
-  font-family: system-ui;
-  font-size: 18px;
-  line-height: 32px;
-
   margin: 0;
-  color: rgb(1000, 1000, 1000);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--surface);
+}
 
-  @media (max-width: 1024px) {
-    font-size: 15px;
-    line-height: 24px;
-  }
+a {
+  color: var(--brand-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 img {
@@ -40,125 +69,457 @@ img {
   display: block;
 }
 
-h1 {
-  margin: 40px 0;
-  font-size: 64px;
-  line-height: 70px;
-  font-weight: bold;
-
-  @media (max-width: 1024px) {
-    margin: 24px 0;
-    font-size: 42px;
-    line-height: 42px;
-  }
-
-  @media (max-width: 768px) {
-    font-size: 38px;
-    line-height: 38px;
-  }
-
-  @media (max-width: 400px) {
-    font-size: 32px;
-    line-height: 32px;
-  }
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  color: var(--ink);
 }
 
-p {
-  margin: 24px 0;
-
-  @media (max-width: 1024px) {
-    margin: calc(var(--base) * 0.75) 0;
-  }
+/* ── Skip link ─────────────────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -60px;
+  z-index: 100;
+  padding: var(--space-2) var(--space-4);
+  background: var(--brand-primary);
+  color: #fff;
+  border-radius: var(--radius);
+  transition: top 0.15s ease;
 }
 
-a {
-  color: currentColor;
-
-  &:focus {
-    opacity: 0.8;
-    outline: none;
-  }
-
-  &:active {
-    opacity: 0.7;
-    outline: none;
-  }
+.skip-link:focus {
+  top: var(--space-2);
+  text-decoration: none;
 }
 
-svg {
-  vertical-align: middle;
-}
-
-.home {
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+.site-shell {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  height: 100vh;
-  padding: 45px;
-  max-width: 1024px;
+  min-height: 100vh;
+}
+
+.site-main {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: var(--maxw);
   margin: 0 auto;
-  overflow: hidden;
+  padding: var(--space-8) var(--space-6);
+}
 
-  @media (max-width: 400px) {
-    padding: 24px;
+.site-main:focus {
+  outline: none;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+.site-header {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.site-header__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-6);
+}
+
+.site-brand {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+
+.site-brand:hover {
+  text-decoration: none;
+}
+
+.site-brand__logo {
+  max-height: 40px;
+  width: auto;
+}
+
+.guide-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.guide-bar__link {
+  color: var(--ink-soft);
+}
+
+/* ── Primary nav (GNB / LNB) ───────────────────────────────────────────── */
+.site-nav {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+.site-nav__toggle {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+}
+
+.site-nav__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.site-nav__toggle-bar {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--ink);
+}
+
+.site-nav__toggle-bar + .site-nav__toggle-bar {
+  margin-top: -6px; /* stacked hamburger lines via flex gap fallback */
+}
+
+.gnb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gnb__item {
+  position: relative;
+}
+
+.gnb__link {
+  display: inline-block;
+  padding: var(--space-3) var(--space-4);
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+}
+
+.gnb__link:hover {
+  text-decoration: none;
+  color: var(--brand-primary);
+  border-bottom-color: var(--brand-primary);
+}
+
+.lnb {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  min-width: 200px;
+}
+
+/* Desktop: the nav is always visible (the <details> hamburger is mobile-only).
+   Force the disclosure content open regardless of the details' open state —
+   covering both the modern ::details-content mechanism and the legacy
+   display-based hiding — and hide the summary/toggle. */
+@media (min-width: 721px) {
+  .site-nav__toggle {
+    display: none;
   }
 
-  .content {
+  .site-nav__panel {
+    display: block !important;
+  }
+
+  .site-nav::details-content {
+    content-visibility: visible !important;
+    display: block;
+  }
+}
+
+/* Desktop drop-down: hidden until hover / keyboard focus within the item. */
+@media (min-width: 721px) {
+  .lnb {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 20;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(20, 24, 29, 0.1);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(4px);
+    transition:
+      opacity 0.12s ease,
+      transform 0.12s ease;
+  }
+
+  .gnb__item:hover .lnb,
+  .gnb__item:focus-within .lnb {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+}
+
+.lnb__link {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink-soft);
+  border-radius: 6px;
+}
+
+.lnb__link:hover {
+  text-decoration: none;
+  background: var(--surface-muted);
+  color: var(--brand-primary);
+}
+
+/* ── Mobile nav ────────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .site-header__bar {
+    flex-wrap: wrap;
+  }
+
+  .site-nav__toggle {
     display: flex;
+  }
+
+  .site-nav__panel {
+    padding-bottom: var(--space-4);
+  }
+
+  .gnb {
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex-grow: 1;
-
-    h1 {
-      text-align: center;
-    }
+    gap: 0;
   }
 
-  .links {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-
-    a {
-      text-decoration: none;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-    }
-
-    .admin {
-      color: rgb(0, 0, 0);
-      background: rgb(1000, 1000, 1000);
-      border: 1px solid rgb(0, 0, 0);
-    }
-
-    .docs {
-      color: rgb(1000, 1000, 1000);
-      background: rgb(0, 0, 0);
-      border: 1px solid rgb(1000, 1000, 1000);
-    }
+  .gnb__link {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line);
   }
 
-  .footer {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    @media (max-width: 1024px) {
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    p {
-      margin: 0;
-    }
-
-    .codeLink {
-      text-decoration: none;
-      padding: 0 0.5rem;
-      background: rgb(60, 60, 60);
-      border-radius: 4px;
-    }
+  .lnb {
+    padding: 0 0 var(--space-2) var(--space-4);
   }
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+.site-footer {
+  flex-shrink: 0;
+  margin-top: var(--space-12);
+  border-top: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.site-footer__nav {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-6) 0;
+}
+
+.footer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.footer-bar__link {
+  color: var(--ink-soft);
+}
+
+.site-footer__body {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: var(--space-6);
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+}
+
+.site-footer__contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-style: normal;
+}
+
+.site-footer__copyright {
+  margin: var(--space-3) 0 0;
+}
+
+/* ── Breadcrumb ────────────────────────────────────────────────────────── */
+.breadcrumb {
+  margin-bottom: var(--space-6);
+  font-size: 0.85rem;
+}
+
+.breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-faint);
+}
+
+.breadcrumb__item + .breadcrumb__item::before {
+  content: '/';
+  margin-right: var(--space-2);
+  color: var(--line);
+}
+
+.breadcrumb__current {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* ── Home ──────────────────────────────────────────────────────────────── */
+.hero {
+  padding: var(--space-8) 0 var(--space-12);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--space-8);
+}
+
+.hero__eyebrow {
+  margin: 0 0 var(--space-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--brand-primary);
+}
+
+.hero__title {
+  margin: 0 0 var(--space-3);
+  font-size: clamp(1.8rem, 4vw, 2.75rem);
+}
+
+.hero__lead {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--ink-soft);
+  font-size: 1.05rem;
+}
+
+.section-index__heading {
+  font-size: 1.1rem;
+  margin: 0 0 var(--space-4);
+}
+
+.section-index__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-card__link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-6);
+  height: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.section-card__link:hover {
+  text-decoration: none;
+  border-color: var(--brand-primary);
+  box-shadow: 0 6px 18px rgba(15, 98, 254, 0.08);
+}
+
+.section-card__title {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.section-card__meta {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+}
+
+/* ── Generic page + sitemap ────────────────────────────────────────────── */
+.page__eyebrow,
+.page__title {
+  margin: 0 0 var(--space-3);
+}
+
+.page__eyebrow {
+  color: var(--brand-primary);
+  font-weight: 700;
+}
+
+.page__title {
+  font-size: clamp(1.6rem, 3.5vw, 2.25rem);
+}
+
+.page__meta {
+  color: var(--ink-faint);
+  margin: 0 0 var(--space-4);
+}
+
+.page__placeholder,
+.page__empty {
+  color: var(--ink-soft);
+}
+
+.button {
+  display: inline-block;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius);
+  background: var(--brand-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+.button:hover {
+  text-decoration: none;
+  background: var(--brand-primary-dark);
+}
+
+.sitemap,
+.sitemap__children {
+  list-style: none;
+  padding-left: var(--space-6);
+}
+
+.sitemap {
+  padding-left: 0;
+}
+
+.sitemap__item {
+  padding: var(--space-1) 0;
+}
+
+.sitemap__link {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.sitemap__children .sitemap__link {
+  font-weight: 400;
+  color: var(--ink-soft);
 }
