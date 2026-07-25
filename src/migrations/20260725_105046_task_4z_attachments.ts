@@ -94,18 +94,34 @@ export async function down({ db, payload, req }: MigrateDownArgs): Promise<void>
   ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_attachments_fk";`)
 
   // ── DATA REVERSE (no-op on an empty DB) ───────────────────────────────────
-  // Repoint join-table media_id back to the original `media` row (matched by
-  // the preserved unique filename) before re-adding the media FKs.
+  // Move attachment data back into `media` before re-adding the media FKs.
+  // Two cases: (a) attachments up() COPIED from media still have their original
+  // filename-matching row in media; (b) attachments created NATIVELY after the
+  // migration have no media counterpart — recreate those referenced rows in
+  // media first (media.alt is NOT NULL, so COALESCE a label). Then every
+  // referenced attachment has a filename-matching media row and the join-table
+  // media_id columns can be remapped from attachment ids back to media ids.
   await db.execute(sql`
-   UPDATE "posts_attachments" pa SET "media_id" = m."id"
+   INSERT INTO "media" ("alt", "updated_at", "created_at", "url", "thumbnail_u_r_l", "filename", "mime_type", "filesize", "width", "height", "focal_x", "focal_y")
+  SELECT COALESCE(a."alt", a."filename", 'attachment'), a."updated_at", a."created_at", a."url", a."thumbnail_u_r_l", a."filename", a."mime_type", a."filesize", a."width", a."height", a."focal_x", a."focal_y"
+  FROM "attachments" a
+  WHERE a."filename" IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM "media" m WHERE m."filename" = a."filename")
+    AND (a."id" IN (SELECT "media_id" FROM "posts_attachments") OR a."id" IN (SELECT "media_id" FROM "admin_notices_attachments"));
+  UPDATE "posts_attachments" pa SET "media_id" = m."id"
   FROM "attachments" a JOIN "media" m ON m."filename" = a."filename"
   WHERE pa."media_id" = a."id";
   UPDATE "admin_notices_attachments" ana SET "media_id" = m."id"
   FROM "attachments" a JOIN "media" m ON m."filename" = a."filename"
   WHERE ana."media_id" = a."id";`)
 
+  // `DROP CONSTRAINT IF EXISTS` before each re-ADD keeps the re-add idempotent
+  // / safe-to-re-run, consistent with the established down-migration pattern
+  // (Postgres has no `ADD CONSTRAINT IF NOT EXISTS`, so guard the drop side).
   await db.execute(sql`
-   ALTER TABLE "posts_attachments" ADD CONSTRAINT "posts_attachments_media_id_media_id_fk" FOREIGN KEY ("media_id") REFERENCES "public"."media"("id") ON DELETE set null ON UPDATE no action;
+   ALTER TABLE "posts_attachments" DROP CONSTRAINT IF EXISTS "posts_attachments_media_id_media_id_fk";
+  ALTER TABLE "posts_attachments" ADD CONSTRAINT "posts_attachments_media_id_media_id_fk" FOREIGN KEY ("media_id") REFERENCES "public"."media"("id") ON DELETE set null ON UPDATE no action;
+  ALTER TABLE "admin_notices_attachments" DROP CONSTRAINT IF EXISTS "admin_notices_attachments_media_id_media_id_fk";
   ALTER TABLE "admin_notices_attachments" ADD CONSTRAINT "admin_notices_attachments_media_id_media_id_fk" FOREIGN KEY ("media_id") REFERENCES "public"."media"("id") ON DELETE set null ON UPDATE no action;
   DROP INDEX IF EXISTS "payload_locked_documents_rels_attachments_id_idx";
   ALTER TABLE "payload_locked_documents_rels" DROP COLUMN "attachments_id";

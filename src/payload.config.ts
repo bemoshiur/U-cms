@@ -1,7 +1,6 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
 import type { Plugin } from 'payload'
@@ -44,6 +43,7 @@ import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
 import { fileEndpoints } from './endpoints/fileDownload'
 import { shortUrlRedirectEndpoint } from './endpoints/shortUrlRedirect'
+import { richTextEditor } from './richTextEditor'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -359,7 +359,10 @@ export default buildConfig({
     // the admin IP guard — see src/security/adminIpEnforcement.ts.
     shortUrlRedirectEndpoint,
   ],
-  editor: lexicalEditor(),
+  // Shared richText editor — its UploadFeature is restricted to the GATED
+  // `attachments` collection so embedded uploads never land in the public
+  // `media` pool (Task 4-zero B2 hardening). See src/richTextEditor.ts.
+  editor: richTextEditor,
   secret: process.env.PAYLOAD_SECRET || '',
   // See the `serverURL` const above (I-1 fix) — required so that
   // security-sensitive email links never fall back to the request Origin
