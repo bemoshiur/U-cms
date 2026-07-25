@@ -8,6 +8,8 @@ import { codesStep } from './steps/codes'
 import { departmentsStep } from './steps/departments'
 import { passwordPoliciesStep } from './steps/passwordPolicies'
 import { adminIpRulesStep } from './steps/adminIpRules'
+import { boardTypesStep } from './steps/boardTypes'
+import { boardsStep } from './steps/boards'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -30,6 +32,10 @@ export type { SeedStep } from './types'
  *  - `passwordPoliciesStep` (Task 1D) has no dependencies; appended last.
  *  - `adminIpRulesStep` (Task 2C) needs the admin site (`sitesStep`) and the
  *    `system.ipAccessControl` menu (`adminMenusStep`); appended last.
+ *  - `boardTypesStep` (Task 3A) has no dependencies; must precede `boardsStep`
+ *    (boards reference board types by their PG code).
+ *  - `boardsStep` (Task 3A) needs the demo site (`sitesStep`) and the built-in
+ *    board types (`boardTypesStep`); appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -40,6 +46,8 @@ export const seedSteps: SeedStep[] = [
   departmentsStep,
   passwordPoliciesStep,
   adminIpRulesStep,
+  boardTypesStep,
+  boardsStep,
 ]
 
 /**

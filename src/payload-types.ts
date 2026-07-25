@@ -74,6 +74,8 @@ export interface Config {
     codeClassifications: CodeClassification;
     codeGroups: CodeGroup;
     codes: Code;
+    boardTypes: BoardType;
+    boards: Board;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -100,6 +102,8 @@ export interface Config {
     codeClassifications: CodeClassificationsSelect<false> | CodeClassificationsSelect<true>;
     codeGroups: CodeGroupsSelect<false> | CodeGroupsSelect<true>;
     codes: CodesSelect<false> | CodesSelect<true>;
+    boardTypes: BoardTypesSelect<false> | BoardTypesSelect<true>;
+    boards: BoardsSelect<false> | BoardsSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -488,6 +492,173 @@ export interface Code {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boardTypes".
+ */
+export interface BoardType {
+  id: number;
+  /**
+   * System-assigned board type code (PGxxxx), auto-generated on create — not user-editable.
+   */
+  code?: string | null;
+  name: string;
+  /**
+   * Behavioral kind — drives post rendering/behavior in Task 3B (integrated/photo/qna/faq/attachment/extended).
+   */
+  kind: 'integrated' | 'photo' | 'qna' | 'faq' | 'attachment' | 'extended';
+  /**
+   * Informational: legacy stored every board type in one physical table (tb_bbs). The rebuild likewise stores every board type in the single `posts` collection — this field is retained for legacy/audit parity and is not a live table switch.
+   */
+  tableName?: string | null;
+  /**
+   * Board type detail (게시판유형상세). Max 800 characters.
+   */
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boards".
+ */
+export interface Board {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * System-assigned board ID (Bxxxxxxx), auto-generated on create.
+   */
+  bbsId?: string | null;
+  name: string;
+  /**
+   * The board's type (from Board Type Management). Locked to the integrated type when Integrated board is checked.
+   */
+  boardType: number | BoardType;
+  /**
+   * Integrated board — locks board type to PG0001 and skin to common (ref 1-27).
+   */
+  isIntegrated?: boolean | null;
+  /**
+   * Skin choice only. React rendering resolves this in Phase 4 (legacy JSP path mapping deferred).
+   */
+  skin?: ('common' | 'site') | null;
+  /**
+   * Board form — list or thumbnail (gallery) layout (ref 1-28 callout 4).
+   */
+  boardForm?: ('list' | 'thumbnail') | null;
+  sortOrder?: ('latest' | 'oldest') | null;
+  /**
+   * Rich-text editor is available to admins only; end users never get it (ref 1-28).
+   */
+  editorForAdminOnly?: boolean | null;
+  commentsEnabled?: boolean | null;
+  prevNextEnabled?: boolean | null;
+  excelExport?: boolean | null;
+  userPostAllowed?: boolean | null;
+  /**
+   * Allow public/private (secret) posts (공개/비공개, ref 1-28).
+   */
+  secretPostAllowed?: boolean | null;
+  /**
+   * Days a post shows the New icon after registration (ref 1-28 New icon toggle).
+   */
+  newIconWindow?: number | null;
+  listCount?: number | null;
+  pageCount?: number | null;
+  /**
+   * Raw HTML rendered above the board. Sanitize on render in Phase 4 (XSS).
+   */
+  topContent?: string | null;
+  /**
+   * Raw HTML rendered below the board. Sanitize on render in Phase 4 (XSS).
+   */
+  bottomContent?: string | null;
+  /**
+   * Configurable notice banner shown at the top of the board (ref 2-7).
+   */
+  headerNotice?: string | null;
+  attachmentsEnabled?: boolean | null;
+  attachmentMaxCount?: number | null;
+  /**
+   * 10 MByte recommended (legacy hint).
+   */
+  attachmentMaxSizeMB?: number | null;
+  /**
+   * Lowercase, comma-separated, no spaces — e.g. "hwp,pdf,png".
+   */
+  attachmentAllowedExtensions?: string | null;
+  /**
+   * Up to 3 classification-code bindings. Each binds a pre-existing code GROUP (분류코드) — see report for the codeGroups-vs-codes decision.
+   */
+  categories?:
+    | {
+        /**
+         * The bound classification code group (must pre-exist in Code Management — popup selection only in legacy).
+         */
+        classificationCode: number | CodeGroup;
+        /**
+         * Display label for this category.
+         */
+        title?: string | null;
+        /**
+         * Value for the HTML title attribute.
+         */
+        htmlTitleAttr?: string | null;
+        /**
+         * Injected HTML attributes, e.g. data="12".
+         */
+        attributeValue?: string | null;
+        /**
+         * Inline CSS for the rendered input.
+         */
+        style?: string | null;
+        useFlag?: boolean | null;
+        requiredFlag?: boolean | null;
+        listFlag?: boolean | null;
+        detailFlag?: boolean | null;
+        searchFlag?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Per-field config for every post column. Defaults to the built-in fields + extraField1-4 (varchar) + extraContent1-4 (text). Drives the posts schema in Task 3B.
+   */
+  fields?:
+    | {
+        /**
+         * Stable key, e.g. 'title', 'extraField1'.
+         */
+        fieldKey: string;
+        label?: string | null;
+        htmlTitleAttr?: string | null;
+        /**
+         * e.g. data="12".
+         */
+        attributeValue?: string | null;
+        style?: string | null;
+        /**
+         * HTML input element the field renders as (ref 1-30 Type selector).
+         */
+        inputType?: ('text' | 'textarea' | 'date' | 'email' | 'select' | 'number') | null;
+        useFlag?: boolean | null;
+        requiredFlag?: boolean | null;
+        listFlag?: boolean | null;
+        detailFlag?: boolean | null;
+        searchFlag?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Ordered fieldKeys for the LIST view columns (ref 1-31). Drag-drop UI is later.
+   */
+  listFieldOrder?: string[] | null;
+  /**
+   * Ordered fieldKeys for the DETAIL view (ref 1-32). Independent of list order.
+   */
+  detailFieldOrder?: string[] | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "passwordPolicies".
  */
 export interface PasswordPolicy {
@@ -768,6 +939,14 @@ export interface PayloadLockedDocument {
         value: number | Code;
       } | null)
     | ({
+        relationTo: 'boardTypes';
+        value: number | BoardType;
+      } | null)
+    | ({
+        relationTo: 'boards';
+        value: number | Board;
+      } | null)
+    | ({
         relationTo: 'roles';
         value: number | Role;
       } | null)
@@ -1022,6 +1201,84 @@ export interface CodesSelect<T extends boolean = true> {
   description?: T;
   legacyValue?: T;
   isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boardTypes_select".
+ */
+export interface BoardTypesSelect<T extends boolean = true> {
+  code?: T;
+  name?: T;
+  kind?: T;
+  tableName?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "boards_select".
+ */
+export interface BoardsSelect<T extends boolean = true> {
+  tenant?: T;
+  bbsId?: T;
+  name?: T;
+  boardType?: T;
+  isIntegrated?: T;
+  skin?: T;
+  boardForm?: T;
+  sortOrder?: T;
+  editorForAdminOnly?: T;
+  commentsEnabled?: T;
+  prevNextEnabled?: T;
+  excelExport?: T;
+  userPostAllowed?: T;
+  secretPostAllowed?: T;
+  newIconWindow?: T;
+  listCount?: T;
+  pageCount?: T;
+  topContent?: T;
+  bottomContent?: T;
+  headerNotice?: T;
+  attachmentsEnabled?: T;
+  attachmentMaxCount?: T;
+  attachmentMaxSizeMB?: T;
+  attachmentAllowedExtensions?: T;
+  categories?:
+    | T
+    | {
+        classificationCode?: T;
+        title?: T;
+        htmlTitleAttr?: T;
+        attributeValue?: T;
+        style?: T;
+        useFlag?: T;
+        requiredFlag?: T;
+        listFlag?: T;
+        detailFlag?: T;
+        searchFlag?: T;
+        id?: T;
+      };
+  fields?:
+    | T
+    | {
+        fieldKey?: T;
+        label?: T;
+        htmlTitleAttr?: T;
+        attributeValue?: T;
+        style?: T;
+        inputType?: T;
+        useFlag?: T;
+        requiredFlag?: T;
+        listFlag?: T;
+        detailFlag?: T;
+        searchFlag?: T;
+        id?: T;
+      };
+  listFieldOrder?: T;
+  detailFieldOrder?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -103,6 +103,22 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 1,
     collectionSlug: 'media',
   },
+  // Board engine (Task 3A; refs 1-27..1-35, 1-77/1-78). `boardTypes` is
+  // global; `boards` is tenant-scoped (per-site).
+  {
+    menuKey: 'content.boardTypes',
+    name: 'Board Type Management',
+    parentMenuKey: 'content',
+    order: 2,
+    collectionSlug: 'boardTypes',
+  },
+  {
+    menuKey: 'content.boards',
+    name: 'Board Management',
+    parentMenuKey: 'content',
+    order: 3,
+    collectionSlug: 'boards',
+  },
   // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
   // logging backbone: access history, login history, and the two permission
   // journals. `privacy.permissionLogs` gates BOTH permission-journal

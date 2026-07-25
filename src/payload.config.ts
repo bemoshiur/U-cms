@@ -16,6 +16,8 @@ import { Departments } from './collections/Departments'
 import { CodeClassifications } from './collections/codes/CodeClassifications'
 import { CodeGroups } from './collections/codes/CodeGroups'
 import { Codes } from './collections/codes/Codes'
+import { BoardTypes } from './collections/boards/BoardTypes'
+import { Boards } from './collections/boards/Boards'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
@@ -173,7 +175,13 @@ const plugins: Plugin[] = [
    * super-admin until Task 1C/1D adds the roles/permission model.
    */
   multiTenantPlugin({
-    collections: {},
+    // `boards` (Task 3A) is the first tenant-scoped collection: the plugin
+    // adds a required `tenant` relationship → `sites`, so every board belongs
+    // to exactly one site. Future tasks opt in posts, menus, web contents,
+    // etc. per docs/planning/development-plan.md §2.1.
+    collections: {
+      boards: {},
+    },
     tenantsSlug: Sites.slug,
     userHasAccessToAllTenants: () => true,
   }),
@@ -226,6 +234,9 @@ export default buildConfig({
     CodeClassifications,
     CodeGroups,
     Codes,
+    // Board engine (Task 3A): global board types + tenant-scoped boards.
+    BoardTypes,
+    Boards,
     Roles,
     AdminMenus,
     PasswordPolicies,
