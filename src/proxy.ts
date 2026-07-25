@@ -6,8 +6,10 @@ import {
   evaluateAdminIpRequest,
   isAdminIpEnforcementDisabled,
   renderBlockedHtml,
+  renderFailClosedHtml,
   resolveClientIp,
 } from './security/adminIpEnforcement'
+import type { AdminIpEvaluation } from './security/adminIpEnforcement'
 
 /**
  * Admin IP access control enforcement point (Task 2C Part 2; feature-inventory
@@ -35,12 +37,14 @@ import {
  *
  * ## Bootstrap / lockout safety
  *
- *  - `ADMIN_IP_ENFORCEMENT=off` short-circuits before Payload is even loaded.
+ *  - `ADMIN_IP_ENFORCEMENT=off` short-circuits before Payload is even loaded, so
+ *    the escape hatch works even when the database is down.
  *  - Exempt paths short-circuit before Payload is loaded (keeps recovery cheap
  *    and always reachable).
- *  - `evaluateAdminIpRequest` treats an empty ruleset / missing admin site /
- *    any internal error as ALLOW (fail-open) — an internal fault must never
- *    brick the admin.
+ *  - `evaluateAdminIpRequest` distinguishes KNOWN-SAFE states (empty/unarmed
+ *    ruleset, no admin site → ALLOW) from UNKNOWN ones (guard threw → 503
+ *    fail-closed). A Payload-load failure here is handled with the same
+ *    fail-closed posture rather than a raw uncaught 500.
  */
 export const config = {
   matcher: ['/admin/:path*', '/api/:path*'],
@@ -48,7 +52,7 @@ export const config = {
 
 export async function proxy(request: NextRequest): Promise<Response> {
   // Cheap, Payload-free pre-checks: never load the CMS for disabled enforcement
-  // or an exempt path (public recovery flows, media serving, etc.).
+  // or an exempt path (public recovery flows, media file serving, etc.).
   if (isAdminIpEnforcementDisabled()) {
     return NextResponse.next()
   }
@@ -58,29 +62,45 @@ export async function proxy(request: NextRequest): Promise<Response> {
     return NextResponse.next()
   }
 
-  const clientIp = resolveClientIp(request.headers)
+  const client = resolveClientIp(request.headers)
 
-  // Guarded path — load Payload (cached after first call) and evaluate.
-  const { getPayload } = await import('payload')
-  const { default: payloadConfig } = await import('@payload-config')
-  const payload = await getPayload({ config: payloadConfig })
+  // Guarded path — load Payload (cached after first call) and evaluate. A
+  // load-path throw is an UNKNOWN state → fail closed (503), consistent with the
+  // guard's own error handling, instead of an uncaught 500.
+  let result: AdminIpEvaluation
+  try {
+    const { getPayload } = await import('payload')
+    const { default: payloadConfig } = await import('@payload-config')
+    const payload = await getPayload({ config: payloadConfig })
+    result = await evaluateAdminIpRequest({ payload, pathname, client })
+  } catch {
+    result = { allowed: false, status: 503, reason: 'load-error-fail-closed', clientIp: client.ip }
+  }
 
-  const result = await evaluateAdminIpRequest({ payload, pathname, clientIp })
   if (result.allowed) {
     return NextResponse.next()
   }
 
-  // Browser navigations get a readable 403 page; API/XHR callers get JSON in
-  // Payload's `{ errors: [...] }` shape so the admin's fetch layer surfaces it.
+  // 403 = a resolvable IP is off the allowlist; 503 = fail-closed (no
+  // trustworthy IP / internal error) with operator recovery instructions.
+  const isFailClosed = result.status === 503
   const accept = request.headers.get('accept') ?? ''
   if (accept.includes('text/html')) {
-    return new NextResponse(renderBlockedHtml(clientIp), {
+    return new NextResponse(isFailClosed ? renderFailClosedHtml() : renderBlockedHtml(client.ip), {
       status: result.status,
       headers: { 'content-type': 'text/html; charset=utf-8' },
     })
   }
   return NextResponse.json(
-    { errors: [{ message: 'Access denied: your IP address is not on the admin allowlist.' }] },
+    {
+      errors: [
+        {
+          message: isFailClosed
+            ? 'Admin access is temporarily unavailable: the server could not securely determine your network. Set TRUSTED_PROXY_HOPS, or ADMIN_IP_ENFORCEMENT=off to disable.'
+            : 'Access denied: your IP address is not on the admin allowlist.',
+        },
+      ],
+    },
     { status: result.status },
   )
 }

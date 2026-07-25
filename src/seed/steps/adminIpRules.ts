@@ -7,15 +7,22 @@ import type { SeedStep } from '../types'
  *
  * ## Bootstrap safety — why the `*` allow is ACTIVE
  *
- * The enforcement guard (src/security/*) is default-deny *once any rule exists*.
- * If the seed installed only the two localhost rules, a real deployment behind a
- * reverse proxy — whose admins connect from a non-localhost IP — would be locked
- * out the instant the seed ran (localhost is also unreachable when the proxy
- * forwards the real client IP, not 127.0.0.1). So the seed installs an ACTIVE
- * bare-`*` ALLOW rule, which keeps the admin OPEN to every IP out of the box.
- * IP restriction stays effectively OFF until an operator deactivates/deletes
- * that `*` rule and adds allow rules for their own networks (at which point
- * default-deny arms). This is the documented, non-bricking default.
+ * The seed installs an ACTIVE bare-`*` ALLOW rule so that, once an operator
+ * configures `TRUSTED_PROXY_HOPS`, every trusted client IP is allowed out of the
+ * box (IP restriction effectively OFF) until they deactivate/delete the `*` rule
+ * and add allow rules for their own networks.
+ *
+ * Interaction with the trust model (src/security/adminIpEnforcement.ts):
+ *   - `next dev` (development): untrusted requests are permissive → localhost is
+ *     reachable regardless of these rules.
+ *   - Production WITH `TRUSTED_PROXY_HOPS` set: the `*` allow matches every
+ *     trusted IP → open until narrowed.
+ *   - Production WITHOUT `TRUSTED_PROXY_HOPS` (armed list, no trustworthy IP):
+ *     the guard FAILS CLOSED (503) — the operator must set `TRUSTED_PROXY_HOPS`
+ *     or `ADMIN_IP_ENFORCEMENT=off`. A truly fresh (un-seeded, empty) install
+ *     stays OPEN via the "empty ruleset = open" net.
+ * None of these hard-brick: a fresh install and localhost dev are always
+ * reachable, and the escape hatch always recovers.
  */
 
 const FAR_FUTURE = '2999-12-31T23:59:59.000Z'
@@ -31,7 +38,7 @@ export const SEED_IP_RULES: IpRuleSeed[] = [
   {
     ipAddress: '*',
     accessType: 'allow',
-    memo: 'BOOTSTRAP: allows ALL IPs, so admin IP restriction is effectively OFF. To enforce an allowlist, deactivate or delete this rule and add allow rules for your office/VPN IPs (default-deny then applies).',
+    memo: 'BOOTSTRAP: allows ALL (trusted) IPs, so admin IP restriction is effectively OFF. In production set TRUSTED_PROXY_HOPS so the real client IP can be resolved; then deactivate/delete this rule and add allow rules for your office/VPN IPs (default-deny then applies).',
   },
   {
     ipAddress: '127.0.0.1',

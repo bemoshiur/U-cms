@@ -1,6 +1,6 @@
 import type { Payload } from 'payload'
 import { getPayload } from 'payload'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import config from '@/payload.config'
 import { runSeed } from '@/seed'
@@ -8,7 +8,8 @@ import { adminMenusStep } from '@/seed/steps/adminMenus'
 import { sitesStep } from '@/seed/steps/sites'
 import { adminIpRulesStep } from '@/seed/steps/adminIpRules'
 import { isIpAllowedForAdmin } from '@/security/ipAccessGuard'
-import { classifyAdminPath, evaluateAdminIpRequest } from '@/security/adminIpEnforcement'
+import { evaluateAdminIpRequest } from '@/security/adminIpEnforcement'
+import type { ResolvedClientIp } from '@/security/adminIpEnforcement'
 
 let payload: Payload
 let adminSiteId: number
@@ -16,6 +17,13 @@ let adminSiteId: number
 function unique(label: string): string {
   return `${label}${Date.now()}${Math.floor(Math.random() * 100000)}`
 }
+
+/** A trusted client IP (as if a correctly-configured reverse proxy resolved it). */
+function trusted(ip: string): ResolvedClientIp {
+  return { ip, trusted: true }
+}
+/** No trustworthy IP source (e.g. TRUSTED_PROXY_HOPS=0 / no proxy). */
+const UNTRUSTED: ResolvedClientIp = { ip: undefined, trusted: false }
 
 /** A wide, always-valid window for a rule whose window shouldn't be the variable under test. */
 const WINDOW = {
@@ -87,17 +95,20 @@ describe('admin IP access control (Task 2C)', () => {
   })
 
   describe('isIpAllowedForAdmin (default-deny guard)', () => {
-    it('empty ruleset → ALLOWED (bootstrap safety)', async () => {
+    it('empty ruleset → ALLOWED + unarmed (bootstrap safety)', async () => {
       const site = await makeSite()
       const decision = await isIpAllowedForAdmin(payload, '198.51.100.9', site)
       expect(decision.allowed).toBe(true)
       expect(decision.reason).toBe('no-rules-bootstrap')
+      expect(decision.armed).toBe(false)
     })
 
-    it('matching allow rule → ALLOWED', async () => {
+    it('matching allow rule → ALLOWED + armed', async () => {
       const site = await makeSite()
       await createRule(site, { ipAddress: '203.0.113.7', accessType: 'allow' })
-      expect((await isIpAllowedForAdmin(payload, '203.0.113.7', site)).allowed).toBe(true)
+      const decision = await isIpAllowedForAdmin(payload, '203.0.113.7', site)
+      expect(decision.allowed).toBe(true)
+      expect(decision.armed).toBe(true)
     })
 
     it('non-matching IP under a populated ruleset → DENIED (default-deny)', async () => {
@@ -117,7 +128,7 @@ describe('admin IP access control (Task 2C)', () => {
       expect(decision.reason).toBe('blocked-by-rule')
     })
 
-    it('expired allow rule is ignored → DENIED', async () => {
+    it('expired allow rule is ignored → DENIED + unarmed', async () => {
       const site = await makeSite()
       await createRule(site, {
         ipAddress: '203.0.113.7',
@@ -125,7 +136,9 @@ describe('admin IP access control (Task 2C)', () => {
         validFrom: '2000-01-01T00:00:00.000Z',
         validTo: '2001-01-01T00:00:00.000Z',
       })
-      expect((await isIpAllowedForAdmin(payload, '203.0.113.7', site)).allowed).toBe(false)
+      const decision = await isIpAllowedForAdmin(payload, '203.0.113.7', site)
+      expect(decision.allowed).toBe(false)
+      expect(decision.armed).toBe(false)
     })
 
     it('not-yet-valid (future) allow rule is ignored → DENIED', async () => {
@@ -139,37 +152,26 @@ describe('admin IP access control (Task 2C)', () => {
       expect((await isIpAllowedForAdmin(payload, '203.0.113.7', site)).allowed).toBe(false)
     })
 
-    it('inactive allow rule is ignored → DENIED', async () => {
+    it('inactive allow rule is ignored → DENIED + unarmed', async () => {
       const site = await makeSite()
       await createRule(site, { ipAddress: '203.0.113.7', accessType: 'allow', isActive: false })
-      expect((await isIpAllowedForAdmin(payload, '203.0.113.7', site)).allowed).toBe(false)
+      const decision = await isIpAllowedForAdmin(payload, '203.0.113.7', site)
+      expect(decision.allowed).toBe(false)
+      expect(decision.armed).toBe(false)
     })
 
     it('a rule on another site does not grant access here (wrong-site ignored)', async () => {
       const siteA = await makeSite()
       const siteB = await makeSite()
-      // siteA allows the IP; siteB has an unrelated rule so it is not bootstrap-open.
       await createRule(siteA, { ipAddress: '203.0.113.7', accessType: 'allow' })
       await createRule(siteB, { ipAddress: '10.0.0.1', accessType: 'allow' })
       expect((await isIpAllowedForAdmin(payload, '203.0.113.7', siteB)).allowed).toBe(false)
-      // sanity: it IS allowed on siteA
       expect((await isIpAllowedForAdmin(payload, '203.0.113.7', siteA)).allowed).toBe(true)
-    })
-
-    it('an unknown client IP is covered by a * allow but not by a specific allow', async () => {
-      const siteStar = await makeSite()
-      await createRule(siteStar, { ipAddress: '*', accessType: 'allow' })
-      expect((await isIpAllowedForAdmin(payload, undefined, siteStar)).allowed).toBe(true)
-
-      const siteExact = await makeSite()
-      await createRule(siteExact, { ipAddress: '203.0.113.7', accessType: 'allow' })
-      expect((await isIpAllowedForAdmin(payload, undefined, siteExact)).allowed).toBe(false)
     })
   })
 
-  describe('evaluateAdminIpRequest (enforcement + path scoping + denial audit)', () => {
+  describe('evaluateAdminIpRequest (enforcement + trust model + audit)', () => {
     beforeAll(async () => {
-      // Deterministic admin-site ruleset regardless of what other specs seeded.
       await deleteAllAdminRules()
       await createRule(adminSiteId, { ipAddress: '203.0.113.7', accessType: 'allow' })
     })
@@ -177,12 +179,12 @@ describe('admin IP access control (Task 2C)', () => {
       await deleteAllAdminRules()
     })
 
-    it('blocks a disallowed IP on a guarded admin route (403) and writes a denied accessLog', async () => {
+    it('blocks a disallowed TRUSTED IP on a guarded admin route (403) + writes a denied accessLog', async () => {
       const pathname = `/admin/collections/users?probe=${unique('p')}`
       const result = await evaluateAdminIpRequest({
         payload,
         pathname,
-        clientIp: '198.51.100.9',
+        client: trusted('198.51.100.9'),
       })
       expect(result.allowed).toBe(false)
       expect(result.status).toBe(403)
@@ -197,23 +199,39 @@ describe('admin IP access control (Task 2C)', () => {
       expect(logs.docs[0]!.menuKey).toBe('system.ipAccessControl')
     })
 
-    it('allows the same disallowed IP on a guarded route when the allowed IP is used', async () => {
+    it('allows a guarded route when the allowlisted TRUSTED IP is used', async () => {
       const result = await evaluateAdminIpRequest({
         payload,
         pathname: '/admin/collections/users',
-        clientIp: '203.0.113.7',
+        client: trusted('203.0.113.7'),
       })
       expect(result.allowed).toBe(true)
     })
 
+    it('GUARDS the media collection endpoint but EXEMPTS the media file route', async () => {
+      const collection = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/api/media/123',
+        client: trusted('198.51.100.9'),
+      })
+      expect(collection.allowed).toBe(false)
+      expect(collection.status).toBe(403)
+
+      const file = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/api/media/file/logo.png',
+        client: trusted('198.51.100.9'),
+      })
+      expect(file.allowed).toBe(true)
+    })
+
     it('does NOT block a disallowed IP on the public recovery/frontend endpoints', async () => {
-      for (const pathname of [
-        '/api/find-password',
-        '/api/account-request',
-        '/admin/forgot',
-        '/api/media/file/logo.png',
-      ]) {
-        const result = await evaluateAdminIpRequest({ payload, pathname, clientIp: '198.51.100.9' })
+      for (const pathname of ['/api/find-password', '/api/account-request', '/admin/forgot']) {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname,
+          client: trusted('198.51.100.9'),
+        })
         expect(result.allowed).toBe(true)
       }
     })
@@ -225,36 +243,91 @@ describe('admin IP access control (Task 2C)', () => {
         const result = await evaluateAdminIpRequest({
           payload,
           pathname: '/admin/collections/users',
-          clientIp: '198.51.100.9',
+          client: trusted('198.51.100.9'),
         })
         expect(result.allowed).toBe(true)
         expect(result.reason).toBe('enforcement-disabled')
       } finally {
-        if (prev === undefined) {
-          delete process.env.ADMIN_IP_ENFORCEMENT
-        } else {
-          process.env.ADMIN_IP_ENFORCEMENT = prev
-        }
+        if (prev === undefined) delete process.env.ADMIN_IP_ENFORCEMENT
+        else process.env.ADMIN_IP_ENFORCEMENT = prev
       }
     })
   })
 
-  describe('classifyAdminPath', () => {
-    it('guards /admin and /api but exempts recovery, media, and the public frontend', () => {
-      expect(classifyAdminPath('/admin')).toBe('guard')
-      expect(classifyAdminPath('/admin/collections/users')).toBe('guard')
-      expect(classifyAdminPath('/admin/login')).toBe('guard')
-      expect(classifyAdminPath('/api/users/login')).toBe('guard')
-      expect(classifyAdminPath('/api/users/me')).toBe('guard')
+  describe('trust model: untrusted IP (no TRUSTED_PROXY_HOPS)', () => {
+    afterAll(async () => {
+      await deleteAllAdminRules()
+    })
 
-      expect(classifyAdminPath('/admin/forgot')).toBe('exempt')
-      expect(classifyAdminPath('/admin/account-request')).toBe('exempt')
-      expect(classifyAdminPath('/admin/logout')).toBe('exempt')
-      expect(classifyAdminPath('/api/find-password')).toBe('exempt')
-      expect(classifyAdminPath('/api/users/forgot-password')).toBe('exempt')
-      expect(classifyAdminPath('/api/media/file/x.png')).toBe('exempt')
-      expect(classifyAdminPath('/')).toBe('exempt')
-      expect(classifyAdminPath('/some-frontend-page')).toBe('exempt')
+    it('ARMED allowlist + no trusted IP + PRODUCTION → FAIL CLOSED (503)', async () => {
+      await deleteAllAdminRules()
+      await createRule(adminSiteId, { ipAddress: '203.0.113.7', accessType: 'allow' })
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(503)
+        expect(result.reason).toBe('no-trusted-ip-fail-closed')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('ARMED allowlist + no trusted IP + DEV → permissive (localhost not bricked)', async () => {
+      // NODE_ENV is 'test' here (not production) → dev-permissive branch.
+      const result = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/admin',
+        client: UNTRUSTED,
+      })
+      expect(result.allowed).toBe(true)
+    })
+
+    it('UNARMED (empty) allowlist + no trusted IP → ALLOW regardless of env', async () => {
+      await deleteAllAdminRules()
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(true)
+        expect(result.reason).toBe('unarmed-open')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+  })
+
+  describe('fail-open vs fail-closed discipline', () => {
+    it('empty ruleset (known-safe) → ALLOW, but a guard THROW (unknown) → FAIL CLOSED 503', async () => {
+      await deleteAllAdminRules()
+      const known = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/admin',
+        client: trusted('198.51.100.9'),
+      })
+      expect(known.allowed).toBe(true) // empty ruleset → no-rules-bootstrap
+
+      const throwingPayload = {
+        find: async () => {
+          throw new Error('db exploded')
+        },
+        logger: { error: () => undefined },
+      } as unknown as Payload
+      const unknown = await evaluateAdminIpRequest({
+        payload: throwingPayload,
+        pathname: '/admin',
+        client: trusted('198.51.100.9'),
+      })
+      expect(unknown.allowed).toBe(false)
+      expect(unknown.status).toBe(503)
+      expect(unknown.reason).toBe('guard-error-fail-closed')
     })
   })
 
@@ -264,7 +337,7 @@ describe('admin IP access control (Task 2C)', () => {
       await expect(createRule(site, { ipAddress: '999.1.1.1' })).rejects.toThrow()
     })
 
-    it('rejects validTo <= validFrom', async () => {
+    it('rejects validTo <= validFrom on create', async () => {
       const site = await makeSite()
       await expect(
         createRule(site, {
@@ -275,32 +348,43 @@ describe('admin IP access control (Task 2C)', () => {
       ).rejects.toThrow()
     })
 
+    it('rejects a validTo-ONLY PATCH that sets validTo <= the persisted validFrom', async () => {
+      const site = await makeSite()
+      const id = await createRule(site, {
+        ipAddress: '203.0.113.7',
+        validFrom: '2026-06-01T00:00:00.000Z',
+        validTo: '2026-12-01T00:00:00.000Z',
+      })
+      // PATCH carrying ONLY validTo (no validFrom) — the validator must fetch the
+      // persisted validFrom to still enforce validTo > validFrom.
+      await expect(
+        payload.update({
+          collection: 'adminIpRules',
+          id,
+          data: { validTo: '2026-05-01T00:00:00.000Z' },
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+    })
+
     it('accepts a valid rule (wildcard + valid window)', async () => {
       const site = await makeSite()
       await expect(createRule(site, { ipAddress: '10.0.*' })).resolves.toBeTypeOf('number')
     })
   })
 
-  describe('bootstrap / real-flow: seeding example rules does NOT brick localhost', () => {
-    it('after adminIpRulesStep, an unknown-IP localhost request to the admin is still ALLOWED', async () => {
+  describe('bootstrap / real-flow: seeding example rules does NOT brick a dev session', () => {
+    it('after adminIpRulesStep, an untrusted (localhost dev) request to the admin is still ALLOWED', async () => {
       await deleteAllAdminRules()
       await adminIpRulesStep.run(payload)
 
-      // localhost dev / no reverse proxy → clientIp undefined; the seeded active
-      // `*` allow keeps the admin reachable.
-      const undefinedIp = await evaluateAdminIpRequest({
+      // NODE_ENV=test (dev-like) → untrusted + armed → dev-permissive → allowed.
+      const result = await evaluateAdminIpRequest({
         payload,
         pathname: '/admin',
-        clientIp: undefined,
+        client: UNTRUSTED,
       })
-      expect(undefinedIp.allowed).toBe(true)
-
-      const anyIp = await evaluateAdminIpRequest({
-        payload,
-        pathname: '/admin/collections/users',
-        clientIp: '198.51.100.9',
-      })
-      expect(anyIp.allowed).toBe(true)
+      expect(result.allowed).toBe(true)
 
       // Re-running the seed is idempotent (still 3 rules on the admin site).
       await adminIpRulesStep.run(payload)

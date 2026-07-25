@@ -33,6 +33,15 @@ import { ipMatches } from './ipMatch'
 export type IpAccessDecision = {
   allowed: boolean
   reason: 'no-rules-bootstrap' | 'blocked-by-rule' | 'allowed-by-rule' | 'default-deny'
+  /**
+   * Whether the allowlist is **armed** — i.e. there is at least one active,
+   * in-window rule for this site right now. The enforcement layer needs this
+   * (distinct from `allowed`) to decide what to do when it has NO trustworthy
+   * client IP: an unarmed allowlist never blocks (bootstrap net), while an
+   * armed one with no trustworthy IP fails closed in production. An empty
+   * ruleset, or one whose rules are all inactive/expired, is unarmed.
+   */
+  armed: boolean
 }
 
 type AdminIpRuleRow = {
@@ -68,23 +77,27 @@ export async function isIpAllowedForAdmin(
 
   // Empty allowlist → open (bootstrap safety, documented above).
   if (all.docs.length === 0) {
-    return { allowed: true, reason: 'no-rules-bootstrap' }
+    return { allowed: true, reason: 'no-rules-bootstrap', armed: false }
   }
 
   const nowMs = now.getTime()
   const active = (all.docs as AdminIpRuleRow[]).filter((r) => isWithinWindow(r, nowMs))
+  const armed = active.length > 0
 
   // block wins over allow.
   for (const r of active) {
     if (r.accessType === 'block' && r.ipAddress && ipMatches(clientIp, r.ipAddress)) {
-      return { allowed: false, reason: 'blocked-by-rule' }
+      return { allowed: false, reason: 'blocked-by-rule', armed }
     }
   }
   for (const r of active) {
     if (r.accessType === 'allow' && r.ipAddress && ipMatches(clientIp, r.ipAddress)) {
-      return { allowed: true, reason: 'allowed-by-rule' }
+      return { allowed: true, reason: 'allowed-by-rule', armed }
     }
   }
 
-  return { allowed: false, reason: 'default-deny' }
+  // Rules exist but none matched (or all are inactive/expired → unarmed): under
+  // default-deny a trusted client is blocked; an unarmed set (armed === false)
+  // is treated as bootstrap-open by the enforcement layer.
+  return { allowed: false, reason: 'default-deny', armed }
 }

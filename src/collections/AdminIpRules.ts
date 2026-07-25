@@ -1,4 +1,4 @@
-import type { CollectionConfig, TextFieldSingleValidation, Validate } from 'payload'
+import type { CollectionConfig, Payload, TextFieldSingleValidation, Validate } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../access/hasMenuAccess'
 import { auditCollection } from '../audit/auditCollection'
@@ -40,16 +40,41 @@ const validateIpAddress: TextFieldSingleValidation = (value, { required }) => {
 
 /**
  * `validTo` must be strictly after `validFrom` (ref 1-21 validity window). Also
- * enforces required by hand (custom validate replaces the default). `siblingData`
- * carries `validFrom` from the same document.
+ * enforces required by hand (custom validate replaces the default).
+ *
+ * Review fix (Low): `validFrom` is read from the incoming payload
+ * (`siblingData`/`data`) when present, but a PATCH that sets ONLY `validTo`
+ * carries no `validFrom` — so on an update the validator falls back to fetching
+ * the persisted `validFrom`, keeping `validTo > validFrom` enforced even on a
+ * `validTo`-only edit.
  */
-const validateValidTo: Validate = (value, { data, siblingData }) => {
+const validateValidTo: Validate = async (value, options) => {
+  const { data, siblingData, req, id, operation } = options as {
+    data?: { validFrom?: unknown }
+    siblingData?: { validFrom?: unknown }
+    req?: { payload?: Payload }
+    id?: number | string
+    operation?: string
+  }
   if (!value) {
     return 'Valid-to date is required.'
   }
-  const from =
-    (siblingData as { validFrom?: unknown })?.validFrom ??
-    (data as { validFrom?: unknown })?.validFrom
+
+  let from: unknown = siblingData?.validFrom ?? data?.validFrom
+  if (from === undefined && operation === 'update' && id != null && req?.payload) {
+    try {
+      const existing = await req.payload.findByID({
+        collection: 'adminIpRules',
+        id,
+        depth: 0,
+        overrideAccess: true,
+      })
+      from = (existing as { validFrom?: unknown })?.validFrom
+    } catch {
+      /* best-effort — if the existing doc can't be read, skip the comparison */
+    }
+  }
+
   if (from) {
     const fromMs = new Date(from as string).getTime()
     const toMs = new Date(value as string).getTime()
