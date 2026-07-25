@@ -188,7 +188,16 @@ export const throttleTwoFactorFailure: CollectionAfterErrorHook = async ({
       return undefined
     }
 
-    const identifier = extractLoginIdentifier(req)
+    // B1 (case-bypass fix): Payload stores emails lowercased and `equals` maps
+    // to a case-sensitive Drizzle `eq`, so the throttle lookup MUST normalize
+    // the attempted identifier exactly the way the login operation does
+    // (`.toLowerCase().trim()`, mirroring `auth/operations/login.js`). Without
+    // this, a mixed-case email (`Admin@Example.com`) matches no row here — the
+    // failed-OTP counter is never written and the whole brute-force throttle is
+    // silently disabled. Normalized at THIS call site rather than inside
+    // `extractLoginIdentifier`, because the other caller (`recordLoginFailure`)
+    // records the identifier verbatim for forensic fidelity (see helpers.ts).
+    const identifier = extractLoginIdentifier(req)?.toLowerCase().trim()
     if (!identifier) {
       return undefined
     }

@@ -1,4 +1,5 @@
 import type { Payload, PayloadRequest, Where } from 'payload'
+import { APIError } from 'payload'
 
 import { renderFindIdEmail } from '../email/authEmails'
 
@@ -109,12 +110,28 @@ export async function findPassword(
   })
 
   if (found.docs.length > 0) {
-    await payload.forgotPassword({
-      collection: 'users',
-      data: { email },
-      req,
-    })
-    return { message: GENERIC_FIND_PASSWORD_MESSAGE, emailed: true }
+    try {
+      await payload.forgotPassword({
+        collection: 'users',
+        data: { email },
+        req,
+      })
+      return { message: GENERIC_FIND_PASSWORD_MESSAGE, emailed: true }
+    } catch (error) {
+      // D1 (existence-oracle fix): the built-in `users/forgot-password`
+      // operation gate (`rateLimitPasswordRecovery`) throws a 429 when its
+      // bucket is exhausted. Surfacing that 429 here — while a NON-matching
+      // email falls through to the generic 200 below — would make matching vs.
+      // non-matching distinguishable, a deterministic account-existence oracle
+      // (CWE-204). Swallow ONLY the rate-limit 429 and return the SAME generic
+      // response a non-match yields, so the two are indistinguishable. The
+      // endpoint-level `find-password` gate already throttles volume on this
+      // path, so the operation gate is redundant here. Anything else re-throws.
+      if (error instanceof APIError && error.status === 429) {
+        return { message: GENERIC_FIND_PASSWORD_MESSAGE, emailed: false }
+      }
+      throw error
+    }
   }
 
   return { message: GENERIC_FIND_PASSWORD_MESSAGE, emailed: false }

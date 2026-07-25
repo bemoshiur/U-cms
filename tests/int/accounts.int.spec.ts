@@ -16,6 +16,7 @@ import {
   findPassword,
 } from '@/accounts/recovery'
 import { markDormantAccounts } from '@/accounts/dormancy'
+import { resetPublicRateLimiter } from '@/security/rateLimit'
 
 let payload: Payload
 
@@ -429,6 +430,57 @@ describe('admin account lifecycle (Task 1D)', () => {
       const result = await findPassword(payload, { email })
       expect(result.message).toBe(GENERIC_FIND_PASSWORD_MESSAGE)
       expect(result.emailed).toBe(false)
+    })
+
+    it('D1 regression — with the forgot-password bucket pre-exhausted, matching vs non-matching emails return IDENTICAL results (no existence oracle)', async () => {
+      const matchEmail = uniqueEmail('oraclematch')
+      await payload.create({
+        collection: 'users',
+        data: { email: matchEmail, password: STRONG_PW, status: 'active' },
+        overrideAccess: true,
+      })
+      const missEmail = uniqueEmail('oraclemiss')
+
+      // Pre-exhaust the built-in `users/forgot-password` operation bucket — the
+      // one the MATCHING branch trips via `payload.forgotPassword`. Drain it
+      // through the real operation (req-less Local-API calls share the single
+      // `untrusted` bucket, the same key `findPassword` resolves to), so the
+      // next reset-mail send is guaranteed to 429.
+      resetPublicRateLimiter()
+      const drain = () =>
+        payload.forgotPassword({
+          collection: 'users',
+          data: { email: missEmail },
+          disableEmail: true,
+        })
+      const statusOf = async (fn: () => Promise<unknown>): Promise<number | undefined> => {
+        try {
+          await fn()
+          return undefined
+        } catch (err) {
+          return (err as { status?: number }).status
+        }
+      }
+      let status: number | undefined
+      let guard = 0
+      do {
+        status = await statusOf(drain)
+      } while (status === undefined && guard++ < 1000)
+      expect(status).toBe(429) // bucket confirmed exhausted
+
+      try {
+        // Matching email: without the fix the operation-gate 429 escapes as a
+        // 429; with the fix it is swallowed and returns the same generic no-op.
+        const matched = await findPassword(payload, { email: matchEmail })
+        // Non-matching email: never reaches forgotPassword → generic no-op.
+        const missed = await findPassword(payload, { email: missEmail })
+
+        // Neither throws (identical status) AND identical body — no oracle.
+        expect(matched).toEqual({ message: GENERIC_FIND_PASSWORD_MESSAGE, emailed: false })
+        expect(missed).toEqual(matched)
+      } finally {
+        resetPublicRateLimiter()
+      }
     })
   })
 

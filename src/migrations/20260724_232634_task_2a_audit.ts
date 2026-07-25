@@ -85,6 +85,16 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
+  // NOTE: `IF EXISTS` added by hand to the four `DROP CONSTRAINT` lines below
+  // (same correction applied to the 2c down migration). The generated output
+  // ran `DROP TABLE ... CASCADE` on `access_logs`/`login_history`/etc. FIRST,
+  // and CASCADE already removes each table's FK on the surviving
+  // `payload_locked_documents_rels` — so the later un-guarded explicit
+  // `DROP CONSTRAINT` threw `constraint ... does not exist`, deterministically
+  // failing migrate:down / migrate:refresh / migrate:reset. Guarding them makes
+  // the drops idempotent (no-ops once CASCADE has already removed them). The
+  // `DROP INDEX` / `DROP COLUMN` lines target `payload_locked_documents_rels`
+  // (unaffected by the CASCADE) and are left as-is.
   await db.execute(sql`
    ALTER TABLE "access_logs" DISABLE ROW LEVEL SECURITY;
   ALTER TABLE "login_history" DISABLE ROW LEVEL SECURITY;
@@ -94,14 +104,14 @@ export async function down({ db, payload, req }: MigrateDownArgs): Promise<void>
   DROP TABLE "login_history" CASCADE;
   DROP TABLE "permission_change_logs" CASCADE;
   DROP TABLE "menu_permission_logs" CASCADE;
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_access_logs_fk";
-  
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_login_history_fk";
-  
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_permission_change_logs_fk";
-  
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_menu_permission_logs_fk";
-  
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_access_logs_fk";
+
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_login_history_fk";
+
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_permission_change_logs_fk";
+
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_menu_permission_logs_fk";
+
   DROP INDEX "payload_locked_documents_rels_access_logs_id_idx";
   DROP INDEX "payload_locked_documents_rels_login_history_id_idx";
   DROP INDEX "payload_locked_documents_rels_permission_change_logs_id_idx";

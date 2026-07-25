@@ -149,6 +149,25 @@ async function throttleWrongOtp(email: string): Promise<void> {
   } as any)
 }
 
+/**
+ * Upper-cases every other letter of an (already-lowercased) email so the result
+ * DIFFERS from the stored value but still `.toLowerCase()`s back to it — the
+ * `Admin@Example.com` shape that the B1 case-bypass exploits.
+ */
+function toMixedCase(email: string): string {
+  let flip = false
+  return email.replace(/[a-z]/g, (ch) => {
+    flip = !flip
+    return flip ? ch.toUpperCase() : ch
+  })
+}
+
+/** Wrong 6-digit code derived from a valid one (never collides with it). */
+function wrongCode(secret: string): string {
+  const valid = authenticator.generate(secret)
+  return String((Number(valid) + 1) % 1_000_000).padStart(6, '0')
+}
+
 describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
   beforeAll(async () => {
     const payloadConfig = await config
@@ -556,6 +575,49 @@ describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
       const after = await serverRead(user.id)
       expect(after.totpFailedAttempts).toBe(0)
       expect(after.totpLockUntil).toBeFalsy()
+    })
+
+    it('B1 regression — a MIXED-CASE email cannot bypass the throttle (drives the real login path, no pre-seeding)', async () => {
+      await setTwoFactor(true)
+      const { user, secret } = await setupConfirmedUser('mixedcasebypass')
+
+      // The stored email is lowercased; the attacker submits a mixed-case
+      // variant that still resolves to the same account at login.
+      const mixed = toMixedCase(user.email)
+      expect(mixed).not.toBe(user.email) // genuinely mixed
+      expect(mixed.toLowerCase()).toBe(user.email) // still the same account
+
+      // Drive TWO_FACTOR_MAX_ATTEMPTS wrong-OTP logins END TO END with the
+      // mixed-case email: each real login rejects the wrong code, then the
+      // afterError throttle hook runs with the SAME mixed-case identifier the
+      // HTTP router passes (req.data.email) — NOT a pre-seeded counter. Without
+      // the fix the case-sensitive lookup matches no row, so nothing is written.
+      for (let i = 0; i < TWO_FACTOR_MAX_ATTEMPTS; i++) {
+        await expect(
+          payload.login({
+            collection: 'users',
+            data: { email: mixed, password: STRONG_PW },
+            req: { data: { otp: wrongCode(secret) } },
+          } as Parameters<typeof payload.login>[0]),
+        ).rejects.toThrow(TWO_FACTOR_INVALID_MESSAGE)
+        await throttleWrongOtp(mixed)
+      }
+
+      // The throttle must have engaged on the real (lowercased) row.
+      const locked = await serverRead(user.id)
+      expect(locked.totpFailedAttempts).toBe(TWO_FACTOR_MAX_ATTEMPTS)
+      expect(locked.totpLockUntil).toBeTruthy()
+      expect(new Date(locked.totpLockUntil as string).getTime()).toBeGreaterThan(Date.now())
+
+      // 6th attempt with a CORRECT code (still mixed-case email) is refused by
+      // the lock — the assertion that fails WITHOUT the fix (login would succeed).
+      await expect(
+        payload.login({
+          collection: 'users',
+          data: { email: mixed, password: STRONG_PW },
+          req: { data: { otp: authenticator.generate(secret) } },
+        } as Parameters<typeof payload.login>[0]),
+      ).rejects.toThrow(TWO_FACTOR_LOCKED_MESSAGE)
     })
 
     it('an expired lock lets a valid code through again (never permanently locked)', async () => {
