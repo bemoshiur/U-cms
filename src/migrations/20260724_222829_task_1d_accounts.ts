@@ -32,15 +32,22 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
+  // NOTE: `IF EXISTS` added by hand to the `DROP CONSTRAINT` lines below (same
+  // correction as the 2A/2C down migrations). The preceding
+  // `DROP TABLE "password_policies" CASCADE` already removes
+  // `payload_locked_documents_rels_password_policies_fk` from the surviving
+  // `payload_locked_documents_rels`, so the un-guarded explicit drop threw
+  // `constraint ... does not exist` and broke migrate:down / refresh / reset.
+  // Guarding makes the drops idempotent (and the whole down safe to re-run).
   await db.execute(sql`
    ALTER TABLE "password_policies" DISABLE ROW LEVEL SECURITY;
   DROP TABLE "password_policies" CASCADE;
-  ALTER TABLE "users" DROP CONSTRAINT "users_department_id_departments_id_fk";
-  
-  ALTER TABLE "users" DROP CONSTRAINT "users_profile_photo_id_media_id_fk";
-  
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_password_policies_fk";
-  
+  ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_department_id_departments_id_fk";
+
+  ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_profile_photo_id_media_id_fk";
+
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_password_policies_fk";
+
   DROP INDEX "users_login_id_idx";
   DROP INDEX "users_department_idx";
   DROP INDEX "users_profile_photo_idx";

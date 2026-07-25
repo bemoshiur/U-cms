@@ -33,7 +33,7 @@
 - [x] 1.4 `admins` auth collection: `loginId` (unique) + email (unique), name, mobile, extension, department rel, duties, profile photo (upload→media), roles hasMany (saveToJWT), status (승인대기/정상/장기미로그인/locked) — Task 1D. (Deferred custom UI: dup-check UX, mobile country-code-from-code-mgmt, 64×64 display + rotate/reorder controls — later admin-component task.)
 - [x] 1.5 Approval workflow: self-service account request (`POST /api/account-request`) → `status: pending` (client status/roles force-stripped) → approve by editing `status` in admin (field-gated on system.admins); login blocked until `active` (beforeLogin) — Task 1D.
 - [x] 1.6 Password policy enforcement (`src/auth/validatePassword.ts`, beforeValidate hook): ≥10 chars w/ 2 of 3 classes OR ≥8 w/ 3 classes; block sequences/login-ID-similar — Task 1D. (`passwordPolicies` collection holds display text/history; enforcement is fixed in code — code/DB split. 6-month rotation is advisory text only, not mechanically enforced.)
-- [~] 1.7 `maxLoginAttempts: 5` / `lockTime: 10m` set; public account-request + ID/PW-find endpoints exposed — Task 1D. Custom login VIEW (branded logo, save-ID, conditional buttons, lockout messaging) DEFERRED to Phase 2's 2FA login rework, per the Task 1D brief.
+- [~] 1.7 `maxLoginAttempts: 5` / `lockTime: 10m` set; public account-request + ID/PW-find endpoints exposed — Task 1D. Custom login VIEW delivered in Task 2B (`admin.components.views.login`: branded logo, two-step OTP form, conditional Account-Request/Find-ID/Find-PW links). Save-ID checkbox + full lockout-messaging polish remain Phase 4 frontend.
 - [x] 1.8 ID/PW recovery: find-ID (`POST /api/find-id`, name+email → emails login ID), find-PW (`POST /api/find-password`, id+email → Payload forgotPassword reset email) — approved/active accounts only, generic responses (no enumeration) — Task 1D.
 - [x] 1.9 Long-inactivity job: `markDormantAccounts()` + `scripts/mark-dormant.ts` (`pnpm dormancy:sweep`) auto-transition active→장기 미로그인 (dormant); blocks login until an admin re-activates — Task 1D.
 
@@ -59,22 +59,22 @@
 
 ### 2FA — refs 1-4, 1-5, 1-6
 
-- [ ] 2.1 TOTP secret per admin (otplib); QR issuance page shown **only on first login**; re-issue by admin (email delivery)
-- [ ] 2.2 Custom login flow: password step → OTP step (6-digit) when site 2FA enabled; guide page; account-registered-phone requirement note
-- [ ] 2.3 Admin account buttons: reset 2FA device / reset OTP code (ref 1-16)
+- [x] 2.1 TOTP secret per admin (otplib); QR issuance page shown **only on first login**; re-issue by admin (email delivery) (Task 2B — `totpSecret` hidden+read:false field; `POST /api/2fa/enroll` returns QR+secret once, never after confirmation; admin reset re-issues + emails via `renderTwoFactorResetEmail`)
+- [~] 2.2 Custom login flow: password step → OTP step (6-digit) when site 2FA enabled; guide page; account-registered-phone requirement note (Task 2B — server `require2FA` beforeLogin gate is the enforcement; custom `admin.components.views.login` two-step form + conditional Account-Request/Find-ID/Find-PW links; `GET /api/2fa/guide` setup page. Polished form UI + account-registered-phone note are Phase 4 frontend — see task-2B-report.md)
+- [x] 2.3 Admin account buttons: reset 2FA device / reset OTP code (ref 1-16) (Task 2B — admin-only `resetTwoFactorDevice` / `regenerateTwoFactorSecret` action fields; clear/regenerate enrolment + email + accessLog)
 
 ### Network & session security — refs 1-20, 1-21, 1-7(#10)
 
-- [ ] 2.4 `adminIpRules` collection: applicant/affiliation/phone/memo, IP (wildcard `a.b.c.*`, bare-`*` warning, IPv6), allow classification, validity window, use toggle (inline flip)
-- [ ] 2.5 Default-deny middleware on admin routes: allowlist check + auto-block after validity expiry
-- [ ] 2.6 Idle auto-logout (default 30 min) with countdown + extend button in admin quick-menu
+- [x] 2.4 `adminIpRules` collection: applicant/affiliation/phone/memo, IP (wildcard `a.b.c.*`, bare-`*` warning, IPv6), allow classification, validity window, use toggle (inline flip)
+- [x] 2.5 Default-deny middleware on admin routes: allowlist check + auto-block after validity expiry
+- [x] 2.6 Idle auto-logout (default 30 min) with countdown + extend button in admin quick-menu
 
 ### Audit logging — refs 1-55, 3-1..3-3, 3-5..3-7
 
-- [ ] 2.7 `accessLogs` collection + hook/middleware capture: actor, menu, action verb, URL, IP, event ts, session-login ts; date+keyword search views
-- [ ] 2.8 `loginHistory`: success/fail, geo-IP overseas flag, UA mobile flag; masked-ID master list + pre-filtered views (overseas, mobile, failures); empty-state
-- [ ] 2.9 `permissionChangeLogs` (user↔role, w/ actor+IP) and `menuPermissionLogs` (per-save added/removed menu enumeration + role-member snapshot)
-- [ ] 2.10 PII masking utilities (IDs `ha***g`, names) applied to all log list views
+- [x] 2.7 `accessLogs` collection + hook/middleware capture: actor, menu, action verb, URL, IP, event ts, session-login ts; date+keyword search views (Task 2A — append-only/immutable collection + `recordAccess`/`auditCollection` mutation capture + login/logout; date/keyword search is Payload's built-in list filtering. Read/list auditing deferred — see task-2A-report.md)
+- [x] 2.8 `loginHistory`: success/fail, geo-IP overseas flag, UA mobile flag; masked-ID master list + pre-filtered views (overseas, mobile, failures); empty-state (Task 2A — one collection; overseas/mobile/failure are documented saved-filter queries; geo is a `geoLookup` stub defaulting domestic)
+- [x] 2.9 `permissionChangeLogs` (user↔role, w/ actor+IP) and `menuPermissionLogs` (per-save added/removed menu enumeration + role-member snapshot) (Task 2A — afterChange diff hooks on users/roles)
+- [x] 2.10 PII masking utilities (IDs `ha***g`, names) applied to all log list views (Task 2A — `src/lib/mask.ts` + `MaskedCell` on accessLogs.actorLabel, loginHistory.userLabel/loginId)
 
 **Exit criteria:** 2FA round-trip works; non-allowlisted IP blocked from admin; every admin action and login lands in the correct log with correct flags.
 

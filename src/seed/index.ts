@@ -7,6 +7,7 @@ import { sitesStep } from './steps/sites'
 import { codesStep } from './steps/codes'
 import { departmentsStep } from './steps/departments'
 import { passwordPoliciesStep } from './steps/passwordPolicies'
+import { adminIpRulesStep } from './steps/adminIpRules'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -27,6 +28,8 @@ export type { SeedStep } from './types'
  *  - `departmentsStep` has no dependency on any of the above but is
  *    registered last to match the brief's Part 3 ordering.
  *  - `passwordPoliciesStep` (Task 1D) has no dependencies; appended last.
+ *  - `adminIpRulesStep` (Task 2C) needs the admin site (`sitesStep`) and the
+ *    `system.ipAccessControl` menu (`adminMenusStep`); appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -36,6 +39,7 @@ export const seedSteps: SeedStep[] = [
   codesStep,
   departmentsStep,
   passwordPoliciesStep,
+  adminIpRulesStep,
 ]
 
 /**

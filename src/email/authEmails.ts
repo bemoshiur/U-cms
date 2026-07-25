@@ -56,6 +56,24 @@ export function renderForgotPasswordEmail(args: {
   })
 }
 
+/**
+ * 2FA reset notice (Task 2B Part 4, ref 1-16). Sent to a user after an admin
+ * clears or regenerates their Google-OTP enrolment, so they know their existing
+ * authenticator entry no longer works and that they must re-enrol on next login.
+ * Deliberately carries NO secret/QR (those are only ever shown in the
+ * authenticated enrolment flow, once) — this is purely a heads-up.
+ */
+export function renderTwoFactorResetEmail(): string {
+  return renderEmail({
+    preheader: 'Your Pulse CMS two-factor authentication has been reset.',
+    heading: 'Two-factor authentication reset',
+    bodyHtml:
+      '<p>An administrator has reset the two-factor authentication (Google OTP) on your Pulse CMS account.</p>' +
+      '<p>Your previous authenticator entry will no longer work. The next time you sign in, you will be guided through setting up two-factor authentication again with a new QR code.</p>' +
+      '<p>If you did not expect this, please contact an administrator immediately.</p>',
+  })
+}
+
 /** ID-recovery email HTML (ref 1-3 Find ID → email the account's login ID). */
 export function renderFindIdEmail(loginId: string): string {
   return renderEmail({

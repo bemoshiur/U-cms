@@ -1,7 +1,11 @@
 import type { CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../access/hasMenuAccess'
+import { auditCollection } from '../audit/auditCollection'
 import { preventSelfReferentialCycle } from './utils'
+
+/** Access-history audit hooks (Task 2A) for this collection's mutations. */
+const adminMenusAudit = auditCollection('system.menus')
 
 /**
  * A custom `validate` REPLACES Payload's default required-checking
@@ -98,5 +102,7 @@ export const AdminMenus: CollectionConfig = {
   ],
   hooks: {
     beforeChange: [preventSelfReferentialCycle('adminMenus')],
+    afterChange: [adminMenusAudit.afterChange],
+    afterDelete: [adminMenusAudit.afterDelete],
   },
 }

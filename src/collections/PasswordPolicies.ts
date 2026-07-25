@@ -1,6 +1,10 @@
 import type { CollectionConfig } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../access/hasMenuAccess'
+import { auditCollection } from '../audit/auditCollection'
+
+/** Access-history audit hooks (Task 2A) for this collection's mutations. */
+const passwordPoliciesAudit = auditCollection('system.passwordPolicies')
 
 /**
  * Legacy 비밀번호 작성 규칙 (Password Composition Rules) — ref 3-9; Task 1D
@@ -54,6 +58,10 @@ export const PasswordPolicies: CollectionConfig = {
     // the "most recently created active" selection orders by — no explicit
     // field needed.
   ],
+  hooks: {
+    afterChange: [passwordPoliciesAudit.afterChange],
+    afterDelete: [passwordPoliciesAudit.afterDelete],
+  },
 }
 
 /**

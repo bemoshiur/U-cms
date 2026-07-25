@@ -87,6 +87,14 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 7,
     collectionSlug: 'passwordPolicies',
   },
+  // Admin IP access control (Task 2C; refs 1-20/1-21).
+  {
+    menuKey: 'system.ipAccessControl',
+    name: 'Admin IP Access Control',
+    parentMenuKey: 'system',
+    order: 8,
+    collectionSlug: 'adminIpRules',
+  },
   { menuKey: 'content', name: 'Content Management', order: 2 },
   {
     menuKey: 'content.media',
@@ -94,6 +102,33 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     parentMenuKey: 'content',
     order: 1,
     collectionSlug: 'media',
+  },
+  // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
+  // logging backbone: access history, login history, and the two permission
+  // journals. `privacy.permissionLogs` gates BOTH permission-journal
+  // collections (permissionChangeLogs + menuPermissionLogs share one node, per
+  // the Task 2A brief); its `collectionSlug` points at the primary one.
+  { menuKey: 'privacy', name: 'Privacy Protection', order: 3 },
+  {
+    menuKey: 'privacy.accessLogs',
+    name: 'Access History',
+    parentMenuKey: 'privacy',
+    order: 1,
+    collectionSlug: 'accessLogs',
+  },
+  {
+    menuKey: 'privacy.loginHistory',
+    name: 'Login History',
+    parentMenuKey: 'privacy',
+    order: 2,
+    collectionSlug: 'loginHistory',
+  },
+  {
+    menuKey: 'privacy.permissionLogs',
+    name: 'Permission Change History',
+    parentMenuKey: 'privacy',
+    order: 3,
+    collectionSlug: 'permissionChangeLogs',
   },
 ]
 

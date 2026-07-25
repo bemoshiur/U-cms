@@ -1,6 +1,10 @@
 import type { CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../../access/hasMenuAccess'
+import { auditCollection } from '../../audit/auditCollection'
+
+/** Access-history audit hooks (Task 2A) for this collection's mutations. */
+const codeClassificationsAudit = auditCollection('system.codes.classifications')
 
 /**
  * A custom `validate` REPLACES Payload's default required-checking
@@ -60,4 +64,8 @@ export const CodeClassifications: CollectionConfig = {
       defaultValue: true,
     },
   ],
+  hooks: {
+    afterChange: [codeClassificationsAudit.afterChange],
+    afterDelete: [codeClassificationsAudit.afterDelete],
+  },
 }

@@ -3,6 +3,7 @@ import { APIError } from 'payload'
 
 import { submitAccountRequest } from '../accounts/accountRequest'
 import { findId, findPassword } from '../accounts/recovery'
+import { PUBLIC_ENDPOINT_NAMES, enforceRateLimit } from '../security/rateLimit'
 
 /**
  * Public (unauthenticated) REST endpoints for the admin-account lifecycle
@@ -14,6 +15,13 @@ import { findId, findPassword } from '../accounts/recovery'
  * functions in `src/accounts/*` (which are unit/int-tested directly against
  * the Local API), and shape the HTTP response. Each catches `APIError` to
  * return its status/message, and returns a generic 500 otherwise.
+ *
+ * Task 2D: each handler is rate-limited FIRST (before parsing the body or any
+ * account lookup) via `enforceRateLimit`, so an over-limit request gets a
+ * generic 429 that leaks nothing about whether an account exists — the 429 is
+ * strictly about volume and is applied ahead of the existence check, preserving
+ * the generic-response guarantee of find-id / find-password. See
+ * `src/security/rateLimit.ts` for the key model + per-instance caveat.
  *
  * NOTE: the custom login VIEW (ref 1-1's conditional "Account Request" /
  * "Find ID·PW" buttons) is deferred to the Phase 2 2FA login rework per the
@@ -40,6 +48,10 @@ export const accountRequestEndpoint: Endpoint = {
   path: '/account-request',
   method: 'post',
   handler: async (req) => {
+    const limited = enforceRateLimit(req, PUBLIC_ENDPOINT_NAMES.accountRequest)
+    if (limited) {
+      return limited
+    }
     try {
       const body = await readJson(req)
       const result = await submitAccountRequest(req.payload, body, req)
@@ -61,6 +73,10 @@ export const findIdEndpoint: Endpoint = {
   path: '/find-id',
   method: 'post',
   handler: async (req) => {
+    const limited = enforceRateLimit(req, PUBLIC_ENDPOINT_NAMES.findId)
+    if (limited) {
+      return limited
+    }
     try {
       const body = await readJson(req)
       const result = await findId(req.payload, body, req)
@@ -71,10 +87,26 @@ export const findIdEndpoint: Endpoint = {
   },
 }
 
+/**
+ * NOTE (two intentional rate-limit layers): this endpoint's `find-password`
+ * gate covers ALL requests here — including non-matching enumeration attempts
+ * that never reach `forgotPassword`. When a match IS found, `findPassword` calls
+ * `payload.forgotPassword`, which is ADDITIONALLY rate-limited at the operation
+ * level (`users/forgot-password`, via `rateLimitPasswordRecovery`) so the
+ * IP-guard-exempt built-in `/api/users/forgot-password` route + GraphQL mutation
+ * are covered too. The two keys are DISTINCT, so a matched request consumes one
+ * slot in each independent window — this does not halve a single limit; the
+ * layers deliberately measure different things (endpoint volume vs. reset-mail
+ * sends). See `rateLimitPasswordRecovery` in `src/security/rateLimit.ts`.
+ */
 export const findPasswordEndpoint: Endpoint = {
   path: '/find-password',
   method: 'post',
   handler: async (req) => {
+    const limited = enforceRateLimit(req, PUBLIC_ENDPOINT_NAMES.findPassword)
+    if (limited) {
+      return limited
+    }
     try {
       const body = await readJson(req)
       const result = await findPassword(req.payload, body, req)

@@ -1,6 +1,11 @@
 import type { CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../access/hasMenuAccess'
+import { auditCollection } from '../audit/auditCollection'
+import { journalRoleMenuChanges } from '../audit/permissionJournals'
+
+/** Access-history audit hooks (Task 2A) for this collection's mutations. */
+const rolesAudit = auditCollection('system.roles')
 
 /**
  * A custom `validate` REPLACES Payload's default required-checking
@@ -104,4 +109,10 @@ export const Roles: CollectionConfig = {
       },
     },
   ],
+  hooks: {
+    // Access-history audit + menu-permission-change journal (Task 2A, ref 3-3):
+    // journal the menuGrants diff, then record the mutation itself.
+    afterChange: [journalRoleMenuChanges, rolesAudit.afterChange],
+    afterDelete: [rolesAudit.afterDelete],
+  },
 }

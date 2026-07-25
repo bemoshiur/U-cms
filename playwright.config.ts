@@ -56,6 +56,16 @@ export default defineConfig({
     env: {
       SMTP_HOST: process.env.SMTP_HOST || 'localhost',
       SMTP_PORT: process.env.SMTP_PORT || '1025',
+      /*
+       * Task 2C: disable the admin IP guard for e2e. `next start` runs in
+       * production, so with an ARMED allowlist (e.g. after `pnpm seed`) and no
+       * `TRUSTED_PROXY_HOPS` configured, the guard would deliberately fail
+       * closed (503) — see src/security/adminIpEnforcement.ts. The e2e smoke
+       * test targets the admin UI, not IP enforcement (which is covered by the
+       * unit + int suites), so bypass it here for a deterministic run. An
+       * explicit value in the environment still wins.
+       */
+      ADMIN_IP_ENFORCEMENT: process.env.ADMIN_IP_ENFORCEMENT || 'off',
     },
   },
 })

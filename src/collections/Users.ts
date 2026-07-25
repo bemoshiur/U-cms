@@ -1,8 +1,34 @@
 import type { Access, CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccess, menuFieldAccess } from '../access/hasMenuAccess'
-import { blockInactiveLogin, enforcePasswordPolicy, recordLastLogin } from '../auth/userHooks'
+import { auditCollection } from '../audit/auditCollection'
+import { recordLoginFailure, recordLogout } from '../audit/authHooks'
+import { journalUserRoleChanges } from '../audit/permissionJournals'
+import {
+  blockInactiveLogin,
+  enforcePasswordPolicy,
+  enforcePasswordPolicyOnReset,
+  recordLastLogin,
+} from '../auth/userHooks'
+import { rateLimitPasswordRecovery } from '../security/rateLimit'
+import {
+  auditForcedLogout,
+  notifyTwoFactorReset,
+  processTwoFactorAdminReset,
+  require2FA,
+  revokeSessionsOnStatusChange,
+  throttleTwoFactorFailure,
+} from '../auth/twoFactorHooks'
 import { renderForgotPasswordEmail } from '../email/authEmails'
+
+/**
+ * Access-history audit hooks (Task 2A) for this collection's mutations.
+ * `linkActor: false` because a `users` mutation locks the mutated user row,
+ * which would deadlock the isolated audit write's `actor` FK when a user edits
+ * their own account (identity is still captured via `actorLabel`) — see
+ * `RecordAccessArgs.linkActor`.
+ */
+const usersAudit = auditCollection('system.admins', { linkActor: false })
 
 /**
  * `read`/`update` access for `users`: any authenticated user may always
@@ -118,13 +144,50 @@ export const Users: CollectionConfig = {
     },
   },
   hooks: {
+    // Task 2D — operation-level guards for the built-in password-recovery flows.
+    // `rateLimitPasswordRecovery` rate-limits BOTH `forgotPassword`
+    // (`POST /api/users/forgot-password` + GraphQL, which are IP-guard-exempt
+    // and bypass our custom /api/find-password endpoint) and `resetPassword`
+    // (`POST /api/users/reset-password`). Then `enforcePasswordPolicyOnReset`
+    // applies the ref-3-9 composition policy to the still-plaintext reset
+    // password (carried I-3). Both no-op for every unrelated operation. See
+    // their doc comments for why reset needs `beforeOperation`, not
+    // `beforeValidate`.
+    beforeOperation: [rateLimitPasswordRecovery, enforcePasswordPolicyOnReset],
     // Password composition policy (ref 3-9) — runs while `data.password` is
     // still plaintext, on both create and update. See `enforcePasswordPolicy`.
     beforeValidate: [enforcePasswordPolicy],
-    // Only `status: active` accounts may authenticate (ref 1-16).
-    beforeLogin: [blockInactiveLogin],
-    // Stamp `lastLoginAt` for the dormancy sweep (ref 1-16 장기 미로그인).
+    // Task 2B: process admin 2FA-reset actions (Part 4) and revoke live
+    // sessions when `status` flips to non-active (carried I-2, Part 5). Both
+    // mutate `data` in place — field write-access was already enforced in the
+    // earlier beforeValidate field phase, so these access-locked writes persist.
+    beforeChange: [processTwoFactorAdminReset, revokeSessionsOnStatusChange],
+    // Only `status: active` accounts may authenticate (ref 1-16), then the
+    // Google-OTP 2FA gate (Task 2B Part 3) — runs after the status gate so it
+    // only sees an already password-verified, active user.
+    beforeLogin: [blockInactiveLogin, require2FA],
+    // Stamp `lastLoginAt` (dormancy sweep) + write the `login` accessLog and a
+    // success `loginHistory` row (Task 2A, refs 1-55/3-7). See `recordLastLogin`.
     afterLogin: [recordLastLogin],
+    // Task 2A: journal any `roles` change (ref 3-2 권한 변경 이력), then record
+    // the mutation itself in the access history (ref 1-55/3-1). The login-time
+    // `lastLoginAt` stamp is suppressed via `context.skipAudit` to avoid
+    // double-logging alongside the dedicated `login` event. Task 2B appends the
+    // 2FA-reset notifier (email + audit) and the forced-logout auditor (I-2).
+    afterChange: [
+      journalUserRoleChanges,
+      usersAudit.afterChange,
+      notifyTwoFactorReset,
+      auditForcedLogout,
+    ],
+    afterDelete: [usersAudit.afterDelete],
+    // Failed-login capture (ref 3-6 로그인 실패 이력) — the only Payload 3.86 seam
+    // that fires on a rejected password (see `recordLoginFailure`). Task 2B
+    // appends the OTP brute-force throttle, which counts wrong codes here (post
+    // transaction-kill, so its user-row write can't deadlock).
+    afterError: [recordLoginFailure, throttleTwoFactorFailure],
+    // Logout capture (ref 1-55).
+    afterLogout: [recordLogout],
   },
   fields: [
     // Email added by default
@@ -246,6 +309,111 @@ export const Users: CollectionConfig = {
       admin: {
         readOnly: true,
         description: 'Last successful login. Maintained by the system; used by the dormancy sweep.',
+      },
+    },
+    // ── Google-OTP two-factor authentication (Task 2B; refs 1-4/1-5/1-6) ──
+    {
+      name: 'totpSecret',
+      type: 'text',
+      // SECURITY: the shared TOTP secret must NEVER reach any client. Two
+      // independent guards: `hidden` strips it from every read unless
+      // `showHiddenFields` is explicitly set, and `access.read: () => false`
+      // strips it for every non-`overrideAccess` caller regardless. Only the
+      // enrolment/login/reset server code reads it (overrideAccess +
+      // showHiddenFields) and writes it (overrideAccess or a server hook). It is
+      // verified absent from `/api/users/me` and the list view by the tests.
+      hidden: true,
+      access: {
+        read: () => false,
+        create: () => false,
+        update: () => false,
+      },
+    },
+    {
+      name: 'totpConfirmed',
+      type: 'checkbox',
+      defaultValue: false,
+      // System-managed: set true only by `verify-enroll`, cleared by an admin
+      // reset — never client-writable (overrideAccess/server hooks bypass this).
+      access: {
+        create: () => false,
+        update: () => false,
+      },
+      admin: {
+        readOnly: true,
+        description:
+          'Whether Google-OTP two-factor authentication is set up and confirmed for this account.',
+      },
+    },
+    {
+      name: 'totpEnrolledAt',
+      type: 'date',
+      access: {
+        create: () => false,
+        update: () => false,
+      },
+      admin: {
+        readOnly: true,
+        description: 'When two-factor authentication was confirmed. Null until first enrolment.',
+      },
+    },
+    // OTP brute-force throttle state (Task 2B fix). System-managed: incremented
+    // by `throttleTwoFactorFailure` (afterError) on a wrong code, reset by
+    // `require2FA` on a correct one. Admin-readable for support, never
+    // client-writable.
+    {
+      name: 'totpFailedAttempts',
+      type: 'number',
+      defaultValue: 0,
+      access: {
+        create: () => false,
+        update: () => false,
+      },
+      admin: {
+        readOnly: true,
+        description: 'Consecutive failed OTP codes. Resets on a successful code.',
+      },
+    },
+    {
+      name: 'totpLockUntil',
+      type: 'date',
+      access: {
+        create: () => false,
+        update: () => false,
+      },
+      admin: {
+        readOnly: true,
+        description:
+          'When set to a future time, the OTP step is locked out (too many failed codes). Auto-clears on expiry / a successful code.',
+      },
+    },
+    // Admin-only reset ACTIONS (ref 1-16). One-shot checkboxes gated on
+    // `system.admins`: checking one and saving performs the action (see
+    // `processTwoFactorAdminReset`) and the box resets itself to unchecked.
+    {
+      name: 'resetTwoFactorDevice',
+      type: 'checkbox',
+      defaultValue: false,
+      access: {
+        create: menuFieldAccess('system.admins'),
+        update: menuFieldAccess('system.admins'),
+      },
+      admin: {
+        description:
+          'Admin action: clear this user’s 2FA enrolment so they must set up a new device on next login. The user is emailed. Requires the system.admins grant.',
+      },
+    },
+    {
+      name: 'regenerateTwoFactorSecret',
+      type: 'checkbox',
+      defaultValue: false,
+      access: {
+        create: menuFieldAccess('system.admins'),
+        update: menuFieldAccess('system.admins'),
+      },
+      admin: {
+        description:
+          'Admin action: regenerate this user’s OTP secret (invalidates the old code immediately; user re-enrols with a new QR). The user is emailed. Requires the system.admins grant.',
       },
     },
   ],

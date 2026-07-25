@@ -84,6 +84,13 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
 }
 
 export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
+  // NOTE: `IF EXISTS` added by hand to the four `DROP CONSTRAINT` lines below
+  // (same correction as the 2A/2C down migrations). The preceding
+  // `DROP TABLE ... CASCADE` statements already remove each table's
+  // `payload_locked_documents_rels_*_fk` from the surviving
+  // `payload_locked_documents_rels`, so the un-guarded explicit drops threw
+  // `constraint ... does not exist` and broke migrate:down / refresh / reset.
+  // Guarding makes the drops idempotent (and the whole down safe to re-run).
   await db.execute(sql`
    ALTER TABLE "departments" DISABLE ROW LEVEL SECURITY;
   ALTER TABLE "code_classifications" DISABLE ROW LEVEL SECURITY;
@@ -93,14 +100,14 @@ export async function down({ db, payload, req }: MigrateDownArgs): Promise<void>
   DROP TABLE "code_classifications" CASCADE;
   DROP TABLE "code_groups" CASCADE;
   DROP TABLE "codes" CASCADE;
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_departments_fk";
-  
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_code_classifications_fk";
-  
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_code_groups_fk";
-  
-  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_codes_fk";
-  
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_departments_fk";
+
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_code_classifications_fk";
+
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_code_groups_fk";
+
+  ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT IF EXISTS "payload_locked_documents_rels_codes_fk";
+
   DROP INDEX "payload_locked_documents_rels_departments_id_idx";
   DROP INDEX "payload_locked_documents_rels_code_classifications_id_idx";
   DROP INDEX "payload_locked_documents_rels_code_groups_id_idx";
