@@ -1,5 +1,6 @@
 import type { PayloadRequest } from 'payload'
 
+import { branding } from '../branding'
 import { renderEmail } from './renderEmail'
 
 /**
@@ -39,10 +40,10 @@ export function renderMemberForgotPasswordEmail(args: {
   const resetUrl = `${serverURL}/reset-password/${token ?? ''}`
 
   return renderEmail({
-    preheader: 'Reset your Pulse CMS member password.',
+    preheader: `Reset your ${branding.productName} member password.`,
     heading: 'Reset your password',
     bodyHtml:
-      '<p>We received a request to reset the password for your Pulse CMS member account.</p>' +
+      `<p>We received a request to reset the password for your ${branding.productName} member account.</p>` +
       '<p>Click the button below to choose a new password. If you did not request this, you can safely ignore this email — your password will not change.</p>',
     ctaLabel: 'Reset password',
     ctaUrl: resetUrl,
@@ -52,10 +53,10 @@ export function renderMemberForgotPasswordEmail(args: {
 /** Member ID-recovery email — emails the account's login ID (ref 1-3, member variant). */
 export function renderMemberFindIdEmail(loginId: string): string {
   return renderEmail({
-    preheader: 'Your Pulse CMS member login ID.',
+    preheader: `Your ${branding.productName} member login ID.`,
     heading: 'Your login ID',
     bodyHtml:
-      '<p>You requested to recover the login ID for your Pulse CMS member account.</p>' +
+      `<p>You requested to recover the login ID for your ${branding.productName} member account.</p>` +
       `<p>Your login ID is: <strong>${escapeHtml(loginId)}</strong></p>` +
       '<p>If you did not request this, you can safely ignore this email.</p>',
   })

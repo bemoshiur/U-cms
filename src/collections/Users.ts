@@ -20,6 +20,7 @@ import {
   revokeSessionsOnStatusChange,
   throttleTwoFactorFailure,
 } from '../auth/twoFactorHooks'
+import { branding } from '../branding'
 import { renderForgotPasswordEmail } from '../email/authEmails'
 
 /**
@@ -145,7 +146,7 @@ export const Users: CollectionConfig = {
     lockTime: 10 * 60 * 1000, // 10 minutes
     // Password recovery email (ref 1-3 Find PW) uses the branded template.
     forgotPassword: {
-      generateEmailSubject: () => 'Reset your Pulse CMS password',
+      generateEmailSubject: () => `Reset your ${branding.productName} password`,
       generateEmailHTML: (args) => renderForgotPasswordEmail(args ?? {}),
     },
   },

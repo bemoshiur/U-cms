@@ -1,6 +1,7 @@
 import type { Payload, PayloadRequest, Where } from 'payload'
 import { APIError } from 'payload'
 
+import { branding } from '../branding'
 import { getPublicSiteId } from '../site/config'
 import { renderMemberFindIdEmail } from '../email/memberEmails'
 
@@ -80,7 +81,7 @@ export async function findMemberId(
   if (member?.loginId) {
     await payload.sendEmail({
       to: email,
-      subject: 'Your Pulse CMS member login ID',
+      subject: `Your ${branding.productName} member login ID`,
       html: renderMemberFindIdEmail(String(member.loginId)),
     })
     return { message: GENERIC_MEMBER_FIND_ID_MESSAGE, emailed: true }

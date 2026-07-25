@@ -8,6 +8,7 @@ import {
 } from '../access/memberAccess'
 import { blockInactiveMemberLogin, enforceMemberPasswordPolicy } from '../auth/memberHooks'
 import { tenantMembershipGuard } from '../access/tenantAccess'
+import { branding } from '../branding'
 import { renderMemberForgotPasswordEmail } from '../email/memberEmails'
 import { REQUIRED_TERMS_CATEGORIES } from '../members/terms'
 
@@ -73,7 +74,7 @@ export const Members: CollectionConfig = {
     maxLoginAttempts: 5,
     lockTime: 10 * 60 * 1000, // 10 minutes
     forgotPassword: {
-      generateEmailSubject: () => 'Reset your Pulse CMS member password',
+      generateEmailSubject: () => `Reset your ${branding.productName} member password`,
       generateEmailHTML: (args) => renderMemberForgotPasswordEmail(args ?? {}),
     },
   },

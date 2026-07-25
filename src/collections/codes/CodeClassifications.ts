@@ -25,7 +25,7 @@ const validateClassificationCode: TextFieldSingleValidation = (value, { required
 /**
  * Legacy 공통 분류 코드관리 (Common Classification Code Management) — refs
  * 1-25/1-26. One classification defines a per-sub-system namespace for
- * `codeGroups` (e.g. "SYS" for Pulse CMS's own baseline codes). Global (not
+ * `codeGroups` (e.g. "SYS" for U-CMS's own baseline codes). Global (not
  * tenant-scoped) — see docs/planning/development-plan.md §2.1.
  */
 export const CodeClassifications: CollectionConfig = {

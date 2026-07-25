@@ -4,7 +4,7 @@ import type { SeedStep } from '../types'
 
 /**
  * Baseline code sets from the legacy code specification (ref 1-74) that
- * Pulse CMS's own code needs right away. Kept as typed constants so tests
+ * U-CMS's own code needs right away. Kept as typed constants so tests
  * assert against the same source of truth rather than duplicating literals
  * (mirrors `SEED_SITES` in `src/seed/steps/sites.ts`).
  *
@@ -19,7 +19,7 @@ export const SEED_CLASSIFICATION = {
   code: 'SYS',
   name: 'System codes',
   description:
-    'Baseline system-level codes for Pulse CMS (accessibility validation, approval workflow, board field types). See docs/analysis/feature-inventory.md ref 1-74.',
+    'Baseline system-level codes for U-CMS (accessibility validation, approval workflow, board field types). See docs/analysis/feature-inventory.md ref 1-74.',
 } as const
 
 export const SEED_CODE_GROUPS = [

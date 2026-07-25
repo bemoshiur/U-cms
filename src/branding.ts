@@ -1,5 +1,5 @@
 /**
- * Single source of truth for Pulse CMS's product identity.
+ * Single source of truth for U-CMS's product identity.
  *
  * Every other file that needs the product name, company name, tagline, support
  * email, brand colors, or marketing URLs should import from this module rather
@@ -33,7 +33,7 @@ export type Branding = {
 }
 
 export const branding: Branding = {
-  productName: 'Pulse CMS',
+  productName: 'U-CMS',
   companyName: 'Public Pulse',
   tagline: 'Manage every site from one place',
   supportEmail: 'support@publicpulse.com.bd',

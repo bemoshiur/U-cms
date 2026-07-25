@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import React from 'react'
 
+import { branding } from '@/branding'
 import type { Media, Site } from '@/payload-types'
 import type { CurrentMember } from '@/site/member'
 import type { GuideMenu, NavNode, ResolvedLink } from '@/site/nav'
@@ -46,7 +47,7 @@ export function SiteHeader({
   member: CurrentMember
 }) {
   const logo = logoMedia(site)
-  const siteName = site?.name ?? 'Pulse CMS'
+  const siteName = site?.name ?? branding.productName
   const guides = orderedGuideMenus(topGuides)
 
   return (

@@ -1,5 +1,6 @@
 import type { PayloadRequest } from 'payload'
 
+import { branding } from '../branding'
 import { renderEmail } from './renderEmail'
 
 /**
@@ -46,10 +47,10 @@ export function renderForgotPasswordEmail(args: {
   const resetUrl = `${serverURL}/admin/reset/${token ?? ''}`
 
   return renderEmail({
-    preheader: 'Reset your Pulse CMS administrator password.',
+    preheader: `Reset your ${branding.productName} administrator password.`,
     heading: 'Reset your password',
     bodyHtml:
-      '<p>We received a request to reset the password for your Pulse CMS administrator account.</p>' +
+      `<p>We received a request to reset the password for your ${branding.productName} administrator account.</p>` +
       '<p>Click the button below to choose a new password. If you did not request this, you can safely ignore this email — your password will not change.</p>',
     ctaLabel: 'Reset password',
     ctaUrl: resetUrl,
@@ -65,10 +66,10 @@ export function renderForgotPasswordEmail(args: {
  */
 export function renderTwoFactorResetEmail(): string {
   return renderEmail({
-    preheader: 'Your Pulse CMS two-factor authentication has been reset.',
+    preheader: `Your ${branding.productName} two-factor authentication has been reset.`,
     heading: 'Two-factor authentication reset',
     bodyHtml:
-      '<p>An administrator has reset the two-factor authentication (Google OTP) on your Pulse CMS account.</p>' +
+      `<p>An administrator has reset the two-factor authentication (Google OTP) on your ${branding.productName} account.</p>` +
       '<p>Your previous authenticator entry will no longer work. The next time you sign in, you will be guided through setting up two-factor authentication again with a new QR code.</p>' +
       '<p>If you did not expect this, please contact an administrator immediately.</p>',
   })
@@ -77,10 +78,10 @@ export function renderTwoFactorResetEmail(): string {
 /** ID-recovery email HTML (ref 1-3 Find ID → email the account's login ID). */
 export function renderFindIdEmail(loginId: string): string {
   return renderEmail({
-    preheader: 'Your Pulse CMS administrator login ID.',
+    preheader: `Your ${branding.productName} administrator login ID.`,
     heading: 'Your login ID',
     bodyHtml:
-      '<p>You requested to recover the login ID for your Pulse CMS administrator account.</p>' +
+      `<p>You requested to recover the login ID for your ${branding.productName} administrator account.</p>` +
       `<p>Your login ID is: <strong>${escapeHtml(loginId)}</strong></p>` +
       '<p>If you did not request this, you can safely ignore this email.</p>',
   })

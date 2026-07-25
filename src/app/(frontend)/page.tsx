@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import React from 'react'
 
+import { branding } from '@/branding'
 import { getCurrentMember } from '@/site/member'
 import { buildNav } from '@/site/nav'
 import { getActiveSite, getActiveSiteMenus } from '@/site/rsc'
@@ -31,7 +32,7 @@ export default async function HomePage() {
   return (
     <div className="home">
       <section className="hero" aria-labelledby="hero-heading">
-        <p className="hero__eyebrow">{site?.name ?? 'Pulse CMS'}</p>
+        <p className="hero__eyebrow">{site?.name ?? branding.productName}</p>
         <h1 id="hero-heading" className="hero__title">
           {site ? `Welcome to ${site.name}` : 'Welcome'}
         </h1>

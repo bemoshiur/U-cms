@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 // Matches `branding.productName` / the admin `titleSuffix` in
 // src/payload.config.ts (` — ${branding.productName}`).
-const BRANDED_TITLE_SUFFIX = 'Pulse CMS'
+const BRANDED_TITLE_SUFFIX = 'U-CMS'
 
 test.describe('Admin smoke', () => {
   test('/admin responds, is branded, and renders an auth form', async ({ page }) => {
