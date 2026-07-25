@@ -22,15 +22,18 @@ import type { Post } from '../payload-types'
  *      resolving the file by attachment reference — the direct storage path is
  *      never exposed.
  *
- * ## SECURITY — the /api/media/file gap (flagged, not closed here)
+ * ## SECURITY — the /api/media/file gap (interim gate applied; full fix Phase 4)
  *
- * `media.read` is public and `/api/media/file/*` is exempt from the Task 2C IP
- * guard (the public frontend loads `<img>`s from it). So today a board
- * attachment is ALSO reachable directly at `/api/media/file/<filename>`,
- * bypassing this endpoint's access checks. Board-attachment privacy is only
- * FULLY closed once (a) downloads route exclusively through here AND (b) a
- * later hardening pass gates `/api/media/file` for board-owned uploads (e.g.
- * an `media.read` access fn / signed URLs). Documented in task-3B-report.md.
+ * Previously `media.read` was public AND `/api/media/file/*` was IP-exempt, so a
+ * board attachment was reachable UNAUTHENTICATED at `/api/media/file/<filename>`,
+ * bypassing this endpoint's access checks. B2 (phase-3-final-review §2) closed
+ * the unauthenticated vector: `media.read` now requires `req.user` and the file
+ * route is no longer IP-exempt (see src/collections/Media.ts +
+ * src/security/adminIpEnforcement.ts). Board-attachment privacy is still only
+ * FULLY closed once (a) downloads route exclusively through here AND (b) the
+ * Phase-4 T-zero pass makes `media.read` tenant/secret-aware (or moves board
+ * uploads to signed URLs / a scoped collection). Until then, the
+ * cross-tenant-among-authenticated-admins vector remains open.
  *
  * ## IP guard / public reachability (Phase-4 seam)
  *

@@ -106,6 +106,21 @@ export const WebContents: CollectionConfig = {
     read: tenantScopedMenuAccess(WEB_CONTENTS_MENU_KEY),
     update: tenantScopedMenuAccess(WEB_CONTENTS_MENU_KEY),
     delete: tenantScopedMenuAccess(WEB_CONTENTS_MENU_KEY),
+    // VERSION READS — MUST be scoped, and on the VERSION field path, not the
+    // top-level `tenant` (B1, phase-3-final-review §2). `WebContents` is the
+    // ONLY tenant-scoped collection with versions enabled, so it is the only
+    // one that needs `readVersions`. Payload gates `findVersions` /
+    // `findVersionByID` on this SEPARATE `readVersions` key; it has no core
+    // default, and the multi-tenant plugin's wrapper degrades to
+    // `Boolean(req.user)` when we don't define it (because
+    // `userHasAccessToAllTenants: () => true` makes the wrapper a pass-through —
+    // see src/access/tenantAccess.ts), i.e. every authenticated admin would
+    // read every tenant's DRAFT + historical snapshots. Version queries resolve
+    // fields UNDER the snapshot, so the `Where` key must be `version.tenant`
+    // (NOT `tenant` — a top-level key does not exist on the version row and
+    // would silently re-leak). See tests/int/webContentVersions.int.spec.ts,
+    // which fails both if this line is removed AND if it uses `tenant`.
+    readVersions: tenantScopedMenuAccess(WEB_CONTENTS_MENU_KEY, 'version.tenant'),
   },
   endpoints: [webContentDiffEndpoint],
   fields: [

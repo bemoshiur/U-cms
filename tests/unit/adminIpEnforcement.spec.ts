@@ -101,9 +101,12 @@ describe('resolveClientIp (trusted-proxy model)', () => {
   })
 })
 
-describe('classifyAdminPath (media exemption scoped to the file route)', () => {
-  it('exempts /api/media/file/* but GUARDS the media collection REST endpoints', () => {
-    expect(classifyAdminPath('/api/media/file/logo.png')).toBe('exempt')
+describe('classifyAdminPath (media is fully guarded — B2)', () => {
+  it('GUARDS /api/media/file/* AND the media collection REST endpoints', () => {
+    // B2 (phase-3-final-review §2): the file route is no longer exempt — it
+    // held secret/cross-tenant board attachments. Phase 4 will re-open a
+    // deliberate public path with a tenant/secret-aware split.
+    expect(classifyAdminPath('/api/media/file/logo.png')).toBe('guard')
     expect(classifyAdminPath('/api/media')).toBe('guard')
     expect(classifyAdminPath('/api/media/123')).toBe('guard')
   })
