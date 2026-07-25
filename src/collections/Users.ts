@@ -10,7 +10,7 @@ import {
   enforcePasswordPolicyOnReset,
   recordLastLogin,
 } from '../auth/userHooks'
-import { rateLimitPasswordReset } from '../security/rateLimit'
+import { rateLimitPasswordRecovery } from '../security/rateLimit'
 import {
   auditForcedLogout,
   notifyTwoFactorReset,
@@ -144,13 +144,16 @@ export const Users: CollectionConfig = {
     },
   },
   hooks: {
-    // Task 2D — operation-level guards for the built-in password-reset flow
-    // (`POST /api/users/reset-password`): first a volume rate-limit
-    // (`rateLimitPasswordReset`), then the ref-3-9 composition policy on the
-    // still-plaintext reset password (`enforcePasswordPolicyOnReset`, carried
-    // I-3). Both no-op for every non-reset operation. See their doc comments
-    // for why the reset flow needs `beforeOperation` and not `beforeValidate`.
-    beforeOperation: [rateLimitPasswordReset, enforcePasswordPolicyOnReset],
+    // Task 2D — operation-level guards for the built-in password-recovery flows.
+    // `rateLimitPasswordRecovery` rate-limits BOTH `forgotPassword`
+    // (`POST /api/users/forgot-password` + GraphQL, which are IP-guard-exempt
+    // and bypass our custom /api/find-password endpoint) and `resetPassword`
+    // (`POST /api/users/reset-password`). Then `enforcePasswordPolicyOnReset`
+    // applies the ref-3-9 composition policy to the still-plaintext reset
+    // password (carried I-3). Both no-op for every unrelated operation. See
+    // their doc comments for why reset needs `beforeOperation`, not
+    // `beforeValidate`.
+    beforeOperation: [rateLimitPasswordRecovery, enforcePasswordPolicyOnReset],
     // Password composition policy (ref 3-9) — runs while `data.password` is
     // still plaintext, on both create and update. See `enforcePasswordPolicy`.
     beforeValidate: [enforcePasswordPolicy],

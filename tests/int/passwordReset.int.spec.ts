@@ -7,7 +7,7 @@ import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
 import { rolesStep } from '@/seed/steps/roles'
 import { superAdminStep } from '@/seed/steps/superAdmin'
-import { resetPublicRateLimiter } from '@/security/rateLimit'
+import { GENERIC_RATE_LIMITED_MESSAGE, resetPublicRateLimiter } from '@/security/rateLimit'
 
 /**
  * Task 2D Part 1 — password policy on the REAL reset flow (carried I-3), driven
@@ -50,6 +50,19 @@ async function statusOfRejection(fn: () => Promise<unknown>): Promise<number | u
     return undefined
   } catch (err) {
     return (err as { status?: number }).status
+  }
+}
+
+/** Captures {status,message} of a rejection (or undefined on success). */
+async function rejectionOf(
+  fn: () => Promise<unknown>,
+): Promise<{ status?: number; message?: string } | undefined> {
+  try {
+    await fn()
+    return undefined
+  } catch (err) {
+    const e = err as { status?: number; message?: string }
+    return { status: e.status, message: e.message }
   }
 }
 
@@ -187,6 +200,65 @@ describe('password reset flow enforcement + rate limiting (Task 2D)', () => {
         expect(await statusOfRejection(attempt)).toBe(403)
         expect(await statusOfRejection(attempt)).toBe(403)
         expect(await statusOfRejection(attempt)).toBe(429)
+      } finally {
+        if (prevMax === undefined) delete process.env.PUBLIC_RATE_LIMIT_MAX
+        else process.env.PUBLIC_RATE_LIMIT_MAX = prevMax
+        resetPublicRateLimiter()
+      }
+    })
+  })
+
+  describe('Part 2 (security-review fix) — the built-in forgot-password operation is rate limited', () => {
+    it('rate-limits forgotPassword after the window; a single legitimate request still works', async () => {
+      const prevMax = process.env.PUBLIC_RATE_LIMIT_MAX
+      process.env.PUBLIC_RATE_LIMIT_MAX = '3'
+      resetPublicRateLimiter()
+      try {
+        const { email } = await makeActiveUser()
+        const attempt = () =>
+          payload.forgotPassword({ collection: 'users', data: { email }, disableEmail: true })
+
+        // A single legitimate recovery request works (returns a reset token).
+        const firstToken = await attempt()
+        expect(firstToken).toBeTruthy()
+
+        // Exhaust the remaining window (max=3 → two more allowed), then the
+        // 4th hit — which drives the SAME forgotPasswordOperation the built-in
+        // /api/users/forgot-password route + GraphQL mutation use — is blocked.
+        expect(await statusOfRejection(attempt)).toBeUndefined()
+        expect(await statusOfRejection(attempt)).toBeUndefined()
+
+        const blocked = await rejectionOf(attempt)
+        expect(blocked?.status).toBe(429)
+        // Generic message — the 429 fires before the user lookup, so it can't
+        // signal whether the queried account exists.
+        expect(blocked?.message).toBe(GENERIC_RATE_LIMITED_MESSAGE)
+      } finally {
+        if (prevMax === undefined) delete process.env.PUBLIC_RATE_LIMIT_MAX
+        else process.env.PUBLIC_RATE_LIMIT_MAX = prevMax
+        resetPublicRateLimiter()
+      }
+    })
+
+    it('the 429 does not leak account existence: a non-existent email is blocked identically', async () => {
+      const prevMax = process.env.PUBLIC_RATE_LIMIT_MAX
+      process.env.PUBLIC_RATE_LIMIT_MAX = '2'
+      resetPublicRateLimiter()
+      try {
+        // No such account. Allowed calls return null silently (Payload's own
+        // enumeration-safety); once over the limit the SAME generic 429 is
+        // raised — identical to the matching-account case above.
+        const attempt = () =>
+          payload.forgotPassword({
+            collection: 'users',
+            data: { email: uniqueEmail('ghost') },
+            disableEmail: true,
+          })
+        expect(await statusOfRejection(attempt)).toBeUndefined()
+        expect(await statusOfRejection(attempt)).toBeUndefined()
+        const blocked = await rejectionOf(attempt)
+        expect(blocked?.status).toBe(429)
+        expect(blocked?.message).toBe(GENERIC_RATE_LIMITED_MESSAGE)
       } finally {
         if (prevMax === undefined) delete process.env.PUBLIC_RATE_LIMIT_MAX
         else process.env.PUBLIC_RATE_LIMIT_MAX = prevMax

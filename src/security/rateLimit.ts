@@ -12,8 +12,10 @@ import { resolveClientIp } from './adminIpEnforcement'
  *
  * It deliberately does NOT touch authenticated admin traffic or the IP guard:
  * it is wired only into the three custom public endpoints
- * (`src/endpoints/publicAccountEndpoints.ts`) and, via `rateLimitPasswordReset`,
- * the `resetPassword` operation.
+ * (`src/endpoints/publicAccountEndpoints.ts`) and, via
+ * `rateLimitPasswordRecovery`, the built-in `forgotPassword` + `resetPassword`
+ * operations (so the IP-guard-exempt `/api/users/forgot-password` route and the
+ * GraphQL mutation are covered too, not just our custom endpoint).
  *
  * ## Fixed-window algorithm
  *
@@ -66,6 +68,7 @@ export const PUBLIC_ENDPOINT_NAMES = {
   accountRequest: 'account-request',
   findId: 'find-id',
   findPassword: 'find-password',
+  forgotPassword: 'users/forgot-password',
   resetPassword: 'users/reset-password',
 } as const
 
@@ -252,26 +255,58 @@ export function enforceRateLimit(
 }
 
 /**
- * `beforeOperation` hook rate-limiting Payload's built-in `resetPassword`
- * (served at `POST /api/users/reset-password`). This is the one public flow
- * without a custom endpoint of ours, so it is guarded at the operation seam
- * instead: a throw here aborts before the token lookup / password hashing.
+ * Operation labels for the two built-in password-recovery operations that have
+ * no custom endpoint of ours, so they are guarded at the operation seam instead.
+ */
+const RECOVERY_OPERATION_ENDPOINTS: Partial<Record<string, string>> = {
+  forgotPassword: PUBLIC_ENDPOINT_NAMES.forgotPassword,
+  resetPassword: PUBLIC_ENDPOINT_NAMES.resetPassword,
+}
+
+/**
+ * `beforeOperation` hook rate-limiting Payload's built-in password-recovery
+ * operations — `forgotPassword` (`POST /api/users/forgot-password` + the
+ * `forgotPasswordUser` GraphQL mutation) and `resetPassword`
+ * (`POST /api/users/reset-password`). Both operations run their
+ * `beforeOperation` collection hooks at the very top (verified in
+ * `node_modules/payload/dist/auth/operations/{forgotPassword,resetPassword}.js`),
+ * so a throw here aborts BEFORE the account lookup / token check / password
+ * hashing — which also keeps the 429 generic (no account-existence leak).
  *
- * Fires only for `resetPassword` (a no-op for every other operation). On a real
- * HTTP request `req.headers` carries the forwarding headers, so the same
+ * ## Why guarding the OPERATION (not just our endpoint) is required
+ *
+ * The built-in `forgot-password` route and the GraphQL mutation are exempt from
+ * the admin IP guard (they must stay reachable for recovery — see
+ * `EXEMPT_API_PREFIXES` in `adminIpEnforcement.ts`) and drive
+ * `forgotPasswordOperation` DIRECTLY, bypassing our `/api/find-password`
+ * endpoint. Rate-limiting only the custom endpoint would leave the
+ * "mail-bomb a victim's inbox" vector (Part 2's named goal) wide open via the
+ * built-in route. Guarding the operation closes it for every entry point at
+ * once — the built-in route, the GraphQL mutation, and our own `findPassword`.
+ *
+ * ## Deliberate two-layer keying on the find-password path (NOT double-limiting)
+ *
+ * A request through our `/api/find-password` endpoint counts against TWO
+ * DISTINCT buckets: `find-password` (the endpoint gate, which also covers
+ * NON-matching enumeration attempts that never reach `forgotPassword`) and
+ * `users/forgot-password` (this operation gate, which additionally covers the
+ * built-in route + GraphQL). Because the keys differ, one request consumes one
+ * slot in each independent window — it does NOT halve a single limit. The two
+ * layers measure different things (endpoint volume vs. actual reset-mail sends)
+ * and are intentionally kept separate; see the endpoint doc for the rationale.
+ *
+ * On a real HTTP request `req.headers` carries the forwarding headers, so the
  * trusted-proxy keying applies; a Local-API call (no headers) shares the
  * `untrusted` bucket. The 429 is surfaced as an {@link APIError}; unlike the
  * custom endpoints it cannot attach a `Retry-After` HEADER (APIError carries no
  * headers), but the 429 status + generic message are still returned.
  */
-export const rateLimitPasswordReset: CollectionBeforeOperationHook = (arg) => {
-  if (arg.operation !== 'resetPassword') {
+export const rateLimitPasswordRecovery: CollectionBeforeOperationHook = (arg) => {
+  const endpoint = RECOVERY_OPERATION_ENDPOINTS[arg.operation]
+  if (!endpoint) {
     return
   }
-  const decision = checkPublicRateLimit(
-    arg.req as { headers?: Headers },
-    PUBLIC_ENDPOINT_NAMES.resetPassword,
-  )
+  const decision = checkPublicRateLimit(arg.req as { headers?: Headers }, endpoint)
   if (!decision.allowed) {
     throw new APIError(GENERIC_RATE_LIMITED_MESSAGE, 429)
   }

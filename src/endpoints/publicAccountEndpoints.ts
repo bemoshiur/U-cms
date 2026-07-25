@@ -87,6 +87,18 @@ export const findIdEndpoint: Endpoint = {
   },
 }
 
+/**
+ * NOTE (two intentional rate-limit layers): this endpoint's `find-password`
+ * gate covers ALL requests here — including non-matching enumeration attempts
+ * that never reach `forgotPassword`. When a match IS found, `findPassword` calls
+ * `payload.forgotPassword`, which is ADDITIONALLY rate-limited at the operation
+ * level (`users/forgot-password`, via `rateLimitPasswordRecovery`) so the
+ * IP-guard-exempt built-in `/api/users/forgot-password` route + GraphQL mutation
+ * are covered too. The two keys are DISTINCT, so a matched request consumes one
+ * slot in each independent window — this does not halve a single limit; the
+ * layers deliberately measure different things (endpoint volume vs. reset-mail
+ * sends). See `rateLimitPasswordRecovery` in `src/security/rateLimit.ts`.
+ */
 export const findPasswordEndpoint: Endpoint = {
   path: '/find-password',
   method: 'post',
