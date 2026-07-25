@@ -82,37 +82,37 @@
 
 ### Board engine — refs 1-27..1-35, 1-77, 1-78, 2-5..2-8
 
-- [ ] 3.1 `boardTypes` collection (auto PG-code, name, description ≤800 chars) + seed built-ins (integrated, photo, answer/Q&A, FAQ, attachment, extended)
-- [ ] 3.2 `boards` collection — basic settings: auto bbsId, name, kind (integrated=fixed type/skin vs custom), type rel, skin, sort, admin-only editor flag, comments, excel, user-post, New-icon window, list/page counts, top/bottom HTML blocks
-- [ ] 3.3 Boards — attachment settings: on/off unlocks max count, max size (per-file), lowercase comma-separated extension whitelist
-- [ ] 3.4 Boards — category tab: up to 3 classification-code slots (code-search popup only) each w/ title, HTML attrs, style, 5 flags (use/required/list/detail/search)
-- [ ] 3.5 Boards — field-settings grid: built-in fields + extraField1-4 (varchar-equivalent, chosen input type) + extraContent1-4 (text), each w/ label/attrs/style + 5 flags
-- [ ] 3.6 Boards — independent list-column and detail-field ordering (drag + up/down)
-- [ ] 3.7 `posts` collection honoring board config: pin flag (+period, pinned sort first), title, author, dept/team, Lexical content (Editor/HTML/TEXT), categories, extra fields, view count, per-site scope
-- [ ] 3.8 Board-kind behaviors: Q&A answer threads, FAQ rendering, gallery w/ representative thumbnail + card grid, attachment board w/ per-file copyable managed URLs (fixed board, ref 1-81)
-- [ ] 3.9 Managed secure download endpoint (access-controlled, download-counted) replacing `fileDown.do`
-- [ ] 3.10 Board list/detail admin views: multi-criteria search (category+codes+period+field+keyword), Excel export, configurable header notice text
+- [x] 3.1 `boardTypes` collection (auto PG-code, name, description ≤800 chars) + seed built-ins (integrated, photo, answer/Q&A, FAQ, attachment, extended)
+- [x] 3.2 `boards` collection — basic settings: auto bbsId, name, kind (integrated=fixed type/skin vs custom), type rel, skin, sort, admin-only editor flag, comments, excel, user-post, New-icon window, list/page counts, top/bottom HTML blocks
+- [x] 3.3 Boards — attachment settings: on/off unlocks max count, max size (per-file), lowercase comma-separated extension whitelist
+- [x] 3.4 Boards — category tab: up to 3 classification-code slots (code-search popup only) each w/ title, HTML attrs, style, 5 flags (use/required/list/detail/search)
+- [x] 3.5 Boards — field-settings grid: built-in fields + extraField1-4 (varchar-equivalent, chosen input type) + extraContent1-4 (text), each w/ label/attrs/style + 5 flags
+- [x] 3.6 Boards — independent list-column and detail-field ordering (drag + up/down)
+- [x] 3.7 `posts` collection honoring board config: pin flag (+period, pinned sort first), title, author, dept/team, Lexical content (Editor/HTML/TEXT), categories, extra fields, view count, per-site scope
+- [x] 3.8 Board-kind behaviors: Q&A answer threads, FAQ rendering, gallery w/ representative thumbnail + card grid, attachment board w/ per-file copyable managed URLs (fixed board, ref 1-81)
+- [x] 3.9 Managed secure download endpoint (access-controlled, download-counted) replacing `fileDown.do`
+- [x] 3.10 Board list/detail admin views: multi-criteria search (category+codes+period+field+keyword), Excel export, configurable header notice text
 
 ### Word filters — refs 1-38..1-41
 
-- [ ] 3.11 `profanityWords`: use-flag, bulk delete; hook blocks post save containing active words
-- [ ] 3.12 `memberBannedWords`: scope (common/loginId/password); hook blocks member signup accordingly
+- [x] 3.11 `profanityWords`: use-flag, bulk delete; hook blocks post save containing active words
+- [x] 3.12 `memberBannedWords`: scope (common/loginId/password); hook blocks member signup accordingly
 
 ### Display components — refs 1-45..1-53, 2-1
 
-- [ ] 3.13 `notificationAreas`: image (490×245 rec), title, internal-picker/external link (http validation), new/current window, hour-precision exposure window, 4-way ordering, inline use toggle
-- [ ] 3.14 `popups`: image (160×140 rec), geometry (w/h/top/left px), scrollbar flag, close-for-a-day cookie, exposure window
-- [ ] 3.15 `banners`: image (196×70 rec), link mode, exposure window, 4-way ordering
-- [ ] 3.16 `adminNotices` board (pin period, 5 attachments png/gif/jpg w/ per-file description)
-- [ ] 3.17 Guide menus (top/bottom): max 5 top items after fixed defaults, internal-picker/absolute-URL rule, batch-save inline editor
+- [x] 3.13 `notificationAreas`: image (490×245 rec), title, internal-picker/external link (http validation), new/current window, hour-precision exposure window, 4-way ordering, inline use toggle
+- [x] 3.14 `popups`: image (160×140 rec), geometry (w/h/top/left px), scrollbar flag, close-for-a-day cookie, exposure window
+- [x] 3.15 `banners`: image (196×70 rec), link mode, exposure window, 4-way ordering
+- [x] 3.16 `adminNotices` board (pin period, 5 attachments png/gif/jpg w/ per-file description)
+- [x] 3.17 Guide menus (top/bottom): max 5 top items after fixed defaults, internal-picker/absolute-URL rule, batch-save inline editor
 
 ### Menus, content, utilities — refs 1-42..1-44, 2-2..2-4, 2-13, 1-80
 
-- [ ] 3.18 `menus` (admin + user, per site): tree w/ drag + up/down, content types (placeholder/program/board/content/link via picker popup), new-window, use-flag (red-in-tree when off), menu-cache refresh action; user menus add person-in-charge + login-state exposure
-- [ ] 3.19 `webContents`: 1:1 menu binding, Payload versions (save = new version, one active, re-activate any) + responsible dept/person
-- [ ] 3.20 Version diff view: split + unified modes, color-coded, version picker, source download (ref 2-4)
-- [ ] 3.21 `shortUrls`: name, original URL, remarks, system-generated code, clipboard copy; public redirect route
-- [ ] 3.22 `helpEntries` tree bound by URL-pattern (preferred) or menu; ⓘ button popup on every admin screen; print-content-only button
+- [x] 3.18 `menus` (admin + user, per site): tree w/ drag + up/down, content types (placeholder/program/board/content/link via picker popup), new-window, use-flag (red-in-tree when off), menu-cache refresh action; user menus add person-in-charge + login-state exposure
+- [x] 3.19 `webContents`: 1:1 menu binding, Payload versions (save = new version, one active, re-activate any) + responsible dept/person
+- [x] 3.20 Version diff view: split + unified modes, color-coded, version picker, source download (ref 2-4)
+- [x] 3.21 `shortUrls`: name, original URL, remarks, system-generated code, clipboard copy; public redirect route
+- [x] 3.22 `helpEntries` tree bound by URL-pattern (preferred) or menu; ⓘ button popup on every admin screen; print-content-only button
 
 **Exit criteria:** create a custom gallery board end-to-end (type → board config → post w/ thumbnail → public API); banned word blocks a post; content version restored + diffed; short URL redirects.
 
