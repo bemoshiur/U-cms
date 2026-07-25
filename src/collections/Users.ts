@@ -1,6 +1,7 @@
 import type { Access, CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccess, menuFieldAccess } from '../access/hasMenuAccess'
+import { isMemberPrincipal } from '../access/memberAccess'
 import { auditCollection } from '../audit/auditCollection'
 import { recordLoginFailure, recordLogout } from '../audit/authHooks'
 import { journalUserRoleChanges } from '../audit/permissionJournals'
@@ -59,7 +60,12 @@ function selfOrMenuAccess(menuKey: string): Access {
   const menuGate = menuAccess(menuKey)
   return async (args) => {
     const { id, req } = args
-    if (!req.user) {
+    // No user, OR a PUBLIC-SITE MEMBER (a different audience that shares the
+    // token-cookie space) → deny. Without the member check, the self-access
+    // `Where` below (`{ id: { equals: req.user.id } }`) would match the admin
+    // `users` row whose numeric id collides with the member's — a cross-audience
+    // leak. A member must have NIL access to `users`.
+    if (!req.user || isMemberPrincipal(req.user)) {
       return false
     }
     if (id !== undefined && id === req.user.id) {

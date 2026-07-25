@@ -38,15 +38,15 @@ import type { Post } from '../payload-types'
  * attachment-fetch path and the raw attachment route never diverges from it into
  * a public hole.
  *
- * ## IP guard / public reachability (Phase-4 seam)
+ * ## IP guard / public reachability (Task 4B seam #4 — now OPEN)
  *
- * `/api/files/download` is under `/api/*`, so it is currently GUARDED by the
- * Task 2C admin IP allowlist (fine for Phase 3/4-zero — only admins consume it).
- * When Phase 4 adds public board/post read, this path must be added to
- * `EXEMPT_API_PREFIXES`, with this endpoint's own access check (extended to
- * allow anonymous read of non-secret posts on public boards) as the sole gate.
- * `/api/attachments/file` MUST stay guarded (not exempt) — only the download
- * endpoint's `canDownloadPost` gate is the sanctioned public seam.
+ * `/api/files/download` is now EXEMPT from the Task 2C admin IP allowlist (see
+ * `EXEMPT_API_PREFIXES`), so a logged-in MEMBER on the public site can reach it.
+ * This is safe because `canDownloadPost` is the sole gate and DENIES anonymous
+ * requests outright (members-only download of non-secret posts; secret/cross-
+ * tenant still gated) — the exemption removes only the network allowlist, never
+ * the visibility check. `/api/attachments/file` MUST stay GUARDED (not exempt):
+ * only this endpoint's `canDownloadPost` gate is the sanctioned member seam.
  *
  * ## S3 storage (documented limitation)
  *
@@ -61,6 +61,29 @@ type PostLike = {
   tenant?: unknown
   authorUser?: unknown
   attachments?: unknown
+  isSecret?: unknown
+}
+
+/**
+ * True when the acting principal is a TENANT-SCOPED ADMIN (`users`) rather than
+ * a public-site member or an anonymous visitor. On a real request `req.user`
+ * carries `collection`; Local-API callers (tests) pass a bare doc without it, so
+ * we fall back to "has a `roles` field" — admin `users` always do, `members`
+ * never do. This is what keeps the admin download surface tenant-scoped (a
+ * cross-tenant admin stays denied) while the member branch below opens.
+ */
+function isTenantScopedAdmin(user: unknown): boolean {
+  if (!user || typeof user !== 'object') {
+    return false
+  }
+  const collection = (user as { collection?: unknown }).collection
+  if (collection === 'members') {
+    return false
+  }
+  if (collection === 'users') {
+    return true
+  }
+  return 'roles' in (user as object)
 }
 
 function json(status: number, message: string): Response {
@@ -69,11 +92,23 @@ function json(status: number, message: string): Response {
 
 /**
  * Access decision for downloading a post's attachment — the single visibility
- * gate. Phase 3: super-admins always; the post's author always (incl. secret);
- * an authenticated admin holding `content.posts` AND assigned to the post's
- * tenant (site) — admins may view secret posts too. Everyone else (incl.
- * anonymous) is denied. Phase 4 extends the anonymous branch for non-secret
- * posts on public boards.
+ * gate. The policy has TWO audiences (Task 4B seam #4):
+ *
+ *  - ADMIN surface (`users`): unchanged from Phase 3 — super always; the post's
+ *    author always (incl. secret); an admin holding `content.posts` AND assigned
+ *    to the post's tenant (secret posts included). A CROSS-TENANT admin stays
+ *    denied (the Task 4-zero confidentiality invariant). This branch is
+ *    identical to before, so every prior admin/secret/cross-tenant test holds.
+ *  - PUBLIC surface (logged-in MEMBER): a member may download a NON-SECRET
+ *    post's attachment. SECRET posts require the admin/author branch, so a member
+ *    (even a member who authored a secret post — a documented T4C refinement) is
+ *    denied a secret file. ANONYMOUS (no session) is DENIED for everything —
+ *    preserving Task 4-zero's "nothing fetchable unauthenticated" invariant. The
+ *    policy is therefore MEMBERS-ONLY (not fully public); see task-4B-report.md.
+ *
+ * Because anonymous is denied here, `/api/files/download` can be safely exempted
+ * from the admin IP guard (so member sessions reach it) — the gate is this
+ * function, not the network allowlist.
  */
 export async function canDownloadPost(args: {
   payload: Payload
@@ -81,30 +116,36 @@ export async function canDownloadPost(args: {
   post: PostLike
 }): Promise<boolean> {
   const { payload, user, post } = args
+  // Anonymous is denied for EVERYTHING (Task 4-zero criterion 5).
   if (!user) {
     return false
   }
-  if (isSuperUser(user)) {
-    return true
+
+  if (isTenantScopedAdmin(user)) {
+    if (isSuperUser(user)) {
+      return true
+    }
+    const userId = (user as { id?: unknown }).id
+    const authorId = toRelationId(post.authorUser)
+    if (authorId !== undefined && userId !== undefined && String(authorId) === String(userId)) {
+      return true
+    }
+    const tenantId = toRelationId(post.tenant)
+    if (tenantId === undefined) {
+      return false
+    }
+    const assigned = getAssignedTenantIds(user).some((id) => String(id) === String(tenantId))
+    if (!assigned) {
+      return false
+    }
+    // `hasMenuAccess` only reads `req.user` + `req.payload`, so a minimal
+    // request shape is sufficient here (no HTTP request in this call path).
+    return hasMenuAccess({ payload, user } as unknown as PayloadRequest, POSTS_MENU_KEY)
   }
 
-  const userId = (user as { id?: unknown }).id
-  const authorId = toRelationId(post.authorUser)
-  if (authorId !== undefined && userId !== undefined && String(authorId) === String(userId)) {
-    return true
-  }
-
-  const tenantId = toRelationId(post.tenant)
-  if (tenantId === undefined) {
-    return false
-  }
-  const assigned = getAssignedTenantIds(user).some((id) => String(id) === String(tenantId))
-  if (!assigned) {
-    return false
-  }
-  // `hasMenuAccess` only reads `req.user` + `req.payload`, so a minimal
-  // request shape is sufficient here (no HTTP request in this call path).
-  return hasMenuAccess({ payload, user } as unknown as PayloadRequest, POSTS_MENU_KEY)
+  // Authenticated public-site MEMBER (or any non-admin authed principal):
+  // non-secret posts only. Secret posts require the admin/author branch above.
+  return post.isSecret !== true
 }
 
 /** Resolves the local upload dir for a collection (default staticDir = slug). */

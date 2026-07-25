@@ -121,7 +121,13 @@ export function tenantMembershipGuard(tenantFieldName = 'tenant'): CollectionBef
     if (!data) {
       return data
     }
-    if (req.user && !isSuperUser(req.user)) {
+    // Skip PUBLIC-SITE MEMBERS (Task 4B): this guard reads the ADMIN `users.
+    // tenants` array (`getAssignedTenantIds`), which members don't have. A member
+    // editing their own record can't change `tenant` anyway (it's field-access-
+    // locked to `members.manage`), so there is nothing to guard here. Inlined
+    // (not `isMemberPrincipal`) to avoid a tenantAccess↔memberAccess import cycle.
+    const isMember = (req.user as { collection?: unknown } | undefined)?.collection === 'members'
+    if (req.user && !isSuperUser(req.user) && !isMember) {
       const effectiveTenant = toRelationId(
         tenantFieldName in data ? data[tenantFieldName] : originalDoc?.[tenantFieldName],
       )

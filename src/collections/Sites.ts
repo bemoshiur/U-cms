@@ -2,6 +2,7 @@ import type { CollectionConfig, Field, TextFieldSingleValidation } from 'payload
 import { APIError } from 'payload'
 
 import { hasMenuAccessSync, menuAccess } from '../access/hasMenuAccess'
+import { isMemberPrincipal } from '../access/memberAccess'
 import { auditCollection } from '../audit/auditCollection'
 
 /** Access-history audit hooks (Task 2A) for this collection's mutations. */
@@ -97,7 +98,11 @@ export const Sites: CollectionConfig = {
   // `hidden` still keeps the management screen out of the nav for anyone
   // without it.
   access: {
-    read: ({ req }) => Boolean(req.user),
+    // Any authenticated ADMIN may read (the multi-tenant TenantSelectionProvider
+    // reads sites on every /admin render — see the note above), but a public-site
+    // MEMBER must NOT: members are a different audience with nil admin access.
+    // The public frontend reads sites via overrideAccess, so it is unaffected.
+    read: ({ req }) => Boolean(req.user) && !isMemberPrincipal(req.user),
     create: menuAccess('system.sites'),
     update: menuAccess('system.sites'),
     delete: menuAccess('system.sites'),
@@ -151,6 +156,18 @@ export const Sites: CollectionConfig = {
       defaultValue: false,
       admin: {
         condition: (_data, siblingData) => !siblingData?.isAdminSite,
+      },
+    },
+    // Member sign-up policy (Task 4B). When enabled, public-site sign-ups are
+    // created `pending` and an admin must activate them; otherwise new members
+    // are `active` immediately (the legacy default). User-facing sites only.
+    {
+      name: 'memberApprovalRequired',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        condition: (_data, siblingData) => !siblingData?.isAdminSite,
+        description: 'Require administrator approval before a newly signed-up member can log in.',
       },
     },
     {

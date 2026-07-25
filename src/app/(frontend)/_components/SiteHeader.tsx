@@ -75,6 +75,21 @@ export function SiteHeader({
               </Link>
             </li>
           ))}
+          {member != null && (
+            <li className="guide-bar__item">
+              <span className="member-bar">
+                <Link href="/profile" className="guide-bar__link">
+                  {member.name ? `My profile (${member.name})` : 'My profile'}
+                </Link>
+                {/* No-JS logout: POST clears the member cookie (see /logout route). */}
+                <form className="member-bar__logout" action="/logout" method="post">
+                  <button type="submit" className="member-bar__logout-btn">
+                    Log out
+                  </button>
+                </form>
+              </span>
+            </li>
+          )}
           {guides.map((guide) => {
             const link: ResolvedLink = resolveGuideLink(guide)
             return (

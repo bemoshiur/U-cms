@@ -16,6 +16,7 @@ import { memberBannedWordsStep } from './steps/memberBannedWords'
 import { displayComponentsStep } from './steps/displayComponents'
 import { contentMenusStep } from './steps/contentMenus'
 import { publicSiteStep } from './steps/publicSite'
+import { membersStep } from './steps/members'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -56,6 +57,8 @@ export type { SeedStep } from './types'
  *  - `publicSiteStep` (Task 4A) needs the demo site + its content menus
  *    (`contentMenusStep`); adds the demo logo/footer, a top+child section, and
  *    guide-menu extras for the public frontend. Appended last.
+ *  - `membersStep` (Task 4B) needs the demo site (`sitesStep`); seeds example
+ *    public-site members (one active, one pending). Appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -74,6 +77,7 @@ export const seedSteps: SeedStep[] = [
   displayComponentsStep,
   contentMenusStep,
   publicSiteStep,
+  membersStep,
 ]
 
 /**

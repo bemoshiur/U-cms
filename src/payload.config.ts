@@ -21,6 +21,7 @@ import { Boards } from './collections/boards/Boards'
 import { Posts } from './collections/posts/Posts'
 import { ProfanityWords } from './collections/ProfanityWords'
 import { MemberBannedWords } from './collections/MemberBannedWords'
+import { Members } from './collections/Members'
 import { NotificationAreas } from './collections/display/NotificationAreas'
 import { Popups } from './collections/display/Popups'
 import { Banners } from './collections/display/Banners'
@@ -320,6 +321,11 @@ export default buildConfig({
     Posts,
     ProfanityWords,
     MemberBannedWords,
+    // Public-site MEMBER accounts (Task 4B) — a SEPARATE, tenant-scoped auth
+    // collection from the admin `users`. A member session grants ZERO admin
+    // access. NOT opted into the multi-tenant plugin (manual `tenant` field);
+    // see src/collections/Members.ts.
+    Members,
     // Per-site display components (Task 3C): notification areas, popups,
     // banners, admin notices, and guide menus — all tenant-scoped.
     NotificationAreas,

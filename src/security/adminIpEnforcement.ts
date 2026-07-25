@@ -110,6 +110,14 @@ const EXEMPT_API_PREFIXES = [
   // (logos, banner/popup images) now that all access-controlled attachments
   // live in the tenant-scoped `attachments` collection. See Media.ts.
   '/api/media/file',
+  // Managed attachment download (Task 4B seam #4). Exempt so a logged-in public
+  // MEMBER can download a non-secret post's attachment. Safe because
+  // `canDownloadPost` (src/endpoints/fileDownload.ts) is the sole gate and
+  // DENIES anonymous requests + secret/cross-tenant files — the exemption drops
+  // only the network allowlist, never the visibility check. Note this is the
+  // `/api/files/download` endpoint ONLY; the raw `/api/attachments/file/*` route
+  // stays GUARDED (see the guardrails note below) — never add `/api/attachments`.
+  '/api/files/download',
   // Public short-URL redirect (Task 3D; refs 1-42/1-43). `GET /api/s/:code`
   // 302s an anonymous visitor to the stored (re-validated) target, so it must
   // stay reachable regardless of the admin IP allowlist — like the public

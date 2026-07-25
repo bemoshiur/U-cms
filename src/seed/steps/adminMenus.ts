@@ -237,6 +237,16 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 3,
     collectionSlug: 'permissionChangeLogs',
   },
+  // Public-site MEMBER management (Task 4B; refs 2-13). Gates the tenant-scoped
+  // `members` auth collection — a SEPARATE audience from admin `users`.
+  { menuKey: 'members', name: 'Member Management', order: 4 },
+  {
+    menuKey: 'members.manage',
+    name: 'Member Accounts',
+    parentMenuKey: 'members',
+    order: 1,
+    collectionSlug: 'members',
+  },
 ]
 
 /**

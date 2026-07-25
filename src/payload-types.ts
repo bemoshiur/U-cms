@@ -64,6 +64,7 @@ export type SupportedTimezones =
 export interface Config {
   auth: {
     users: UserAuthOperations;
+    members: MemberAuthOperations;
   };
   blocks: {};
   collections: {
@@ -80,6 +81,7 @@ export interface Config {
     posts: Post;
     profanityWords: ProfanityWord;
     memberBannedWords: MemberBannedWord;
+    members: Member;
     notificationAreas: NotificationArea;
     popups: Popup;
     banners: Banner;
@@ -121,6 +123,7 @@ export interface Config {
     posts: PostsSelect<false> | PostsSelect<true>;
     profanityWords: ProfanityWordsSelect<false> | ProfanityWordsSelect<true>;
     memberBannedWords: MemberBannedWordsSelect<false> | MemberBannedWordsSelect<true>;
+    members: MembersSelect<false> | MembersSelect<true>;
     notificationAreas: NotificationAreasSelect<false> | NotificationAreasSelect<true>;
     popups: PopupsSelect<false> | PopupsSelect<true>;
     banners: BannersSelect<false> | BannersSelect<true>;
@@ -153,13 +156,31 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: User | Member;
   jobs: {
     tasks: unknown;
     workflows: unknown;
   };
 }
 export interface UserAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
+  };
+}
+export interface MemberAuthOperations {
   forgotPassword: {
     email: string;
     password: string;
@@ -401,6 +422,10 @@ export interface Site {
   isAdminSite?: boolean | null;
   satisfactionEnabled?: boolean | null;
   dataManagerEnabled?: boolean | null;
+  /**
+   * Require administrator approval before a newly signed-up member can log in.
+   */
+  memberApprovalRequired?: boolean | null;
   /**
    * Web accessibility validation usage (operates only in local/dev environments per legacy behavior).
    */
@@ -821,7 +846,13 @@ export interface Post {
     };
     [k: string]: unknown;
   } | null;
+  /**
+   * Auto-stamped to the admin who wrote the answer.
+   */
   answeredBy?: (number | null) | User;
+  /**
+   * Auto-stamped when the answer was written.
+   */
   answeredAt?: string | null;
   /**
    * Derived: true once an answer is present.
@@ -871,6 +902,59 @@ export interface MemberBannedWord {
   isActive?: boolean | null;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members".
+ */
+export interface Member {
+  id: number;
+  /**
+   * Public-site login ID (unique per site).
+   */
+  loginId: string;
+  /**
+   * Display name / nickname. Member-editable.
+   */
+  name: string;
+  /**
+   * Mobile phone number (optional). Member-editable.
+   */
+  mobile?: string | null;
+  /**
+   * Membership lifecycle. Only "Active" members may log in.
+   */
+  status: 'active' | 'pending' | 'dormant' | 'withdrawn';
+  /**
+   * The site (tenant) this member belongs to.
+   */
+  tenant: number | Site;
+  /**
+   * Optional opt-in to marketing messages. Member-editable.
+   */
+  marketingConsent?: boolean | null;
+  /**
+   * Snapshot of the terms this member accepted at sign-up (category + version + timestamp). Retained as consent evidence; not member-editable.
+   */
+  termsConsents?:
+    | {
+        category: 'service' | 'privacy';
+        version: string;
+        agreedAt: string;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  password?: string | null;
+  collection: 'members';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1622,6 +1706,10 @@ export interface PayloadLockedDocument {
         value: number | MemberBannedWord;
       } | null)
     | ({
+        relationTo: 'members';
+        value: number | Member;
+      } | null)
+    | ({
         relationTo: 'notificationAreas';
         value: number | NotificationArea;
       } | null)
@@ -1690,10 +1778,15 @@ export interface PayloadLockedDocument {
         value: number | MenuPermissionLog;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: number | User;
+      }
+    | {
+        relationTo: 'members';
+        value: number | Member;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -1703,10 +1796,15 @@ export interface PayloadLockedDocument {
  */
 export interface PayloadPreference {
   id: number;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: number | User;
+      }
+    | {
+        relationTo: 'members';
+        value: number | Member;
+      };
   key?: string | null;
   value?:
     | {
@@ -1824,6 +1922,7 @@ export interface SitesSelect<T extends boolean = true> {
   isAdminSite?: T;
   satisfactionEnabled?: T;
   dataManagerEnabled?: T;
+  memberApprovalRequired?: T;
   accessibilityValidation?: T;
   twoFactorEnabled?: T;
   accountApplicationEnabled?: T;
@@ -2080,6 +2179,35 @@ export interface MemberBannedWordsSelect<T extends boolean = true> {
   isActive?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members_select".
+ */
+export interface MembersSelect<T extends boolean = true> {
+  loginId?: T;
+  name?: T;
+  mobile?: T;
+  status?: T;
+  tenant?: T;
+  marketingConsent?: T;
+  termsConsents?:
+    | T
+    | {
+        category?: T;
+        version?: T;
+        agreedAt?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
