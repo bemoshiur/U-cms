@@ -18,6 +18,9 @@ import { CodeGroups } from './collections/codes/CodeGroups'
 import { Codes } from './collections/codes/Codes'
 import { BoardTypes } from './collections/boards/BoardTypes'
 import { Boards } from './collections/boards/Boards'
+import { Posts } from './collections/posts/Posts'
+import { ProfanityWords } from './collections/ProfanityWords'
+import { MemberBannedWords } from './collections/MemberBannedWords'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
@@ -29,6 +32,7 @@ import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
 import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
+import { fileEndpoints } from './endpoints/fileDownload'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -181,6 +185,12 @@ const plugins: Plugin[] = [
     // etc. per docs/planning/development-plan.md §2.1.
     collections: {
       boards: {},
+      // Posts (Task 3B) — tenant-scoped like boards; a post's tenant is DERIVED
+      // from its board's site in Posts.ts's beforeValidate. Real per-user
+      // enforcement lives on the collection's own `access`
+      // (tenantScopedMenuAccess) + the create-time membership guard, exactly
+      // like boards — see src/access/tenantAccess.ts.
+      posts: {},
     },
     tenantsSlug: Sites.slug,
     /**
@@ -272,6 +282,10 @@ export default buildConfig({
     // Board engine (Task 3A): global board types + tenant-scoped boards.
     BoardTypes,
     Boards,
+    // Content engine (Task 3B): tenant-scoped posts + global word-filter lists.
+    Posts,
+    ProfanityWords,
+    MemberBannedWords,
     Roles,
     AdminMenus,
     PasswordPolicies,
@@ -289,7 +303,7 @@ export default buildConfig({
   // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B
   // Google-OTP enrolment endpoints: /api/2fa/enroll, /api/2fa/verify-enroll,
   // /api/2fa/guide.
-  endpoints: [...publicAccountEndpoints, ...twoFactorEndpoints],
+  endpoints: [...publicAccountEndpoints, ...twoFactorEndpoints, ...fileEndpoints],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   // See the `serverURL` const above (I-1 fix) — required so that

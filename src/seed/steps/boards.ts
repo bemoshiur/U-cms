@@ -18,6 +18,8 @@ export const SEED_BOARDS: {
   boardForm: 'list' | 'thumbnail'
   attachmentsEnabled: boolean
   headerNotice?: string
+  /** Optional pinned bbsId (only the legacy fixed attachment board B0000009). */
+  bbsId?: string
 }[] = [
   {
     name: 'Notice',
@@ -33,6 +35,24 @@ export const SEED_BOARDS: {
     isIntegrated: false,
     boardForm: 'thumbnail',
     attachmentsEnabled: true,
+  },
+  // Q&A board (Task 3B, ref 1-33/2-8) — posts here carry an admin answer.
+  {
+    name: 'Q&A',
+    boardTypeCode: 'PG0003',
+    isIntegrated: false,
+    boardForm: 'list',
+    attachmentsEnabled: false,
+  },
+  // The legacy fixed Attachment board (Task 3B, ref 1-81) — bbsId B0000009,
+  // whose posts are file hosts exposing managed download URLs.
+  {
+    name: 'Attachment Board',
+    boardTypeCode: 'PG0006',
+    isIntegrated: false,
+    boardForm: 'list',
+    attachmentsEnabled: true,
+    bbsId: 'B0000009',
   },
 ]
 
@@ -90,6 +110,26 @@ export const boardsStep: SeedStep = {
 
       const boardTypeId = await findBoardTypeId(payload, board.boardTypeCode)
 
+      // A pinned bbsId (the legacy fixed attachment board B0000009) flows
+      // through overrideAccess (which bypasses the field-level write lock). On a
+      // fresh install the auto-increment sequence hasn't reached it, so the pin
+      // takes. If the value is ALREADY taken (e.g. auto-generated earlier), drop
+      // the pin and let the generator assign the next free id — a fixed value
+      // must never collide the sequence.
+      let pinnedBbsId = board.bbsId
+      if (pinnedBbsId !== undefined) {
+        const clash = await payload.find({
+          collection: 'boards',
+          where: { bbsId: { equals: pinnedBbsId } },
+          limit: 1,
+          pagination: false,
+          overrideAccess: true,
+        })
+        if (clash.docs.length > 0) {
+          pinnedBbsId = undefined
+        }
+      }
+
       await payload.create({
         collection: 'boards',
         data: {
@@ -100,6 +140,7 @@ export const boardsStep: SeedStep = {
           boardForm: board.boardForm,
           attachmentsEnabled: board.attachmentsEnabled,
           ...(board.headerNotice !== undefined ? { headerNotice: board.headerNotice } : {}),
+          ...(pinnedBbsId !== undefined ? { bbsId: pinnedBbsId } : {}),
         },
         overrideAccess: true,
       })

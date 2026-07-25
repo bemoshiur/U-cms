@@ -119,6 +119,29 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 3,
     collectionSlug: 'boards',
   },
+  // Content engine (Task 3B; refs 1-7, 1-28..1-41, 2-5..2-8). `posts` is
+  // tenant-scoped (per-site); the two word-filter lists are global.
+  {
+    menuKey: 'content.posts',
+    name: 'Post Management',
+    parentMenuKey: 'content',
+    order: 4,
+    collectionSlug: 'posts',
+  },
+  {
+    menuKey: 'content.profanityWords',
+    name: 'Profanity Word Management',
+    parentMenuKey: 'content',
+    order: 5,
+    collectionSlug: 'profanityWords',
+  },
+  {
+    menuKey: 'content.memberBannedWords',
+    name: 'Member Banned-Word Management',
+    parentMenuKey: 'content',
+    order: 6,
+    collectionSlug: 'memberBannedWords',
+  },
   // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
   // logging backbone: access history, login history, and the two permission
   // journals. `privacy.permissionLogs` gates BOTH permission-journal

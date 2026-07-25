@@ -10,6 +10,9 @@ import { passwordPoliciesStep } from './steps/passwordPolicies'
 import { adminIpRulesStep } from './steps/adminIpRules'
 import { boardTypesStep } from './steps/boardTypes'
 import { boardsStep } from './steps/boards'
+import { postsStep } from './steps/posts'
+import { profanityWordsStep } from './steps/profanityWords'
+import { memberBannedWordsStep } from './steps/memberBannedWords'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -36,6 +39,12 @@ export type { SeedStep } from './types'
  *    (boards reference board types by their PG code).
  *  - `boardsStep` (Task 3A) needs the demo site (`sitesStep`) and the built-in
  *    board types (`boardTypesStep`); appended last.
+ *  - `profanityWordsStep` / `memberBannedWordsStep` (Task 3B) have no
+ *    dependencies. `profanityWordsStep` must precede `postsStep` (seeded posts
+ *    must not contain a seeded profanity word — the placeholders are chosen so
+ *    they don't).
+ *  - `postsStep` (Task 3B) needs the demo site + the seeded boards (Notice /
+ *    Gallery / Q&A); appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -48,6 +57,9 @@ export const seedSteps: SeedStep[] = [
   adminIpRulesStep,
   boardTypesStep,
   boardsStep,
+  profanityWordsStep,
+  memberBannedWordsStep,
+  postsStep,
 ]
 
 /**

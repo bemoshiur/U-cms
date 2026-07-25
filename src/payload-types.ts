@@ -76,6 +76,9 @@ export interface Config {
     codes: Code;
     boardTypes: BoardType;
     boards: Board;
+    posts: Post;
+    profanityWords: ProfanityWord;
+    memberBannedWords: MemberBannedWord;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -104,6 +107,9 @@ export interface Config {
     codes: CodesSelect<false> | CodesSelect<true>;
     boardTypes: BoardTypesSelect<false> | BoardTypesSelect<true>;
     boards: BoardsSelect<false> | BoardsSelect<true>;
+    posts: PostsSelect<false> | PostsSelect<true>;
+    profanityWords: ProfanityWordsSelect<false> | ProfanityWordsSelect<true>;
+    memberBannedWords: MemberBannedWordsSelect<false> | MemberBannedWordsSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -659,6 +665,175 @@ export interface Board {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "posts".
+ */
+export interface Post {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * The board this post belongs to — determines the post's config/kind.
+   */
+  board: number | Board;
+  /**
+   * Denormalized board kind (auto-set from the board's type on save).
+   */
+  boardKind?: string | null;
+  title: string;
+  /**
+   * Display name of the author (legacy stored a free-text name).
+   */
+  author?: string | null;
+  /**
+   * The admin/user who authored this post, if applicable.
+   */
+  authorUser?: (number | null) | User;
+  department?: (number | null) | Department;
+  team?: string | null;
+  /**
+   * Post body (Editor mode). HTML/TEXT input modes + sanitize-on-render are a Phase-4 concern.
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Read count; incremented on detail view in Phase 4.
+   */
+  viewCount?: number | null;
+  /**
+   * Pinned notice post (공지). Optionally scoped to a date range below.
+   */
+  isNotice?: boolean | null;
+  noticeFrom?: string | null;
+  noticeTo?: string | null;
+  /**
+   * Secret (비공개) post — only its author + admins may view it.
+   */
+  isSecret?: boolean | null;
+  /**
+   * Category 1 value — a detail code from the group bound to the board's category slot 1.
+   */
+  category1?: (number | null) | Code;
+  /**
+   * Category 2 value — a detail code from the group bound to the board's category slot 2.
+   */
+  category2?: (number | null) | Code;
+  /**
+   * Category 3 value — a detail code from the group bound to the board's category slot 3.
+   */
+  category3?: (number | null) | Code;
+  extraField1?: string | null;
+  extraField2?: string | null;
+  extraField3?: string | null;
+  extraField4?: string | null;
+  extraContent1?: string | null;
+  extraContent2?: string | null;
+  extraContent3?: string | null;
+  extraContent4?: string | null;
+  /**
+   * Uploaded files. Constraints (count/size/extensions) come from the board; download via the managed endpoint (/api/files/download).
+   */
+  attachments?:
+    | {
+        media: number | Media;
+        description?: string | null;
+        /**
+         * The gallery thumbnail (photo boards). At most one per post.
+         */
+        isRepresentative?: boolean | null;
+        /**
+         * Per-post file sequence, auto-assigned.
+         */
+        fileSn?: number | null;
+        /**
+         * Managed-download counter (see fileDownload.ts).
+         */
+        downloadCount?: number | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Admin's answer to a Q&A question. Presence sets isAnswered.
+   */
+  answer?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  answeredBy?: (number | null) | User;
+  answeredAt?: string | null;
+  /**
+   * Derived: true once an answer is present.
+   */
+  isAnswered?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "profanityWords".
+ */
+export interface ProfanityWord {
+  id: number;
+  /**
+   * A forbidden word. Matching is case-insensitive substring.
+   */
+  word: string;
+  /**
+   * Only active words are enforced against new posts.
+   */
+  isActive?: boolean | null;
+  /**
+   * The admin who registered this word (auto-set on create).
+   */
+  registrant?: (number | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "memberBannedWords".
+ */
+export interface MemberBannedWord {
+  id: number;
+  /**
+   * A banned word. Matching is case-insensitive substring.
+   */
+  word: string;
+  /**
+   * Where the word is banned: common (everywhere), loginId, or password (ref 1-41).
+   */
+  scope: 'common' | 'loginId' | 'password';
+  /**
+   * Only active words are enforced at signup.
+   */
+  isActive?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "passwordPolicies".
  */
 export interface PasswordPolicy {
@@ -945,6 +1120,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'boards';
         value: number | Board;
+      } | null)
+    | ({
+        relationTo: 'posts';
+        value: number | Post;
+      } | null)
+    | ({
+        relationTo: 'profanityWords';
+        value: number | ProfanityWord;
+      } | null)
+    | ({
+        relationTo: 'memberBannedWords';
+        value: number | MemberBannedWord;
       } | null)
     | ({
         relationTo: 'roles';
@@ -1279,6 +1466,75 @@ export interface BoardsSelect<T extends boolean = true> {
       };
   listFieldOrder?: T;
   detailFieldOrder?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "posts_select".
+ */
+export interface PostsSelect<T extends boolean = true> {
+  tenant?: T;
+  board?: T;
+  boardKind?: T;
+  title?: T;
+  author?: T;
+  authorUser?: T;
+  department?: T;
+  team?: T;
+  content?: T;
+  viewCount?: T;
+  isNotice?: T;
+  noticeFrom?: T;
+  noticeTo?: T;
+  isSecret?: T;
+  category1?: T;
+  category2?: T;
+  category3?: T;
+  extraField1?: T;
+  extraField2?: T;
+  extraField3?: T;
+  extraField4?: T;
+  extraContent1?: T;
+  extraContent2?: T;
+  extraContent3?: T;
+  extraContent4?: T;
+  attachments?:
+    | T
+    | {
+        media?: T;
+        description?: T;
+        isRepresentative?: T;
+        fileSn?: T;
+        downloadCount?: T;
+        id?: T;
+      };
+  answer?: T;
+  answeredBy?: T;
+  answeredAt?: T;
+  isAnswered?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "profanityWords_select".
+ */
+export interface ProfanityWordsSelect<T extends boolean = true> {
+  word?: T;
+  isActive?: T;
+  registrant?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "memberBannedWords_select".
+ */
+export interface MemberBannedWordsSelect<T extends boolean = true> {
+  word?: T;
+  scope?: T;
+  isActive?: T;
   updatedAt?: T;
   createdAt?: T;
 }
