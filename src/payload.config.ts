@@ -21,6 +21,11 @@ import { Boards } from './collections/boards/Boards'
 import { Posts } from './collections/posts/Posts'
 import { ProfanityWords } from './collections/ProfanityWords'
 import { MemberBannedWords } from './collections/MemberBannedWords'
+import { NotificationAreas } from './collections/display/NotificationAreas'
+import { Popups } from './collections/display/Popups'
+import { Banners } from './collections/display/Banners'
+import { AdminNotices } from './collections/display/AdminNotices'
+import { GuideMenus } from './collections/display/GuideMenus'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
@@ -191,6 +196,15 @@ const plugins: Plugin[] = [
       // (tenantScopedMenuAccess) + the create-time membership guard, exactly
       // like boards — see src/access/tenantAccess.ts.
       posts: {},
+      // Per-site display components (Task 3C) — notification areas, popups,
+      // banners, admin notices, and guide menus are all tenant-scoped (ref 2-1:
+      // the demo-site versions are per-site instances of the same programs).
+      // Each reuses tenantScopedMenuAccess + tenantMembershipGuard.
+      notificationAreas: {},
+      popups: {},
+      banners: {},
+      adminNotices: {},
+      guideMenus: {},
     },
     tenantsSlug: Sites.slug,
     /**
@@ -286,6 +300,13 @@ export default buildConfig({
     Posts,
     ProfanityWords,
     MemberBannedWords,
+    // Per-site display components (Task 3C): notification areas, popups,
+    // banners, admin notices, and guide menus — all tenant-scoped.
+    NotificationAreas,
+    Popups,
+    Banners,
+    AdminNotices,
+    GuideMenus,
     Roles,
     AdminMenus,
     PasswordPolicies,

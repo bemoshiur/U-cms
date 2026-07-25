@@ -1,4 +1,5 @@
-import type { Access } from 'payload'
+import type { Access, CollectionBeforeValidateHook } from 'payload'
+import { APIError } from 'payload'
 
 import { toRelationId } from '../collections/utils'
 import { hasMenuAccess, isSuperUser } from './hasMenuAccess'
@@ -66,6 +67,39 @@ export function tenantScopedMenuAccess(menuKey: string, tenantFieldName = 'tenan
       return false
     }
     return { [tenantFieldName]: { in: tenantIds } }
+  }
+}
+
+/**
+ * The reusable create-time tenant-membership guard (Task 3A pattern, extracted
+ * in Task 3C so every per-site collection wires the identical rule rather than
+ * re-inlining it — `boards`/`posts` predate this and keep their inline copies).
+ *
+ * Payload applies the per-user tenant `Where` from `tenantScopedMenuAccess` to
+ * read/update/delete, but NOT to create (a `Where` cannot constrain a
+ * not-yet-existing row), so a crafted create carrying another site's tenant
+ * would otherwise slip past. This `beforeValidate` hook closes that gap: for an
+ * authenticated NON-super writer, the effective tenant (from `data`, falling
+ * back to `originalDoc` on partial updates) must be one they are assigned to.
+ * System/seed writes (no `req.user`) and super-admins are exempt.
+ */
+export function tenantMembershipGuard(tenantFieldName = 'tenant'): CollectionBeforeValidateHook {
+  return ({ data, originalDoc, req }) => {
+    if (!data) {
+      return data
+    }
+    if (req.user && !isSuperUser(req.user)) {
+      const effectiveTenant = toRelationId(
+        tenantFieldName in data ? data[tenantFieldName] : originalDoc?.[tenantFieldName],
+      )
+      if (effectiveTenant !== undefined) {
+        const assigned = getAssignedTenantIds(req.user)
+        if (!assigned.some((id) => String(id) === String(effectiveTenant))) {
+          throw new APIError("You are not assigned to this record's site (tenant).", 403)
+        }
+      }
+    }
+    return data
   }
 }
 

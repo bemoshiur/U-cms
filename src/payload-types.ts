@@ -79,6 +79,11 @@ export interface Config {
     posts: Post;
     profanityWords: ProfanityWord;
     memberBannedWords: MemberBannedWord;
+    notificationAreas: NotificationArea;
+    popups: Popup;
+    banners: Banner;
+    adminNotices: AdminNotice;
+    guideMenus: GuideMenu;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -110,6 +115,11 @@ export interface Config {
     posts: PostsSelect<false> | PostsSelect<true>;
     profanityWords: ProfanityWordsSelect<false> | ProfanityWordsSelect<true>;
     memberBannedWords: MemberBannedWordsSelect<false> | MemberBannedWordsSelect<true>;
+    notificationAreas: NotificationAreasSelect<false> | NotificationAreasSelect<true>;
+    popups: PopupsSelect<false> | PopupsSelect<true>;
+    banners: BannersSelect<false> | BannersSelect<true>;
+    adminNotices: AdminNoticesSelect<false> | AdminNoticesSelect<true>;
+    guideMenus: GuideMenusSelect<false> | GuideMenusSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -834,6 +844,260 @@ export interface MemberBannedWord {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "notificationAreas".
+ */
+export interface NotificationArea {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display image (uploads to Media). Recommended size 490 x 245 px; allowed types jpg/jpeg/png/gif (legacy note).
+   */
+  image: number | Media;
+  title: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Link mode (링크 방식): open in a new window (새창/Y) vs the current page (N).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  /**
+   * Exposure start (hour precision). Empty = no lower bound.
+   */
+  exposeFrom?: string | null;
+  /**
+   * Exposure end (hour precision). Empty = no upper bound. Outside the window the item is not live.
+   */
+  exposeTo?: string | null;
+  /**
+   * Exposure order (노출순서) — lower shows first. The 4-way drag UI is deferred to Phase 4.
+   */
+  displayOrder?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "popups".
+ */
+export interface Popup {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display image (uploads to Media). Recommended size 160 x 140 px; allowed types jpg/jpeg/png/gif (legacy note).
+   */
+  image: number | Media;
+  title: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  /**
+   * Exposure start (hour precision). Empty = no lower bound.
+   */
+  exposeFrom?: string | null;
+  /**
+   * Exposure end (hour precision). Empty = no upper bound. Outside the window the item is not live.
+   */
+  exposeTo?: string | null;
+  /**
+   * Width (넓이) in px (popup window geometry, ref 1-48).
+   */
+  width?: number | null;
+  /**
+   * Height (높이) in px (popup window geometry, ref 1-48).
+   */
+  height?: number | null;
+  /**
+   * Top position (팝업위치 TOP) in px (popup window geometry, ref 1-48).
+   */
+  top?: number | null;
+  /**
+   * Left position (팝업위치 LEFT) in px (popup window geometry, ref 1-48).
+   */
+  left?: number | null;
+  /**
+   * Scrollbar use (스크롤사용여부) — whether the popup window shows scrollbars.
+   */
+  showScrollbar?: boolean | null;
+  /**
+   * Close-for-a-day (하루닫기) — lets a viewer suppress the popup for one day (cookie behavior; frontend concern, the flag is stored here).
+   */
+  closeForDay?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "banners".
+ */
+export interface Banner {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Display image (uploads to Media). Recommended size 196 x 70 px; allowed types jpg/jpeg/png/gif (legacy note).
+   */
+  image: number | Media;
+  /**
+   * Representative banner file (대표 배너파일) — the primary banner for the site.
+   */
+  isRepresentative?: boolean | null;
+  title: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Link mode (링크 방식): open in a new window (새창/Y) vs the current page (N).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  /**
+   * Exposure start (hour precision). Empty = no lower bound.
+   */
+  exposeFrom?: string | null;
+  /**
+   * Exposure end (hour precision). Empty = no upper bound. Outside the window the item is not live.
+   */
+  exposeTo?: string | null;
+  /**
+   * Exposure order (노출순서) — lower shows first. The 4-way drag UI is deferred to Phase 4.
+   */
+  displayOrder?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminNotices".
+ */
+export interface AdminNotice {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Pinned notices sort above general ones (ref 1-49).
+   */
+  noticeType: 'pinned' | 'general';
+  /**
+   * Pin-period start — applies only to pinned notices (ref 1-50 callout 1).
+   */
+  pinFrom?: string | null;
+  /**
+   * Pin-period end — applies only to pinned notices.
+   */
+  pinTo?: string | null;
+  title: string;
+  department?: (number | null) | Department;
+  /**
+   * Team name (팀명).
+   */
+  team?: string | null;
+  /**
+   * Author display name (작성자).
+   */
+  author?: string | null;
+  /**
+   * Notice body (Editor mode). HTML/TEXT input modes + sanitize-on-render are a Phase-4 concern (as with posts).
+   */
+  content?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Up to 5 image files (png/gif/jpg), each with an optional description (ref 1-50).
+   */
+  attachments?:
+    | {
+        media: number | Media;
+        /**
+         * Attachment description (첨부파일 설명).
+         */
+        description?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "guideMenus".
+ */
+export interface GuideMenu {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Which utility bar this menu appears in (max 5 for top, ref 1-53).
+   */
+  position: 'top' | 'bottom';
+  /**
+   * Menu name (메뉴명).
+   */
+  name: string;
+  linkType?: ('internal' | 'external') | null;
+  /**
+   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   */
+  linkInternal?: string | null;
+  /**
+   * External URL — must start with http:// or https://.
+   */
+  linkExternal?: string | null;
+  /**
+   * Link mode (링크 방식): open in a new window (새창/Y) vs the current page (N).
+   */
+  newWindow?: boolean | null;
+  /**
+   * Exposure order (노출순서) — lower shows first. The 4-way drag UI is deferred to Phase 4.
+   */
+  displayOrder?: number | null;
+  /**
+   * Use/expose toggle (사용여부). Inactive items remain in the admin list but never render. Inline list toggling is a Phase-4 UI concern.
+   */
+  active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "passwordPolicies".
  */
 export interface PasswordPolicy {
@@ -1132,6 +1396,26 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'memberBannedWords';
         value: number | MemberBannedWord;
+      } | null)
+    | ({
+        relationTo: 'notificationAreas';
+        value: number | NotificationArea;
+      } | null)
+    | ({
+        relationTo: 'popups';
+        value: number | Popup;
+      } | null)
+    | ({
+        relationTo: 'banners';
+        value: number | Banner;
+      } | null)
+    | ({
+        relationTo: 'adminNotices';
+        value: number | AdminNotice;
+      } | null)
+    | ({
+        relationTo: 'guideMenus';
+        value: number | GuideMenu;
       } | null)
     | ({
         relationTo: 'roles';
@@ -1535,6 +1819,109 @@ export interface MemberBannedWordsSelect<T extends boolean = true> {
   word?: T;
   scope?: T;
   isActive?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "notificationAreas_select".
+ */
+export interface NotificationAreasSelect<T extends boolean = true> {
+  tenant?: T;
+  image?: T;
+  title?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  newWindow?: T;
+  active?: T;
+  exposeFrom?: T;
+  exposeTo?: T;
+  displayOrder?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "popups_select".
+ */
+export interface PopupsSelect<T extends boolean = true> {
+  tenant?: T;
+  image?: T;
+  title?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  active?: T;
+  exposeFrom?: T;
+  exposeTo?: T;
+  width?: T;
+  height?: T;
+  top?: T;
+  left?: T;
+  showScrollbar?: T;
+  closeForDay?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "banners_select".
+ */
+export interface BannersSelect<T extends boolean = true> {
+  tenant?: T;
+  image?: T;
+  isRepresentative?: T;
+  title?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  newWindow?: T;
+  active?: T;
+  exposeFrom?: T;
+  exposeTo?: T;
+  displayOrder?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "adminNotices_select".
+ */
+export interface AdminNoticesSelect<T extends boolean = true> {
+  tenant?: T;
+  noticeType?: T;
+  pinFrom?: T;
+  pinTo?: T;
+  title?: T;
+  department?: T;
+  team?: T;
+  author?: T;
+  content?: T;
+  attachments?:
+    | T
+    | {
+        media?: T;
+        description?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "guideMenus_select".
+ */
+export interface GuideMenusSelect<T extends boolean = true> {
+  tenant?: T;
+  position?: T;
+  name?: T;
+  linkType?: T;
+  linkInternal?: T;
+  linkExternal?: T;
+  newWindow?: T;
+  displayOrder?: T;
+  active?: T;
   updatedAt?: T;
   createdAt?: T;
 }

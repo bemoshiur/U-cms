@@ -13,6 +13,7 @@ import { boardsStep } from './steps/boards'
 import { postsStep } from './steps/posts'
 import { profanityWordsStep } from './steps/profanityWords'
 import { memberBannedWordsStep } from './steps/memberBannedWords'
+import { displayComponentsStep } from './steps/displayComponents'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -45,6 +46,9 @@ export type { SeedStep } from './types'
  *    they don't).
  *  - `postsStep` (Task 3B) needs the demo site + the seeded boards (Notice /
  *    Gallery / Q&A); appended last.
+ *  - `displayComponentsStep` (Task 3C) needs the admin ('bos') + demo sites
+ *    (`sitesStep`) and the `content.*` display menus (`adminMenusStep`);
+ *    appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -60,6 +64,7 @@ export const seedSteps: SeedStep[] = [
   profanityWordsStep,
   memberBannedWordsStep,
   postsStep,
+  displayComponentsStep,
 ]
 
 /**

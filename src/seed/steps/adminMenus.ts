@@ -142,6 +142,43 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 6,
     collectionSlug: 'memberBannedWords',
   },
+  // Per-site display components (Task 3C; refs 1-45..1-53, 2-1). All
+  // tenant-scoped (per-site).
+  {
+    menuKey: 'content.notificationAreas',
+    name: 'Notification Area Management',
+    parentMenuKey: 'content',
+    order: 7,
+    collectionSlug: 'notificationAreas',
+  },
+  {
+    menuKey: 'content.popups',
+    name: 'Popup Management',
+    parentMenuKey: 'content',
+    order: 8,
+    collectionSlug: 'popups',
+  },
+  {
+    menuKey: 'content.banners',
+    name: 'Banner Management',
+    parentMenuKey: 'content',
+    order: 9,
+    collectionSlug: 'banners',
+  },
+  {
+    menuKey: 'content.adminNotices',
+    name: 'Administrator Notice Management',
+    parentMenuKey: 'content',
+    order: 10,
+    collectionSlug: 'adminNotices',
+  },
+  {
+    menuKey: 'content.guideMenus',
+    name: 'Guide Menu Management',
+    parentMenuKey: 'content',
+    order: 11,
+    collectionSlug: 'guideMenus',
+  },
   // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
   // logging backbone: access history, login history, and the two permission
   // journals. `privacy.permissionLogs` gates BOTH permission-journal
