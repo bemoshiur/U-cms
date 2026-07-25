@@ -4,6 +4,7 @@ import { Icon as Icon_60be061a35ba65b3ac8380ea7d755990 } from '../../../componen
 import { Logo as Logo_b1bbc7110cb2a1b52a7180329d8cc3a9 } from '../../../components/branding/Logo'
 import { TenantSelector as TenantSelector_d6d5f193a167989e2ee7d14202901e62 } from '@payloadcms/plugin-multi-tenant/rsc'
 import { TenantSelectionProvider as TenantSelectionProvider_d6d5f193a167989e2ee7d14202901e62 } from '@payloadcms/plugin-multi-tenant/rsc'
+import { LoginView as LoginView_7af18470411f801d2687404387d2db4e } from '../../../components/login/LoginView'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
@@ -17,5 +18,6 @@ export const importMap = {
     TenantSelector_d6d5f193a167989e2ee7d14202901e62,
   '@payloadcms/plugin-multi-tenant/rsc#TenantSelectionProvider':
     TenantSelectionProvider_d6d5f193a167989e2ee7d14202901e62,
+  '/components/login/LoginView#LoginView': LoginView_7af18470411f801d2687404387d2db4e,
   '@payloadcms/next/rsc#CollectionCards': CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
 }

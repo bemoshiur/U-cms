@@ -90,6 +90,14 @@ export const recordLoginFailure: CollectionAfterErrorHook = async ({ collection,
     if (collection?.slug !== 'users' || !isLoginRequest(req)) {
       return
     }
+    // Task 2B: the 2FA gate throws once, mid-login, when the password is correct
+    // but the OTP has not been entered yet (step-1 → step-2 handoff). That is a
+    // benign intermediate, not a failed login — `require2FA` flags it here so we
+    // don't pollute login history with a "failure" on every 2FA sign-in. A
+    // *wrong* OTP is NOT flagged, so it still records as a real failure.
+    if (req?.context?.skipTwoFactorFailureLog) {
+      return
+    }
     await recordLoginHistory(req.payload, {
       req,
       success: false,

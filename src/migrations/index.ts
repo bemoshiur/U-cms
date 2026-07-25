@@ -4,6 +4,7 @@ import * as migration_20260724_205851_codes_compound_unique from './20260724_205
 import * as migration_20260724_212430_roles_and_admin_menus from './20260724_212430_roles_and_admin_menus';
 import * as migration_20260724_222829_task_1d_accounts from './20260724_222829_task_1d_accounts';
 import * as migration_20260724_232634_task_2a_audit from './20260724_232634_task_2a_audit';
+import * as migration_20260725_001909_task_2b_2fa from './20260725_001909_task_2b_2fa';
 
 export const migrations = [
   {
@@ -34,6 +35,11 @@ export const migrations = [
   {
     up: migration_20260724_232634_task_2a_audit.up,
     down: migration_20260724_232634_task_2a_audit.down,
-    name: '20260724_232634_task_2a_audit'
+    name: '20260724_232634_task_2a_audit',
+  },
+  {
+    up: migration_20260725_001909_task_2b_2fa.up,
+    down: migration_20260725_001909_task_2b_2fa.down,
+    name: '20260725_001909_task_2b_2fa'
   },
 ];

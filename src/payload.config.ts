@@ -25,6 +25,7 @@ import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
 import { warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
+import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
 import { branding } from './branding'
 
 const filename = fileURLToPath(import.meta.url)
@@ -199,6 +200,17 @@ export default buildConfig({
         Icon: '/components/branding/Icon#Icon',
         Logo: '/components/branding/Logo#Logo',
       },
+      views: {
+        // Task 2B: replace the built-in login view with a branded two-step
+        // (password → Google-OTP) form that also shows the conditional
+        // Account-Request / Find-ID / Find-PW links (ref 1-1). The actual 2FA
+        // enforcement lives server-side in the `require2FA` beforeLogin gate —
+        // this view is only the UI. `login` (lowercase) is the built-in
+        // one-segment view key matched by @payloadcms/next's Root router.
+        login: {
+          Component: '/components/login/LoginView#LoginView',
+        },
+      },
     },
   },
   collections: [
@@ -220,8 +232,10 @@ export default buildConfig({
     MenuPermissionLogs,
   ],
   // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
-  // /api/account-request, /api/find-id, /api/find-password.
-  endpoints: publicAccountEndpoints,
+  // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B
+  // Google-OTP enrolment endpoints: /api/2fa/enroll, /api/2fa/verify-enroll,
+  // /api/2fa/guide.
+  endpoints: [...publicAccountEndpoints, ...twoFactorEndpoints],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   // See the `serverURL` const above (I-1 fix) — required so that

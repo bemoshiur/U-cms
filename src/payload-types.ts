@@ -191,6 +191,23 @@ export interface User {
    * Last successful login. Maintained by the system; used by the dormancy sweep.
    */
   lastLoginAt?: string | null;
+  totpSecret?: string | null;
+  /**
+   * Whether Google-OTP two-factor authentication is set up and confirmed for this account.
+   */
+  totpConfirmed?: boolean | null;
+  /**
+   * When two-factor authentication was confirmed. Null until first enrolment.
+   */
+  totpEnrolledAt?: string | null;
+  /**
+   * Admin action: clear this user’s 2FA enrolment so they must set up a new device on next login. The user is emailed. Requires the system.admins grant.
+   */
+  resetTwoFactorDevice?: boolean | null;
+  /**
+   * Admin action: regenerate this user’s OTP secret (invalidates the old code immediately; user re-enrols with a new QR). The user is emailed. Requires the system.admins grant.
+   */
+  regenerateTwoFactorSecret?: boolean | null;
   tenants?:
     | {
         tenant: number | Site;
@@ -774,6 +791,11 @@ export interface UsersSelect<T extends boolean = true> {
   extension?: T;
   profilePhoto?: T;
   lastLoginAt?: T;
+  totpSecret?: T;
+  totpConfirmed?: T;
+  totpEnrolledAt?: T;
+  resetTwoFactorDevice?: T;
+  regenerateTwoFactorSecret?: T;
   tenants?:
     | T
     | {
