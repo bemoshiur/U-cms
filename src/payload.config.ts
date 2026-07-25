@@ -26,7 +26,7 @@ import { AccessLogs } from './collections/AccessLogs'
 import { LoginHistory } from './collections/LoginHistory'
 import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
-import { warmAdminMenuKeyCache } from './access/hasMenuAccess'
+import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
 import { branding } from './branding'
@@ -183,6 +183,26 @@ const plugins: Plugin[] = [
       boards: {},
     },
     tenantsSlug: Sites.slug,
+    /**
+     * SECURITY — gate writes to the plugin-added `users.tenants` array on
+     * `system.admins`, exactly like the `roles` and `status` fields in
+     * Users.ts. `users.update` is `selfOrMenuAccess`, so a user may PATCH
+     * their own doc; without this field-level gate a non-super admin could
+     * add any site to their OWN `tenants` and thereby self-grant access to
+     * that site's boards — the same self-escalation hole that `roles`'
+     * field-access closes (see task-1C-report.md), reopened for `tenants`.
+     * `menuFieldAccess` honors `isSuper`; `overrideAccess` (seeds, the
+     * account-request server create) bypasses it as usual. Users can still
+     * edit their own name/email/password — only `tenants` is locked. `read`
+     * is left default (a user may see their own tenant assignment, and the
+     * plugin reads it for scoping).
+     */
+    tenantsArrayField: {
+      arrayFieldAccess: {
+        create: menuFieldAccess('system.admins'),
+        update: menuFieldAccess('system.admins'),
+      },
+    },
     /**
      * INTENTIONALLY permissive — do NOT change to an `isSuper` check. This is
      * a SINGLE global switch that governs tenant scoping on every collection

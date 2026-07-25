@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import config from '@/payload.config'
+import { toRelationId } from '@/collections/utils'
 import { BOARD_DEFAULT_FIELDS, INTEGRATED_BOARD_TYPE_CODE } from '@/collections/boards/defaults'
 import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
@@ -587,6 +588,112 @@ describe('board configuration engine (Task 3A)', () => {
           overrideAccess: false,
         }),
       ).resolves.toBeDefined()
+    })
+
+    // ── NEW-1: the tenant boundary itself must not be self-mutable ──────────
+    it('a non-super user CANNOT self-assign tenants (privilege-escalation guard)', async () => {
+      // Self-PATCH attempting to add site B to their own tenants. The doc-level
+      // update is allowed (self-access), but the `tenants` field write must be
+      // stripped by field-level access — mirrors the users.roles guard.
+      const patched = await payload.update({
+        collection: 'users',
+        id: scopedUser.id,
+        data: { tenants: [{ tenant: siteAId }, { tenant: siteBId }] } as never,
+        user: scopedUser,
+        overrideAccess: false,
+      })
+      const patchedTenantIds = ((patched.tenants ?? []) as { tenant?: unknown }[]).map((t) =>
+        toRelationId(t.tenant),
+      )
+      expect(patchedTenantIds).not.toContain(siteBId)
+
+      // Reload independently (overrideAccess:true) to prove it did NOT persist.
+      const reloaded = await payload.findByID({
+        collection: 'users',
+        id: scopedUser.id,
+        overrideAccess: true,
+      })
+      const reloadedTenantIds = ((reloaded.tenants ?? []) as { tenant?: unknown }[]).map((t) =>
+        toRelationId(t.tenant),
+      )
+      expect(reloadedTenantIds).toContain(siteAId)
+      expect(reloadedTenantIds).not.toContain(siteBId)
+
+      // And the failed escalation did NOT unlock site B boards for them.
+      await expect(
+        payload.findByID({
+          collection: 'boards',
+          id: boardBId,
+          user: reloaded,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('a system.admins holder CAN assign tenants to a user', async () => {
+      const adminsMenu = await payload.find({
+        collection: 'adminMenus',
+        where: { menuKey: { equals: 'system.admins' } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const adminsMenuId = adminsMenu.docs[0]?.id
+      if (adminsMenuId === undefined) {
+        throw new Error('system.admins adminMenu not found — did adminMenusStep run?')
+      }
+
+      const adminRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_ADMINS_${lettersOnly().toUpperCase()}`,
+          name: 'Admins-holder test role',
+          description: 'Grants system.admins (non-super).',
+          menuGrants: [adminsMenuId],
+        },
+        overrideAccess: true,
+      })
+      const adminUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `admins-${Date.now()}-${Math.floor(Math.random() * 100000)}@example.com`,
+          password: TEST_PASSWORD,
+          roles: [adminRole.id],
+          status: 'active',
+        },
+        overrideAccess: true,
+      })
+      const targetUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `target-${Date.now()}-${Math.floor(Math.random() * 100000)}@example.com`,
+          password: TEST_PASSWORD,
+          status: 'active',
+        },
+        overrideAccess: true,
+      })
+
+      const assigned = await payload.update({
+        collection: 'users',
+        id: targetUser.id,
+        data: { tenants: [{ tenant: siteBId }] } as never,
+        user: adminUser,
+        overrideAccess: false,
+      })
+      const assignedTenantIds = ((assigned.tenants ?? []) as { tenant?: unknown }[]).map((t) =>
+        toRelationId(t.tenant),
+      )
+      expect(assignedTenantIds).toContain(siteBId)
+
+      const reloadedTarget = await payload.findByID({
+        collection: 'users',
+        id: targetUser.id,
+        overrideAccess: true,
+      })
+      const reloadedIds = ((reloadedTarget.tenants ?? []) as { tenant?: unknown }[]).map((t) =>
+        toRelationId(t.tenant),
+      )
+      expect(reloadedIds).toContain(siteBId)
     })
   })
 
