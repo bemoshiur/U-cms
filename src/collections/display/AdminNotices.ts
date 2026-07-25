@@ -19,6 +19,26 @@ const ALLOWED_ATTACHMENT_EXTENSIONS = ['png', 'gif', 'jpg', 'jpeg']
 const adminNoticesAudit = auditCollection(ADMIN_NOTICES_MENU_KEY)
 
 /**
+ * Enforces the "pin period only when pinned" rule server-side (LOW-1), not just
+ * via `admin.condition` (which is a UI concern a crafted API write bypasses).
+ * When the effective `noticeType` is not `pinned`, both pin dates are cleared —
+ * so a general notice can never carry a stale/injected pin window. The
+ * effective type is read from `data`, falling back to `originalDoc` on a
+ * partial update.
+ */
+const clearPinPeriodWhenNotPinned: CollectionBeforeValidateHook = ({ data, originalDoc }) => {
+  if (!data) {
+    return data
+  }
+  const noticeType = 'noticeType' in data ? data.noticeType : originalDoc?.noticeType
+  if (noticeType !== 'pinned') {
+    data.pinFrom = null
+    data.pinTo = null
+  }
+  return data
+}
+
+/**
  * Validates each attachment's media extension against the legacy png/gif/jpg
  * allow-list (ref 1-50). Loads the referenced media doc (like `posts`) rather
  * than trusting client input. `maxRows: 5` on the field already caps the count;
@@ -140,7 +160,11 @@ export const AdminNotices: CollectionConfig = {
     },
   ],
   hooks: {
-    beforeValidate: [tenantMembershipGuard(), validateNoticeAttachments],
+    beforeValidate: [
+      tenantMembershipGuard(),
+      clearPinPeriodWhenNotPinned,
+      validateNoticeAttachments,
+    ],
     afterChange: [adminNoticesAudit.afterChange],
     afterDelete: [adminNoticesAudit.afterDelete],
   },

@@ -61,6 +61,59 @@ export function isHttpUrl(value: unknown): boolean {
   return typeof value === 'string' && /^https?:\/\//i.test(value.trim())
 }
 
+/** Placeholder origin used only to detect whether an internal path escapes same-origin. */
+const INTERNAL_LINK_PLACEHOLDER_ORIGIN = 'https://internal-link.invalid'
+
+/**
+ * Whether `value` is a genuine SITE-RELATIVE internal link — a same-origin path
+ * (`/bos/home`) or a query-only menu reference (`?menuSn=123`, the legacy
+ * internal-link shape). Mirrors the hardening in
+ * `src/security/safeRedirect.ts` (identical threat model): rejects control
+ * chars, protocol-relative (`//`) and backslash-authority (`/\`) forms, ANY
+ * scheme (`javascript:` / `data:` / `http(s):` …), and anything that resolves
+ * off-origin. This matters because Phase 4 renders `linkInternal` as a
+ * clickable `href` — an unvalidated value stored under the "internal" label
+ * would be a stored-XSS / open-redirect vector.
+ *
+ * A naive `startsWith('/') && !startsWith('//')` check is NOT enough (browsers
+ * normalize `\` to `/`, so `/\evil.com` becomes protocol-relative), which is
+ * why the leading-char rejection is paired with a belt-and-suspenders
+ * origin-resolution check — see the safeRedirect doc comment for the full
+ * reasoning.
+ */
+export function isSafeInternalLink(value: unknown): boolean {
+  if (typeof value !== 'string' || value.length === 0) {
+    return false
+  }
+  // Reject C0 control chars + DEL anywhere (the WHATWG URL parser silently
+  // strips tabs/newlines rather than rejecting them, so this is independent).
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i)
+    if (code <= 31 || code === 127) {
+      return false
+    }
+  }
+  const first = value.charAt(0)
+  const second = value.charAt(1)
+  if (first === '/') {
+    // A single leading '/', not '//' (protocol-relative) or '/\' (the
+    // browser normalizes the backslash to '/', i.e. also protocol-relative).
+    if (second === '/' || second === '\\') {
+      return false
+    }
+  } else if (first !== '?') {
+    // Only a site-relative path ('/…') or a query-only ref ('?…') is internal;
+    // anything else (a scheme, a bare host, a relative segment) is rejected.
+    return false
+  }
+  try {
+    const resolved = new URL(value, INTERNAL_LINK_PLACEHOLDER_ORIGIN)
+    return resolved.origin === INTERNAL_LINK_PLACEHOLDER_ORIGIN
+  } catch {
+    return false
+  }
+}
+
 /** The four exposure-order moves (노출순서 최상위/상위/하위/최하위). */
 export type OrderMove = 'top' | 'up' | 'down' | 'bottom'
 

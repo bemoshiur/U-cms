@@ -1,6 +1,6 @@
 import type { Field, TextFieldSingleValidation } from 'payload'
 
-import { isHttpUrl } from '../../content/display'
+import { isHttpUrl, isSafeInternalLink } from '../../content/display'
 
 /**
  * Shared field-set for the per-site display collections (Task 3C:
@@ -32,6 +32,30 @@ export const validateExternalLink: TextFieldSingleValidation = (value, options) 
   }
   if (!isHttpUrl(value)) {
     return 'External links must be an absolute URL starting with http:// or https://.'
+  }
+  return true
+}
+
+/**
+ * Validator for a shared `linkInternal` field: when the sibling `linkType` is
+ * `internal`, a NON-EMPTY value must be a genuine site-relative internal link
+ * (`/path` or `?menuSn=…`) — see `isSafeInternalLink`. Empty is allowed (a
+ * display item need not carry a link). This closes the stored-XSS /
+ * open-redirect hole where a tenant-scoped editor could store `javascript:…`,
+ * `data:…`, `//evil.com`, or an off-site URL under the "internal" label (Phase
+ * 4 renders it as a clickable href). A custom `validate` REPLACES Payload's
+ * default, so the empty/other-linkType cases are handled explicitly here.
+ */
+export const validateInternalLink: TextFieldSingleValidation = (value, options) => {
+  const linkType = (options?.siblingData as { linkType?: unknown } | undefined)?.linkType
+  if (linkType !== 'internal') {
+    return true
+  }
+  if (value === undefined || value === null || value === '') {
+    return true
+  }
+  if (!isSafeInternalLink(value)) {
+    return 'Internal links must be a site-relative path starting with "/" (e.g. /bos/home) or a "?menuSn=…" reference — no external URLs, schemes, or protocol-relative values.'
   }
   return true
 }
@@ -136,10 +160,11 @@ export function linkFields(options: { includeNewWindow?: boolean } = {}): Field[
     {
       name: 'linkInternal',
       type: 'text',
+      validate: validateInternalLink,
       admin: {
         condition: (_data, sibling) => sibling?.linkType === 'internal',
         description:
-          'Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.',
+          'Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.',
       },
     },
     {

@@ -151,6 +151,79 @@ describe('per-site display components (Task 3C)', () => {
     })
   })
 
+  // ── internal-link validation (MEDIUM-1: stored XSS / open redirect) ────────
+  describe('internal-link validation', () => {
+    const dangerous = [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      '//evil.com',
+      '/\\evil.com',
+      'https://evil.com',
+    ]
+
+    for (const bad of dangerous) {
+      it(`rejects a linkInternal of ${JSON.stringify(bad)}`, async () => {
+        await expect(
+          payload.create({
+            collection: 'notificationAreas',
+            data: {
+              tenant: siteAId,
+              image: imageId,
+              title: marker('BadInternal'),
+              linkType: 'internal',
+              linkInternal: bad,
+            },
+            overrideAccess: true,
+          }),
+        ).rejects.toThrow()
+      })
+    }
+
+    it('accepts a site-relative path and a ?menuSn reference (guide menus)', async () => {
+      const path = await payload.create({
+        collection: 'guideMenus',
+        data: {
+          tenant: siteAId,
+          position: 'bottom',
+          name: marker('GoodPath'),
+          linkType: 'internal',
+          linkInternal: '/bos/singl/list.do',
+        },
+        overrideAccess: true,
+      })
+      expect(path.linkInternal).toBe('/bos/singl/list.do')
+
+      const query = await payload.create({
+        collection: 'guideMenus',
+        data: {
+          tenant: siteAId,
+          position: 'bottom',
+          name: marker('GoodQuery'),
+          linkType: 'internal',
+          linkInternal: '?menuSn=1',
+        },
+        overrideAccess: true,
+      })
+      expect(query.linkInternal).toBe('?menuSn=1')
+    })
+
+    it('rejects an off-site linkInternal on a banner too (shared field-set)', async () => {
+      await expect(
+        payload.create({
+          collection: 'banners',
+          data: {
+            tenant: siteAId,
+            image: imageId,
+            title: marker('BadBannerInternal'),
+            linkType: 'internal',
+            linkInternal: 'javascript:alert(1)',
+          },
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+    })
+  })
+
   // ── image is required for the image-bearing collections ───────────────────
   describe('image requirement', () => {
     it('rejects a popup without an image', async () => {
@@ -264,6 +337,45 @@ describe('per-site display components (Task 3C)', () => {
       const sorted = [...found.docs].sort(compareAdminNotices)
       expect(sorted[0]?.noticeType).toBe('pinned')
       expect(sorted[sorted.length - 1]?.noticeType).toBe('general')
+    })
+
+    it('clears pinFrom/pinTo when the notice is not pinned (LOW-1)', async () => {
+      // A crafted "general" notice carrying pin dates must not persist them.
+      const general = await payload.create({
+        collection: 'adminNotices',
+        data: {
+          tenant: siteAId,
+          noticeType: 'general',
+          title: marker('GeneralWithPin'),
+          pinFrom: '2026-07-01T00:00:00Z',
+          pinTo: '2026-12-31T00:00:00Z',
+        } as never,
+        overrideAccess: true,
+      })
+      expect(general.pinFrom == null).toBe(true)
+      expect(general.pinTo == null).toBe(true)
+
+      // Downgrading a pinned notice to general also clears the pin window.
+      const pinned = await payload.create({
+        collection: 'adminNotices',
+        data: {
+          tenant: siteAId,
+          noticeType: 'pinned',
+          title: marker('PinnedThenGeneral'),
+          pinFrom: '2026-07-01T00:00:00Z',
+          pinTo: '2026-12-31T00:00:00Z',
+        },
+        overrideAccess: true,
+      })
+      expect(pinned.pinFrom == null).toBe(false)
+      const downgraded = await payload.update({
+        collection: 'adminNotices',
+        id: pinned.id,
+        data: { noticeType: 'general' },
+        overrideAccess: true,
+      })
+      expect(downgraded.pinFrom == null).toBe(true)
+      expect(downgraded.pinTo == null).toBe(true)
     })
 
     it(`rejects more than ${ADMIN_NOTICE_MAX_ATTACHMENTS} attachments`, async () => {

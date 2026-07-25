@@ -856,7 +856,7 @@ export interface NotificationArea {
   title: string;
   linkType?: ('internal' | 'external') | null;
   /**
-   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
    */
   linkInternal?: string | null;
   /**
@@ -900,7 +900,7 @@ export interface Popup {
   title: string;
   linkType?: ('internal' | 'external') | null;
   /**
-   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
    */
   linkInternal?: string | null;
   /**
@@ -964,7 +964,7 @@ export interface Banner {
   title: string;
   linkType?: ('internal' | 'external') | null;
   /**
-   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
    */
   linkInternal?: string | null;
   /**
@@ -1074,7 +1074,7 @@ export interface GuideMenu {
   name: string;
   linkType?: ('internal' | 'external') | null;
   /**
-   * Internal link path (e.g. /bos/…). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
+   * Internal site-relative link — a path like /bos/… or a ?menuSn=… reference (no external URLs or schemes). The menu/program picker popup is deferred to Phase 4 — a text path is stored for now.
    */
   linkInternal?: string | null;
   /**

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { compareAdminNotices, isHttpUrl, isLive, reorder } from '@/content/display'
+import {
+  compareAdminNotices,
+  isHttpUrl,
+  isLive,
+  isSafeInternalLink,
+  reorder,
+} from '@/content/display'
 
 describe('display helpers (Task 3C)', () => {
   describe('isLive', () => {
@@ -76,6 +82,33 @@ describe('display helpers (Task 3C)', () => {
       expect(isHttpUrl('')).toBe(false)
       expect(isHttpUrl(undefined)).toBe(false)
       expect(isHttpUrl(42)).toBe(false)
+    })
+  })
+
+  describe('isSafeInternalLink', () => {
+    it('accepts genuine site-relative paths and query refs', () => {
+      expect(isSafeInternalLink('/path')).toBe(true)
+      expect(isSafeInternalLink('/bos/singl/deptinfo/list.do?menuSn=100085')).toBe(true)
+      expect(isSafeInternalLink('?menuSn=1')).toBe(true)
+      expect(isSafeInternalLink('/')).toBe(true)
+    })
+
+    it('rejects scheme, protocol-relative, backslash-authority, and off-site values', () => {
+      expect(isSafeInternalLink('javascript:alert(1)')).toBe(false)
+      expect(isSafeInternalLink('data:text/html,<script>alert(1)</script>')).toBe(false)
+      expect(isSafeInternalLink('//evil.com')).toBe(false)
+      expect(isSafeInternalLink('/\\evil.com')).toBe(false)
+      expect(isSafeInternalLink('https://evil.com')).toBe(false)
+      expect(isSafeInternalLink('http://evil.com')).toBe(false)
+    })
+
+    it('rejects control chars, bare relative segments, and non-strings', () => {
+      expect(isSafeInternalLink('/path\twith\ttab')).toBe(false)
+      expect(isSafeInternalLink('/evil\n//host')).toBe(false)
+      expect(isSafeInternalLink('relative/path')).toBe(false)
+      expect(isSafeInternalLink('')).toBe(false)
+      expect(isSafeInternalLink(undefined)).toBe(false)
+      expect(isSafeInternalLink(42)).toBe(false)
     })
   })
 
