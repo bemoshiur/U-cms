@@ -1,4 +1,4 @@
-import type { Payload, PayloadRequest } from 'payload'
+import type { Payload, PayloadRequest, Where } from 'payload'
 
 import { hasMenuAccess, isSuperUser } from '../access/hasMenuAccess'
 import {
@@ -37,6 +37,18 @@ import { utcDayBounds, utcDayString } from './trafficAggregation'
  * because some widgets (traffic) are gated on a DIFFERENT key than the collection
  * they read. The tenant `where` is the load-bearing isolation boundary.
  */
+
+/**
+ * §3 security-document exclusion (Task 6D phase-6 fix). The dashboard widgets +
+ * post aggregates are gated on `content.posts`, NOT the privacy grant, so a
+ * content-only admin must never see §3 security-doc post titles / board names /
+ * view-counts (unlogged) in Recent-Posts / Most-Viewed / Q&A nor have them
+ * counted in postsToday / postsTotal. Mirrors NOT_SECURITY_DOC in
+ * `src/site/board.ts` + the L1 exclusion in `downloadStatsData.ts`.
+ * `not_equals: true` compiles to `(col IS NULL OR col <> true)`, so ordinary/
+ * legacy posts (NULL/false) are unaffected.
+ */
+const NOT_SECURITY_DOC: Where = { securityDoc: { not_equals: true } }
 
 /** How many rows each list widget shows. */
 const NOTICE_LIMIT = 5
@@ -232,6 +244,7 @@ export async function loadDashboardData(args: {
           and: [
             { tenant: { equals: tenantId } },
             { createdAt: { greater_than_equal: todayStart } },
+            NOT_SECURITY_DOC,
           ],
         },
         overrideAccess: true,
@@ -242,7 +255,7 @@ export async function loadDashboardData(args: {
     if (visibleMetricKeys.has('postsTotal')) {
       const r = await payload.count({
         collection: 'posts',
-        where: { tenant: { equals: tenantId } },
+        where: { and: [{ tenant: { equals: tenantId } }, NOT_SECURITY_DOC] },
         overrideAccess: true,
         req,
       })
@@ -340,7 +353,11 @@ export async function loadDashboardData(args: {
     const found = await payload.find({
       collection: 'posts',
       where: {
-        and: [{ tenant: { equals: tenantId } }, { isSecret: { not_equals: true } }],
+        and: [
+          { tenant: { equals: tenantId } },
+          { isSecret: { not_equals: true } },
+          NOT_SECURITY_DOC,
+        ],
       },
       depth: 1,
       limit: 200,
