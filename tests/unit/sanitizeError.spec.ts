@@ -50,6 +50,66 @@ describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
     expect(sanitizeErrorMessage(`digest ${hex}`)).not.toContain(hex)
   })
 
+  // ── C1 regression — the exact adversarial shapes the brief named ──────────
+  it('redacts DB connection-string userinfo credentials (postgres/mysql)', () => {
+    const pg = sanitizeErrorMessage(
+      'connect failed postgres://appuser:pw123@db.host:5432/app timeout',
+    )
+    expect(pg).not.toContain('pw123')
+    expect(pg).not.toContain('appuser:pw123')
+    const my = sanitizeErrorMessage('mysql://root:toor@127.0.0.1:3306/app is down')
+    expect(my).not.toContain('toor')
+  })
+
+  it('redacts PAYLOAD_SECRET and other env-style secret keys', () => {
+    expect(sanitizeErrorMessage('boot failed PAYLOAD_SECRET=abc123def')).not.toContain('abc123def')
+    expect(sanitizeErrorMessage('S3_SECRET_ACCESS_KEY=zzzKEYvalue')).not.toContain('zzzKEYvalue')
+    expect(sanitizeErrorMessage('SMTP_PASS=hunter2pass')).not.toContain('hunter2pass')
+    expect(sanitizeErrorMessage('SURVEY_PARTICIPANT_SECRET=svsecret9')).not.toContain('svsecret9')
+  })
+
+  it('redacts compound camelCase/snake_case token params', () => {
+    expect(sanitizeErrorMessage('resetToken=deadbeefdeadbeef1234')).not.toContain('deadbeef')
+    expect(sanitizeErrorMessage('access_token=xyz987tok')).not.toContain('xyz987tok')
+    expect(sanitizeErrorMessage('refreshToken=rrr111tok')).not.toContain('rrr111tok')
+    expect(sanitizeErrorMessage('failed with apiKey=kkk222val')).not.toContain('kkk222val')
+    expect(sanitizeErrorMessage('/cb?code=1&access_token=leaked99')).not.toContain('leaked99')
+  })
+
+  it('redacts a DATABASE_URI value whole (key + userinfo)', () => {
+    const out = sanitizeErrorMessage('DATABASE_URI=postgres://u:secretpw@h:5432/db')
+    expect(out).not.toContain('secretpw')
+  })
+
+  it('C1 — scrubs ALL brief-named secret shapes in one message (fails without the fix)', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sigsigsigsig'
+    const msg =
+      `postgres://u:pw123@h/db PAYLOAD_SECRET=sekret99 resetToken=deadbeefdeadbeefdeadbeef ` +
+      `Bearer ${jwt} alice@example.com DATABASE_URI=mysql://r:toorpw@h/a`
+    const out = sanitizeErrorMessage(msg)
+    for (const secret of [
+      'pw123',
+      'sekret99',
+      'deadbeefdeadbeefdeadbeef',
+      jwt,
+      'alice@example.com',
+      'toorpw',
+    ]) {
+      expect(out).not.toContain(secret)
+    }
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('C1 — the SAME scrub applies to the stack digest', () => {
+    const stack =
+      'Error: fail\n    at q (postgres://u:pw@h/db)\n    at r (PAYLOAD_SECRET=abc123 resetToken=deadbeef1234abcd)'
+    const digest = sanitizeStack(stack)!
+    expect(digest).not.toContain('pw@h')
+    expect(digest).not.toContain('abc123')
+    expect(digest).not.toContain('deadbeef1234abcd')
+    expect(digest).toContain('[REDACTED]')
+  })
+
   it('leaves an ordinary message untouched (no false redaction)', () => {
     const msg = 'Cannot read properties of undefined (reading id)'
     expect(sanitizeErrorMessage(msg)).toBe(msg)

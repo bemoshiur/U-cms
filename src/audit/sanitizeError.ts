@@ -31,15 +31,43 @@ export const MAX_STACK_FRAMES = 30
 const REDACTED = '[REDACTED]'
 
 /**
- * Scrubs a single string of the known-sensitive patterns, in a deliberate
- * order (most specific first). Shared by the message + every stack line.
+ * The sensitive KEY terms (an alternation source). A key counts as sensitive when
+ * one of these appears anywhere in the key identifier — so it catches plain
+ * (`password`, `token`), env-style SCREAMING_SNAKE (`PAYLOAD_SECRET`,
+ * `DATABASE_URI`, `S3_SECRET_ACCESS_KEY`, `SMTP_PASS`), and compound
+ * camelCase/snake_case (`resetToken`, `access_token`, `refreshToken`, `apiKey`)
+ * keys that a naive `\bword\b` anchor would miss (there is no word boundary
+ * inside `resetToken` / `PAYLOAD_SECRET`).
+ */
+const SENSITIVE_TERM =
+  'password|passwd|pwd|passphrase|secret|token|api[_-]?key|apikey|access[_-]?key|accesskey|secret[_-]?key|secretkey|authorization|session|cookie|credential|refresh|private[_-]?key|privatekey|database[_-]?uri|database[_-]?url|connection[_-]?string|dsn|smtp[_-]?pass'
+
+/**
+ * Matches a `KEY[:=]value` whose KEY *contains* a {@link SENSITIVE_TERM}, with
+ * the surrounding key identifier chars captured so the key name is preserved and
+ * only the value is redacted. Anchoring on the sensitive term (not on "any
+ * identifier") is deliberate: it means a NON-sensitive prefix like `Error: ` or
+ * `detail: ` can't swallow an inner `token=…` — the engine slides past the
+ * non-sensitive key straight to the sensitive one.
+ */
+const SENSITIVE_KV = new RegExp(
+  `([A-Za-z0-9_.-]*(?:${SENSITIVE_TERM})[A-Za-z0-9_.-]*)(\\s*[:=]\\s*)("?)([^\\s"'&,;)}\\]]+)`,
+  'gi',
+)
+
+/**
+ * Scrubs a single string of the known-sensitive patterns, in a deliberate order
+ * (most specific first). Shared by the message + every stack line.
  *
- *  1. `Bearer <token>` authorization values.
- *  2. `key=value` / `key: value` where the key is a known-sensitive name
- *     (password, token, secret, api key, session, cookie, credentials, …).
- *  3. JWT-shaped tokens (`eyJ…​.…​.…`).
- *  4. Email addresses (PII).
- *  5. Long hex / base64 blobs (32+/40+ chars — hashes, keys, opaque secrets).
+ *  1. URL / connection-string USERINFO credentials → `<scheme>://[REDACTED]@host`
+ *     (`postgres://user:pw@host`, `mysql://root:toor@host`, the DATABASE_URI shape).
+ *  2. `Bearer <token>` authorization values.
+ *  3. sensitive `KEY=value` / `KEY: value` — KEY matched by {@link SENSITIVE_KEY}
+ *     as a substring, so env secrets + compound token params are covered.
+ *  4. JWT-shaped tokens (`eyJ…​.…​.…`).
+ *  5. Email addresses (PII).
+ *  6. Opaque token/secret blobs — hex runs (20+, incl. the reset-token shape) and
+ *     long base64 (40+).
  *
  * Over-redaction is intentional and safe: this store is admin-readable +
  * exportable, so a false positive (a redacted non-secret) is always preferable
@@ -48,24 +76,30 @@ const REDACTED = '[REDACTED]'
 export function scrubSensitive(input: string): string {
   let out = input
 
-  // 1. Authorization bearer tokens.
+  // 1. URL / connection-string userinfo credentials (before anything else, so the
+  //    whole `user:pass@` is gone regardless of scheme). `[^\s/@]+@` is the
+  //    userinfo up to the `@` — covers postgres/mysql/redis/mongodb/https/… .
+  out = out.replace(/\b([a-z][a-z0-9+.-]*):\/\/[^\s/@]+@/gi, `$1://${REDACTED}@`)
+
+  // 2. Authorization bearer tokens.
   out = out.replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, `Bearer ${REDACTED}`)
 
-  // 2. sensitive key=value / key: value (quoted or bare value).
-  out = out.replace(
-    /\b(passwords?|passwd|pwd|secret|tokens?|api[_-]?keys?|apikey|access[_-]?keys?|secret[_-]?keys?|authorization|session|sid|cookies?|credentials?|client[_-]?secret|refresh[_-]?tokens?|private[_-]?keys?)\b(\s*[:=]\s*)("?)([^\s"',;)}\]]+)/gi,
-    (_m, key: string) => `${key}=${REDACTED}`,
-  )
+  // 3. sensitive KEY=value / KEY: value — KEY contains a SENSITIVE_TERM, so
+  //    `PAYLOAD_SECRET`, `DATABASE_URI`, `resetToken`, `access_token`, `apiKey`,
+  //    `password`, … are all caught (incl. when preceded by a non-sensitive
+  //    `Error: ` / `detail: ` prefix), while ordinary `id=5` / `line:12` are left.
+  out = out.replace(SENSITIVE_KV, (_m, key: string) => `${key}=${REDACTED}`)
 
-  // 3. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
+  // 4. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
   //    header `{"` in base64url — a strong, low-false-positive signal).
   out = out.replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, REDACTED)
 
-  // 4. Email addresses (PII — never stored in the error log).
+  // 5. Email addresses (PII — never stored in the error log).
   out = out.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, REDACTED)
 
-  // 5. Long opaque blobs — hex hashes/keys (32+) and base64 secrets (40+).
-  out = out.replace(/\b[A-Fa-f0-9]{32,}\b/g, REDACTED)
+  // 6. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
+  //    session/CSRF tokens, hashes, keys) and long base64 (40+).
+  out = out.replace(/\b[A-Fa-f0-9]{20,}\b/g, REDACTED)
   out = out.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, REDACTED)
 
   return out

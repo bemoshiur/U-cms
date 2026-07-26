@@ -216,6 +216,51 @@ describe('Task 5C — error-log module + access-history view', () => {
       })
       expect(skipped.docs).toHaveLength(0)
     })
+
+    it('H1 — a GraphQL 4xx (originalError.status) is NOT captured; a GraphQL 500 IS', async () => {
+      const urlGq403 = `/api/graphql/${unique('gq403')}`
+      const urlGq500 = `/api/graphql/${unique('gq500')}`
+      // graphql-js locatedError wraps a resolver throw in a GraphQLError whose OWN
+      // .status is undefined — the real status is on .originalError.
+      const gql403 = Object.assign(new Error('GraphQL error'), {
+        name: 'GraphQLError',
+        originalError: Object.assign(new Error('Forbidden'), { status: 403 }),
+      })
+      const gql500 = Object.assign(new Error('GraphQL error'), {
+        name: 'GraphQLError',
+        originalError: new Error('resolver bug'), // statusless server throw → 500
+      })
+
+      await recordGlobalError({
+        error: gql403,
+        req: fakeReq({ pathname: urlGq403, method: 'POST' }),
+        context: {},
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      await recordGlobalError({
+        error: gql500,
+        req: fakeReq({ pathname: urlGq500, method: 'POST' }),
+        context: {},
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+
+      expect(
+        (
+          await payload.find({
+            collection: 'errorLogs',
+            where: { url: { equals: urlGq403 } },
+            overrideAccess: true,
+          })
+        ).docs,
+      ).toHaveLength(0)
+      const captured = await payload.find({
+        collection: 'errorLogs',
+        where: { url: { equals: urlGq500 } },
+        overrideAccess: true,
+      })
+      expect(captured.docs).toHaveLength(1)
+      expect(captured.docs[0]!.statusCode).toBe(500)
+    })
   })
 
   // ── Part 1 — immutability + gating (mirror the audit backbone) ─────────────
