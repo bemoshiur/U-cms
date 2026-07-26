@@ -1,10 +1,11 @@
 import { browserFamilyFromUserAgent, osFamilyFromUserAgent } from '../content/traffic'
 
 /**
- * Pure error-sanitization + classification helpers for the error-log module
- * (Task 5C; feature-inventory ref 1-56). Kept free of any Payload/Node runtime
- * so every scrub rule is unit-testable and identical wherever an error is
- * captured (the global `afterError` hook, and any future frontend boundary).
+ * Error-sanitization + classification helpers for the error-log module (Task 5C;
+ * feature-inventory ref 1-56). No Payload dependency (unit-testable, identical
+ * wherever an error is captured). The one runtime input it reads is `process.env`
+ * — the PRIMARY defense string-replaces the app's OWN secret values (see
+ * {@link collectEnvSecretValues}); it is parameterized so tests inject their own.
  *
  * ## Why the stored error is sanitized (SECURITY)
  *
@@ -27,19 +28,72 @@ export const MAX_STACK_LEN = 4000
 /** Keep only the top frames of a stack — enough to locate the fault, no deep internals. */
 export const MAX_STACK_FRAMES = 30
 /**
- * PRE-CAP: the raw message/stack is truncated to this before scrubbing (ReDoS
- * hardening). `scrubSensitive` runs inside the global `afterError` capture on
- * EVERY request error, so an attacker who inflates a thrown error's `.message`
- * (an echoed request body, an oversized query/URL, a huge JSON-parse snippet)
- * could otherwise feed a 64k+ string into the regexes and pin the single-threaded
- * event loop. The stored value is a truncated digest anyway, so capping the INPUT
- * first is free — and combined with the bounded quantifiers below it keeps scrub
- * time linear + bounded. Must be >= MAX_STACK_LEN so the digest cap still bites.
+ * Pathological-size guard: the raw message/stack is cut to this (a plain O(1)
+ * substring) BEFORE scrubbing, so an inflated `.message` can't be scanned in full.
+ * It is deliberately GENEROUS — 64 KB, 8× the old 8 KB — for two reasons: (1) a
+ * realistic secret / connection string (< 1 KB, and its credential sits at the
+ * URI's START) never STRADDLES the cut and loses its delimiter, which an 8 KB
+ * pre-cap did (a URI whose `@` sat past 8 KB was truncated mid-userinfo and the
+ * password tail leaked); (2) it bounds the worst-case scrub of an ADVERSARIAL
+ * input (a 64 KB run engineered to maximize the term-anchored regexes' bounded
+ * backtracking) to well under 100 ms with comfortable CI headroom — a larger cap
+ * (256 KB measured ~230 ms) would not. A bigger input is O(1)-cut to 64 KB first,
+ * so it too completes fast. Scrub runs on the whole (≤ 64 KB) input; only AFTER
+ * scrubbing is the result truncated to the digest size (MAX_MESSAGE_LEN / _STACK_).
  */
-export const MAX_SCRUB_INPUT = 8192
+export const MAX_SCRUB_INPUT = 65536
+
+/** Env-secret values shorter than this are ignored for redaction (never nuke a short/common value). */
+export const MIN_ENV_SECRET_LEN = 8
 
 /** The token every redaction collapses a sensitive value to. */
 const REDACTED = '[REDACTED]'
+
+/**
+ * The app's own env vars whose VALUES are secrets to scrub verbatim. The explicit
+ * list guarantees the brief-named ones (some — `DATABASE_URI`, `S3_ACCESS_KEY_ID` —
+ * don't match the name pattern); the pattern then catches ANY other
+ * `*_SECRET` / `*_TOKEN` / `*_PASSWORD` / `*_KEY` env present at runtime.
+ */
+const ENV_SECRET_NAMES = [
+  'PAYLOAD_SECRET',
+  'DATABASE_URI',
+  'DATABASE_URL',
+  'S3_SECRET_ACCESS_KEY',
+  'S3_ACCESS_KEY_ID',
+  'SMTP_PASS',
+  'SMTP_PASSWORD',
+  'SURVEY_PARTICIPANT_SECRET',
+  'TRAFFIC_SECRET',
+]
+const ENV_SECRET_NAME_RE =
+  /SECRET|TOKEN|PASSWORD|PASSWD|PASSPHRASE|CREDENTIAL|PRIVATE_?KEY|_KEY$|_PASS$|_DSN$/i
+
+/**
+ * The PRIMARY, bypass-proof redaction input: the app's OWN runtime secret VALUES
+ * (from `process.env`), longest-first so a longer secret can't be partially
+ * shadowed by a shorter one. `scrubSensitive` string-replaces each of these
+ * VERBATIM before any heuristic regex, so the real DB URI (with password), the
+ * signing secret, the S3 keys, etc. are removed regardless of the format, encoding,
+ * whitespace or position they appear in — plain `String.split/join`, O(n), no
+ * regex, no bypass. Values shorter than {@link MIN_ENV_SECRET_LEN} are ignored so a
+ * short/common env value can't cause mass over-redaction. Parameterized for tests.
+ */
+export function collectEnvSecretValues(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  const values = new Set<string>()
+  for (const name of Object.keys(env)) {
+    const value = env[name]
+    if (typeof value !== 'string' || value.length < MIN_ENV_SECRET_LEN) {
+      continue
+    }
+    if (ENV_SECRET_NAMES.includes(name) || ENV_SECRET_NAME_RE.test(name)) {
+      values.add(value)
+    }
+  }
+  return [...values].sort((a, b) => b.length - a.length)
+}
 
 /**
  * The sensitive KEY terms (an alternation source). A key counts as sensitive when
@@ -55,88 +109,131 @@ const SENSITIVE_TERM =
 
 /**
  * A sensitive KEY identifier: an optional bounded prefix + a {@link SENSITIVE_TERM}
- * + an optional bounded suffix. The `{0,16}` bounds are LOAD-BEARING for ReDoS
+ * + an optional bounded suffix. The `{0,8}` bounds are LOAD-BEARING for ReDoS
  * safety — unbounded `[...]*` on BOTH sides of the alternation is the catastrophic
  * backtracking pattern; bounding each side to a small constant keeps the
- * failed-match cost O(16²) per position, i.e. linear in input length. The prefix
- * can be empty, so the term still matches even when it starts the key (a
- * non-sensitive `Error: ` / `detail: ` prefix can't swallow an inner `token=…`);
- * a key with a >16-char prefix (`SURVEY_PARTICIPANT_SECRET`) still redacts its
- * VALUE — only the echoed key LABEL may be partial, which is cosmetic.
+ * failed-match cost O(8²) per position, i.e. linear in input length (and 3× cheaper
+ * than `{0,16}`, which matters at the 64 KB cap). The prefix can be empty, so the
+ * term still matches even when it starts the key (a non-sensitive `Error: ` /
+ * `detail: ` prefix can't swallow an inner `token=…`); a key with a longer prefix
+ * (`SURVEY_PARTICIPANT_SECRET`) still redacts its VALUE — the match simply starts
+ * nearer the term, so only the echoed key LABEL may be partial, which is cosmetic.
  */
-const SENSITIVE_KEY = `[A-Za-z0-9_.-]{0,16}(?:${SENSITIVE_TERM})[A-Za-z0-9_.-]{0,16}`
+const SENSITIVE_KEY = `[A-Za-z0-9_.-]{0,8}(?:${SENSITIVE_TERM})[A-Za-z0-9_.-]{0,8}`
 
-/**
- * `KEY[:=]value` (bare form). The separator also accepts URL-ENCODED `=`/`:`
- * (`%3D`/`%3A`) so a `resetToken%3Ddeadbeef` in an encoded query string is still
- * caught. The value is a BOUNDED negated class (`{1,512}`) — a single bounded
- * quantifier (never nested), so no ReDoS; an over-long value's tail is caught by
- * the opaque-blob pass as a backstop.
- */
-const SENSITIVE_KV = new RegExp(
-  `(${SENSITIVE_KEY})(\\s*(?:[:=]|%3[aAdD])\\s*)("?)([^\\s"'&,;)}\\]]{1,512})`,
-  'gi',
-)
+/** The KEY→value separator: `:`/`=`, incl. URL-encoded (`%3A`/`%3D`), with optional spaces. */
+const SEP = `\\s*(?:[:=]|%3[aAdD])\\s*`
 
 /** JSON-shaped `"key":"value"` where the key is sensitive (`{"password":"…"}`). */
 const SENSITIVE_JSON = new RegExp(`"(${SENSITIVE_KEY})"\\s*:\\s*"[^"]{0,512}"`, 'gi')
 
+/**
+ * A sensitive key followed by a QUOTED value (single OR double quote): redact the
+ * ENTIRE quoted span, so a value WITH SPACES (`password="my secret pass"`,
+ * `passphrase='correct horse battery staple'`) is fully removed, not truncated at
+ * the first space. The value is a tempered, BOUNDED class
+ * (`(?:(?!\2)[^\r\n]){0,512}`) — a single bounded quantifier, so no ReDoS.
+ */
+const SENSITIVE_KV_QUOTED = new RegExp(
+  `(${SENSITIVE_KEY})(?:${SEP})(["'])(?:(?!\\2)[^\\r\\n]){0,512}\\2`,
+  'gi',
+)
+
+/**
+ * A sensitive key in `KEY = value` ENV-ASSIGNMENT form — a space/tab AFTER the
+ * separator (the shape of an env dump / assignment log:
+ * `PAYLOAD_SECRET = a long secret value`) — redacted to end of the value RUN (end
+ * of line). Requiring the trailing space distinguishes it from an inline
+ * `key=value` (handled token-wise below), so a spaced env value isn't truncated at
+ * its first space.
+ */
+const SENSITIVE_ENV_ASSIGN = new RegExp(
+  `(${SENSITIVE_KEY})(?:\\s*(?:[:=]|%3[aAdD])[ \\t]+)[^\\r\\n]{1,512}`,
+  'gi',
+)
+
+/**
+ * Inline `KEY=token` / `KEY: token` / `KEY%3Dtoken` (unquoted, no space after the
+ * separator): redact the token to its end. The value is a BOUNDED negated class
+ * (`{1,512}`, single quantifier) — no ReDoS; an over-long value's tail is caught by
+ * the opaque-blob pass as a backstop.
+ */
+const SENSITIVE_KV = new RegExp(`(${SENSITIVE_KEY})(?:${SEP})"?[^\\s"'&,;)}\\]]{1,512}`, 'gi')
+
 /** URL / connection-string userinfo: redact the WHOLE userinfo up to the LAST `@`. */
 const URI_USERINFO = /\b([a-z][a-z0-9+.-]{0,20}):\/\/[^\s/]{1,256}@/gi
 
+/** `Bearer|Basic|Digest <credential>` authorization values (single bounded quantifier). */
+const AUTH_SCHEME = /\b(Bearer|Basic|Digest)\s+[A-Za-z0-9._~+/=-]{1,4096}/gi
+
 /**
- * Scrubs a single string of the known-sensitive patterns, in a deliberate order
- * (most specific first). Shared by the message + every stack line. Every regex
- * uses only single or bounded quantifiers (no nested unbounded `[...]*` around an
- * alternation), and callers pre-cap the input length, so scrub time is linear +
- * bounded (ReDoS-safe).
+ * Scrubs a string of the known-sensitive patterns. Pass 0 is the PRIMARY,
+ * bypass-proof defense — a verbatim string-replace of the app's own env-secret
+ * values; passes 1-9 are the heuristic secondary net. Every regex uses only single
+ * or bounded quantifiers (no nested unbounded `[...]*` around an alternation), so
+ * with the caller's size guard scrub time is linear + bounded (ReDoS-safe).
  *
- *  1. URL / connection-string USERINFO credentials → `<scheme>://[REDACTED]@host`
- *     (redacts the whole userinfo up to the LAST `@`, so a password containing
- *     `@` — `postgres://user:p@ss@host` — is fully removed).
- *  2. `Bearer <token>` authorization values.
+ *  0. The app's OWN env-secret values (verbatim string-replace — no regex).
+ *  1. URL / connection-string USERINFO → `<scheme>://[REDACTED]@host` (whole
+ *     userinfo up to the LAST `@`, so a `@` in the password is fully removed).
+ *  2. `Bearer|Basic|Digest <credential>` authorization values.
  *  3. JSON-shaped `"key":"value"` for a sensitive key.
- *  4. sensitive `KEY=value` / `KEY: value` / `KEY%3Dvalue` (env secrets, compound
- *     token params, URL-encoded separators).
- *  5. JWT-shaped tokens (`eyJ…​.…​.…`).
- *  6. Email addresses (PII).
- *  7. Opaque token/secret blobs — hex runs (20+) and long base64 (40+).
+ *  4. sensitive key with a QUOTED value (entire quoted span, spaces and all).
+ *  5. sensitive `KEY = value` env-assignment (to end of line).
+ *  6. inline sensitive `KEY=token` (to end of token).
+ *  7. JWT-shaped tokens (`eyJ….….…`).
+ *  8. Email addresses (PII).
+ *  9. Opaque token/secret blobs — hex runs (20+) and long base64 (40+).
  *
  * Over-redaction is intentional and safe: this store is admin-readable +
  * exportable, so a false positive (a redacted non-secret) is always preferable
  * to a false negative (a leaked secret).
  */
-export function scrubSensitive(input: string): string {
+export function scrubSensitive(
+  input: string,
+  envSecretValues: string[] = collectEnvSecretValues(),
+): string {
   let out = input
 
-  // 1. URL / connection-string userinfo. `[^\s/]{1,256}@` (greedy, single bounded
+  // 0. PRIMARY: the app's own env-secret values, VERBATIM (O(n) per secret, plain
+  //    string replace → no bypass by format/encoding/straddle, and no ReDoS).
+  for (const secret of envSecretValues) {
+    if (secret.length >= MIN_ENV_SECRET_LEN && out.includes(secret)) {
+      out = out.split(secret).join(REDACTED)
+    }
+  }
+
+  // 1. URL / connection-string userinfo. `[^\s/]{1,256}@` (single bounded
   //    quantifier) consumes up to the LAST `@` before the host authority, so an
-  //    embedded `@` in the password (`user:p@ss@host`) is fully redacted, not
-  //    half-leaked. Covers postgres/mysql/redis/mongodb/https/… .
+  //    embedded `@` in the password (`user:p@ss@host`) is fully redacted.
   out = out.replace(URI_USERINFO, `$1://${REDACTED}@`)
 
-  // 2. Authorization bearer tokens (bounded).
-  out = out.replace(/\bBearer\s+[A-Za-z0-9._~+/-]{1,512}=*/gi, `Bearer ${REDACTED}`)
+  // 2. Authorization scheme credentials (Bearer / Basic / Digest).
+  out = out.replace(AUTH_SCHEME, `$1 ${REDACTED}`)
 
   // 3. JSON `"key":"value"` for a sensitive key → redact the value in place.
   out = out.replace(SENSITIVE_JSON, (_m, key: string) => `"${key}":"${REDACTED}"`)
 
-  // 4. sensitive KEY=value / KEY: value / KEY%3Dvalue — env secrets
-  //    (`PAYLOAD_SECRET`, `DATABASE_URI`), compound params (`resetToken`,
-  //    `access_token`, `apiKey`), incl. non-sensitive-prefixed (`Error: token=…`).
+  // 4. sensitive key with a QUOTED value → redact the whole quoted span.
+  out = out.replace(SENSITIVE_KV_QUOTED, (_m, key: string) => `${key}=${REDACTED}`)
+
+  // 5. sensitive `KEY = value` env-assignment (space after sep) → redact to EOL.
+  out = out.replace(SENSITIVE_ENV_ASSIGN, (_m, key: string) => `${key}=${REDACTED}`)
+
+  // 6. inline sensitive `KEY=token` → redact the token.
   out = out.replace(SENSITIVE_KV, (_m, key: string) => `${key}=${REDACTED}`)
 
-  // 5. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
+  // 7. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
   //    header `{"` in base64url — a strong, low-false-positive signal).
   out = out.replace(
     /\beyJ[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,4096}/g,
     REDACTED,
   )
 
-  // 6. Email addresses (PII — never stored in the error log).
+  // 8. Email addresses (PII — never stored in the error log).
   out = out.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, REDACTED)
 
-  // 7. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
+  // 9. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
   //    session/CSRF tokens, hashes, keys) and long base64 (40+).
   out = out.replace(/\b[A-Fa-f0-9]{20,}\b/g, REDACTED)
   out = out.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, REDACTED)
@@ -153,7 +250,9 @@ export function sanitizeErrorMessage(message: unknown): string {
   if (typeof message !== 'string' || message.trim() === '') {
     return '(no message)'
   }
-  // PRE-CAP the raw input BEFORE scrubbing (ReDoS hardening — see MAX_SCRUB_INPUT).
+  // Cut to the pathological-size guard (a plain slice), scrub the WHOLE thing,
+  // THEN truncate to the stored digest size — so a secret/URI never straddles the
+  // cut and loses its delimiter (NEW-1). See MAX_SCRUB_INPUT.
   const capped = message.length > MAX_SCRUB_INPUT ? message.slice(0, MAX_SCRUB_INPUT) : message
   const scrubbed = scrubSensitive(capped).replace(/\s+/g, ' ').trim()
   return scrubbed.length > MAX_MESSAGE_LEN ? `${scrubbed.slice(0, MAX_MESSAGE_LEN)}…` : scrubbed
@@ -171,10 +270,15 @@ export function sanitizeStack(stack: unknown): string | undefined {
   if (typeof stack !== 'string' || stack.trim() === '') {
     return undefined
   }
-  // PRE-CAP the raw stack BEFORE splitting/scrubbing (ReDoS hardening) — the whole
-  // stack (not just per-line) is bounded, so total scrub work is bounded.
+  // Cut to the pathological-size guard BEFORE splitting/scrubbing (the whole stack,
+  // not just per-line, is bounded), then scrub, then truncate to the digest size.
   const capped = stack.length > MAX_SCRUB_INPUT ? stack.slice(0, MAX_SCRUB_INPUT) : stack
-  const lines = capped.split('\n').slice(0, MAX_STACK_FRAMES).map(scrubSensitive)
+  // Collect the env-secret values ONCE and reuse for every line.
+  const envSecrets = collectEnvSecretValues()
+  const lines = capped
+    .split('\n')
+    .slice(0, MAX_STACK_FRAMES)
+    .map((line) => scrubSensitive(line, envSecrets))
   const digest = lines.join('\n').trim()
   if (digest === '') {
     return undefined

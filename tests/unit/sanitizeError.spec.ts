@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  collectEnvSecretValues,
   MAX_MESSAGE_LEN,
   resolveExceptionClass,
   sanitizeErrorMessage,
@@ -17,6 +18,10 @@ import {
  */
 
 describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('redacts password / token / secret key=value pairs (=, :, quoted)', () => {
     const out = sanitizeErrorMessage('login failed password=hunter2 and token: abc123 apiKey="zzz"')
     expect(out).not.toContain('hunter2')
@@ -111,17 +116,18 @@ describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
   })
 
   // ── Re-review: ReDoS bound + 3 remaining bypasses (fail-without-fix) ───────
-  it('ReDoS — a 64k+ adversarial no-separator input completes in bounded time + is truncated', () => {
+  it('ReDoS — a 256KB adversarial input completes in bounded time + is truncated', () => {
     // Worst case for the term-anchored KEY regex: the term ("secret") occurs at
     // every position but a separator NEVER follows — maximal failed backtracking.
-    const evil = 'secret_'.repeat(11000) // 77,000 chars
+    // 256KB is cut to the 64KB size-guard before scrubbing, keeping it bounded.
+    const evil = 'secret_'.repeat(Math.floor((256 * 1024) / 7)) // ~256KB
     const t0 = performance.now()
     const out = sanitizeErrorMessage(evil)
     const elapsed = performance.now() - t0
     expect(elapsed).toBeLessThan(100)
     expect(out.length).toBeLessThanOrEqual(MAX_MESSAGE_LEN + 1)
-    // Also exercise a JSON-ish adversarial input (quotes + colons, no closing value).
-    const evil2 = '{"password":'.repeat(6000)
+    // A JSON-ish adversarial input (quotes + colons, no closing value) at 256KB.
+    const evil2 = '{"password":'.repeat(Math.floor((256 * 1024) / 12))
     const t1 = performance.now()
     sanitizeErrorMessage(evil2)
     expect(performance.now() - t1).toBeLessThan(100)
@@ -143,6 +149,73 @@ describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
   it('bypass 3 — a URL-encoded separator (%3D / %3A) does not bypass redaction', () => {
     expect(sanitizeErrorMessage('/cb?resetToken%3Ddeadbeefcafe')).not.toContain('deadbeefcafe')
     expect(sanitizeErrorMessage('access_token%3Aleakedval99')).not.toContain('leakedval99')
+  })
+
+  // ── Round-3: straddle, spaced values, env-value pass, Basic/Digest ─────────
+  it('NEW-1 — a URI whose @ sits past the old 8KB pre-cap is still redacted (straddle fixed)', () => {
+    const pad = 'x'.repeat(8180) // pushes the URI @ to offset ~8200 (> the old 8192 pre-cap)
+    const out = sanitizeErrorMessage(`${pad} postgres://dbuser:strdlpw@dbhost:5432/app failed`)
+    expect(out).not.toContain('strdlpw')
+    expect(out).not.toContain('dbuser:strdlpw')
+  })
+
+  it('NEW-2 — a QUOTED sensitive value with spaces is FULLY redacted (double + single)', () => {
+    expect(sanitizeErrorMessage('rejected password="my secret pass phrase" here')).not.toContain(
+      'secret pass',
+    )
+    expect(sanitizeErrorMessage("passphrase='correct horse battery staple' invalid")).not.toContain(
+      'correct horse battery staple',
+    )
+    // The env-assignment (KEY = value with spaces) shape.
+    expect(sanitizeErrorMessage('boot PAYLOAD_SECRET = a longsecret value here now')).not.toContain(
+      'longsecret value here',
+    )
+  })
+
+  it('NEW-3 — Basic / Digest auth credentials are redacted (like Bearer)', () => {
+    expect(sanitizeErrorMessage('401 Authorization: Basic dXNlcjpwYXNzd29yZA==')).not.toContain(
+      'dXNlcjpwYXNzd29yZA',
+    )
+    expect(
+      sanitizeErrorMessage('Authorization: Digest username="x", response=abc123def'),
+    ).not.toContain('abc123def')
+  })
+
+  it('PRIMARY — the app’s own env-secret VALUES are redacted verbatim (any format)', () => {
+    vi.stubEnv('PAYLOAD_SECRET', 'super-signing-secret-abc123xyz')
+    vi.stubEnv('DATABASE_URI', 'postgres://u:realdbpw@prod-host/appdb')
+    vi.stubEnv('SOME_API_TOKEN', 'tok_live_zzz99887766')
+    // Injected mid-message in an UNUSUAL format the heuristics might miss.
+    const msg =
+      'crash dump >> [super-signing-secret-abc123xyz] and cfg=postgres://u:realdbpw@prod-host/appdb ; tok_live_zzz99887766'
+    const out = sanitizeErrorMessage(msg)
+    expect(out).not.toContain('super-signing-secret-abc123xyz')
+    expect(out).not.toContain('realdbpw')
+    expect(out).not.toContain('tok_live_zzz99887766')
+    // The scrub also applies to the stack digest.
+    expect(sanitizeStack(`Error\n    at x (super-signing-secret-abc123xyz)`)).not.toContain(
+      'super-signing-secret-abc123xyz',
+    )
+  })
+
+  it('collectEnvSecretValues — selects secret-named vars, ignores short/non-secret ones', () => {
+    const env = {
+      PAYLOAD_SECRET: 'a-long-signing-secret',
+      DATABASE_URI: 'postgres://u:pw@h/db',
+      SOME_TOKEN: 'tok-abcdefgh',
+      NODE_ENV: 'production', // not a secret name
+      SHORT_SECRET: 'abc', // too short (< 8)
+      PUBLIC_URL: 'https://example.com',
+    }
+    const values = collectEnvSecretValues(env)
+    expect(values).toContain('a-long-signing-secret')
+    expect(values).toContain('postgres://u:pw@h/db')
+    expect(values).toContain('tok-abcdefgh')
+    expect(values).not.toContain('production')
+    expect(values).not.toContain('abc')
+    expect(values).not.toContain('https://example.com')
+    // Longest-first so a longer secret is replaced before a shorter overlapping one.
+    expect(values[0]!.length).toBeGreaterThanOrEqual(values[values.length - 1]!.length)
   })
 
   it('leaves an ordinary message untouched (no false redaction)', () => {
