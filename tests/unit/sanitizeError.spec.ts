@@ -44,10 +44,33 @@ describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
     expect(out).toContain('[REDACTED]')
   })
 
-  it('redacts email addresses (PII)', () => {
+  it('redacts email addresses (PII), leaves non-emails intact', () => {
     const out = sanitizeErrorMessage('user alice.smith@example.co.kr was not found')
     expect(out).not.toContain('alice.smith@example.co.kr')
     expect(out).toContain('[REDACTED]')
+    // Real emails of various shapes still redact.
+    for (const e of ['user@example.com', 'a.b+tag@sub.domain.co.uk', 'x@y.io']) {
+      expect(sanitizeErrorMessage(`contact ${e} now`)).not.toContain(e)
+    }
+    // Long (but bounded) local + domain still redact.
+    const longEmail = `${'l'.repeat(60)}@${'d'.repeat(60)}.com`
+    expect(sanitizeErrorMessage(`from ${longEmail}`)).not.toContain(longEmail)
+    // Non-emails are NOT redacted (no `@…TLD`).
+    expect(sanitizeErrorMessage('a.a.a.a')).toBe('a.a.a.a')
+    expect(sanitizeErrorMessage('not-an-email')).toBe('not-an-email')
+  })
+
+  it('B1 — the email regex is BOUNDED: a 64KB word-boundary-dense input completes fast', () => {
+    // Unbounded `+` around `@` is O(n²) — ~4.3s on this at 64KB before the fix.
+    const dense = 'a.a.a.a.'.repeat(Math.floor((64 * 1024) / 8)) // ~64KB, a `\b` every 2 chars
+    const t0 = performance.now()
+    sanitizeErrorMessage(dense)
+    expect(performance.now() - t0).toBeLessThan(100)
+    // An email-prefix-dense run (many `@`, no valid TLD) — the other backtrack shape.
+    const prefixes = 'aaa.bbb@ccc.'.repeat(Math.floor((64 * 1024) / 12))
+    const t1 = performance.now()
+    sanitizeErrorMessage(prefixes)
+    expect(performance.now() - t1).toBeLessThan(100)
   })
 
   it('redacts long hex / base64 opaque blobs', () => {

@@ -34,12 +34,15 @@ export const MAX_STACK_FRAMES = 30
  * realistic secret / connection string (< 1 KB, and its credential sits at the
  * URI's START) never STRADDLES the cut and loses its delimiter, which an 8 KB
  * pre-cap did (a URI whose `@` sat past 8 KB was truncated mid-userinfo and the
- * password tail leaked); (2) it bounds the worst-case scrub of an ADVERSARIAL
- * input (a 64 KB run engineered to maximize the term-anchored regexes' bounded
- * backtracking) to well under 100 ms with comfortable CI headroom — a larger cap
- * (256 KB measured ~230 ms) would not. A bigger input is O(1)-cut to 64 KB first,
- * so it too completes fast. Scrub runs on the whole (≤ 64 KB) input; only AFTER
- * scrubbing is the result truncated to the digest size (MAX_MESSAGE_LEN / _STACK_).
+ * password tail leaked); (2) it caps the worst-case scrub of an ADVERSARIAL input.
+ * The cap is a size limit, NOT a substitute for bounded regexes — EVERY scrub
+ * pattern uses single or BOUNDED quantifiers (no unbounded `+`/`*` around an
+ * overlapping alternation, incl. the email pass, whose unbounded `+` was an O(n²)
+ * ReDoS — ~4.3 s at 64 KB — until bounded). With that, a 64 KB adversarial input
+ * (dense secret terms / quotes / separators / email-shaped runs) measures well
+ * under 100 ms; a bigger input is O(1)-cut to 64 KB first, so it too completes
+ * fast. Scrub runs on the whole (≤ 64 KB) input; only AFTER scrubbing is the
+ * result truncated to the digest size (MAX_MESSAGE_LEN / MAX_STACK_LEN).
  */
 export const MAX_SCRUB_INPUT = 65536
 
@@ -249,8 +252,11 @@ export function scrubSensitive(
     REDACTED,
   )
 
-  // 7. Email addresses (PII — never stored in the error log).
-  out = out.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, REDACTED)
+  // 7. Email addresses (PII — never stored in the error log). Both sides of the
+  //    `@` are BOUNDED ({1,256}) and the TLD is {2,24}: unbounded `+` here is a
+  //    classic O(n²) ReDoS on word-boundary-dense input (`a.a.a…`) — ~4.3 s on a
+  //    64 KB message, run synchronously inside the global afterError capture.
+  out = out.replace(/\b[A-Za-z0-9._%+-]{1,256}@[A-Za-z0-9.-]{1,256}\.[A-Za-z]{2,24}\b/g, REDACTED)
 
   // 8. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
   //    session/CSRF tokens, hashes, keys) and long base64 (40+).
