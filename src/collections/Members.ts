@@ -66,12 +66,25 @@ export const Members: CollectionConfig = {
     defaultColumns: ['email', 'loginId', 'name', 'status', 'tenant'],
     hidden: ({ user }) => !hasMenuAccessSync(user, MEMBERS_MENU_KEY),
     components: {
+      // Task 6B Part 2 (ref 1-36): the member-management LIST screen surfaces the
+      // purpose-gated export via a modal that collects the 열람목적 and POSTs it
+      // to the Task 6A `POST /api/members/export` endpoint. The list itself is
+      // gated (collection read = members.manage), PII columns are masked by the
+      // Task 6A afterRead hook, and Payload's built-in list provides the
+      // date/keyword search + status filter + pagination.
+      beforeListTable: ['/components/members/MemberExportButton#MemberExportButton'],
       // Task 6A Part 2 (ref 1-36 callout 5): the browser-confirm-style privacy
       // notice shown on the member DETAIL view before the PII is worked with —
       // 'a lookup history is being accumulated'. This is a UI affordance; the
       // AUTHORITATIVE, non-bypassable capture is the server afterRead hook below.
       edit: {
         beforeDocumentControls: [
+          // Task 6B Part 1 (ref 1-37): server-rendered, non-spoofable diagonal
+          // watermark (viewer · timestamp · management#) over the audited full-PII
+          // detail — an anti-exfiltration deterrent on screen AND print. Data is
+          // derived server-side from req.user + the immutable personalInfoAccessLogs
+          // row for this view; see src/components/members/MemberDetailWatermark.tsx.
+          '/components/members/MemberDetailWatermark#MemberDetailWatermark',
           '/components/members/PersonalInfoAccessNotice#PersonalInfoAccessNotice',
         ],
       },

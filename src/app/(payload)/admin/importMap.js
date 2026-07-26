@@ -24,6 +24,8 @@ import { StrikethroughFeatureClient as StrikethroughFeatureClient_e70f5e05f09f93
 import { UnderlineFeatureClient as UnderlineFeatureClient_e70f5e05f09f93e00b997edb1ef0c864 } from '@payloadcms/richtext-lexical/client'
 import { BoldFeatureClient as BoldFeatureClient_e70f5e05f09f93e00b997edb1ef0c864 } from '@payloadcms/richtext-lexical/client'
 import { ItalicFeatureClient as ItalicFeatureClient_e70f5e05f09f93e00b997edb1ef0c864 } from '@payloadcms/richtext-lexical/client'
+import { MemberExportButton as MemberExportButton_318d462b95206b59963c1d4a24b155e1 } from '../../../components/members/MemberExportButton'
+import { MemberDetailWatermark as MemberDetailWatermark_f24eaf758f139741fb0dbeabdfffe265 } from '../../../components/members/MemberDetailWatermark'
 import { PersonalInfoAccessNotice as PersonalInfoAccessNotice_954caf87c0096f37d411db63de8801e7 } from '../../../components/members/PersonalInfoAccessNotice'
 import { MaskedCell as MaskedCell_ad147b5f0d54c45e625b612a992c9063 } from '../../../components/audit/MaskedCell'
 import { Icon as Icon_60be061a35ba65b3ac8380ea7d755990 } from '../../../components/branding/Icon'
@@ -95,6 +97,10 @@ export const importMap = {
     BoldFeatureClient_e70f5e05f09f93e00b997edb1ef0c864,
   '@payloadcms/richtext-lexical/client#ItalicFeatureClient':
     ItalicFeatureClient_e70f5e05f09f93e00b997edb1ef0c864,
+  '/components/members/MemberExportButton#MemberExportButton':
+    MemberExportButton_318d462b95206b59963c1d4a24b155e1,
+  '/components/members/MemberDetailWatermark#MemberDetailWatermark':
+    MemberDetailWatermark_f24eaf758f139741fb0dbeabdfffe265,
   '/components/members/PersonalInfoAccessNotice#PersonalInfoAccessNotice':
     PersonalInfoAccessNotice_954caf87c0096f37d411db63de8801e7,
   '/components/audit/MaskedCell#MaskedCell': MaskedCell_ad147b5f0d54c45e625b612a992c9063,
