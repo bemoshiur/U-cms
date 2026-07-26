@@ -340,7 +340,7 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
         postId: String(nonSecretPostBId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
 
     it('C1: a member of site A is DENIED a NON-SECRET attachment on the admin bos site', async () => {
@@ -350,7 +350,7 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
         postId: String(bosPostId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
 
     it('a member CANNOT download a SECRET post attachment', async () => {
@@ -367,7 +367,7 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
         postId: String(secretPostId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
 
     it('ANONYMOUS download is still denied even for a non-secret post (T4-zero invariant)', async () => {
@@ -377,7 +377,7 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
         postId: String(nonSecretPostId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
 
     it('/api/files/download is IP-guard-exempt; /api/attachments/file stays guarded', () => {

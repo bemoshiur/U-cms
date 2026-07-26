@@ -562,24 +562,26 @@ describe('posts + word filters + secure download (Task 3B)', () => {
         expect(res.status).toBe(200)
       })
 
-      it('forbids a user scoped to a different tenant (cannot see the post)', async () => {
+      it('forbids a user scoped to a different tenant (404 — existence oracle collapsed)', async () => {
         const res = await handleFileDownload({
           payload,
           user: scopedUserB,
           postId: String(postId),
           fileSn: 1,
         })
-        expect(res.status).toBe(403)
+        // D1/D2/D3: forbidden collapses to the SAME 404 as a missing post so the
+        // status code cannot confirm the post id exists cross-tenant.
+        expect(res.status).toBe(404)
       })
 
-      it('forbids an anonymous request', async () => {
+      it('forbids an anonymous request (404 — existence oracle collapsed)', async () => {
         const res = await handleFileDownload({
           payload,
           user: null,
           postId: String(postId),
           fileSn: 1,
         })
-        expect(res.status).toBe(403)
+        expect(res.status).toBe(404)
       })
 
       it('404s for a missing post and a missing fileSn', async () => {

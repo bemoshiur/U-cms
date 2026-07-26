@@ -57,6 +57,41 @@ const NON_TEXT_FIELD_KEYS = new Set([
   'attachment',
 ])
 
+/**
+ * The `posts` columns a `like` keyword filter can SAFELY target — the positive
+ * allowlist that fixes D6 (Phase-3 final review). A board admin can mark ANY
+ * field-grid row `searchFlag` (ref 1-30), including a `department` (a
+ * RELATIONSHIP column — Postgres has no `like` on a join id) or `division` (a
+ * legacy grid key with NO matching `posts` column at all). Feeding either into
+ * `{ [col]: { like } }` throws at query time → a 500 on the public search /
+ * export path. So a keyword `like` clause is emitted ONLY for a field whose
+ * MAPPED column is in this set of genuine text columns on `posts`; everything
+ * else (relationships, non-existent columns, dates, counters, ids) is treated
+ * like a NON_TEXT field and contributes no keyword clause. The set is derived
+ * from the real `posts` schema (see `src/collections/posts/Posts.ts`).
+ */
+const TEXT_QUERYABLE_POST_COLUMNS = new Set([
+  'title',
+  'author',
+  'team',
+  'extraField1',
+  'extraField2',
+  'extraField3',
+  'extraField4',
+  'extraContent1',
+  'extraContent2',
+  'extraContent3',
+  'extraContent4',
+])
+
+/** True iff a board field key maps to a real, `like`-queryable text column on `posts`. */
+export function isTextQueryableFieldKey(fieldKey: string): boolean {
+  if (NON_TEXT_FIELD_KEYS.has(fieldKey)) {
+    return false
+  }
+  return TEXT_QUERYABLE_POST_COLUMNS.has(postColumnForFieldKey(fieldKey))
+}
+
 /** Maps a board field key to the `posts` column it filters on. */
 export function postColumnForFieldKey(fieldKey: string): string {
   switch (fieldKey) {
@@ -83,9 +118,15 @@ export function searchableFieldKeys(board: BoardLike): string[] {
   return keys
 }
 
-/** The free-text (keyword-searchable) subset of the board's searchable fields. */
+/**
+ * The free-text (keyword-searchable) subset of the board's searchable fields —
+ * ONLY those whose mapped `posts` column is a real, `like`-queryable text
+ * column (D6: a relationship like `department` or a column-less legacy key like
+ * `division` is excluded here so it can never widen a keyword search into an
+ * invalid `like` clause). See {@link isTextQueryableFieldKey}.
+ */
 export function textSearchableFieldKeys(board: BoardLike): string[] {
-  return searchableFieldKeys(board).filter((key) => !NON_TEXT_FIELD_KEYS.has(key))
+  return searchableFieldKeys(board).filter((key) => isTextQueryableFieldKey(key))
 }
 
 /**
@@ -109,7 +150,14 @@ export function buildPostSearchWhere(
     const requestedField =
       typeof params.field === 'string' && params.field.length > 0 ? params.field : undefined
 
-    if (requestedField && searchable.includes(requestedField)) {
+    if (
+      requestedField &&
+      searchable.includes(requestedField) &&
+      isTextQueryableFieldKey(requestedField)
+    ) {
+      // Only a searchable AND text-queryable field yields a `like` clause (D6):
+      // a searchable relationship/column-less key (department/division) is
+      // ignored here rather than emitting an invalid `like` that would 500.
       and.push({ [postColumnForFieldKey(requestedField)]: { like: keyword } })
     } else if (!requestedField) {
       const orFields = textSearchableFieldKeys(board)
@@ -119,7 +167,8 @@ export function buildPostSearchWhere(
         })
       }
     }
-    // A requested field that is NOT searchable contributes no clause (ignored).
+    // A requested field that is NOT searchable — or is searchable but not a real
+    // text column (D6) — contributes no clause (ignored).
   }
 
   const categories: (keyof PostSearchParams)[] = ['category1', 'category2', 'category3']

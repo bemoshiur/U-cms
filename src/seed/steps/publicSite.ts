@@ -19,6 +19,10 @@ export const SEED_MENU_ABOUT_INTRO = 'Introduction'
 export const SEED_MENU_ABOUT_DIRECTORY = 'Directory'
 export const SEED_DEMO_GUIDE_TOP = 'User Guide'
 export const SEED_DEMO_GUIDE_BOTTOM = 'Privacy Policy'
+export const SEED_MENU_NOTICES = 'Notices'
+/** Reuses the `Notice` board created by `boardsStep` (see src/seed/steps/boards.ts). */
+export const SEED_BOARD_NOTICES = 'Notice'
+export const SEED_NOTICE_POST_TITLE = 'Welcome to the demo notice board'
 
 /** A tiny 1×1 PNG (valid image/png, passes the site-logo mimetype gate). */
 const SEED_PNG_BASE64 =
@@ -140,6 +144,115 @@ async function ensureGuideMenu(
   payload.logger.info(`[seed:public-site] created guide menu "${name}".`)
 }
 
+/**
+ * Seeds a demo NOTICE board (integrated kind) with a board menu (so it shows in
+ * the GNB and `/board/[bbsId]` resolves) and one post carrying an attachment —
+ * the real content Task 4C's list/detail routes render, and what the public-site
+ * e2e browses (board list → post detail → managed download link). Idempotent.
+ */
+async function ensureNoticeBoard(payload: Payload, tenantId: number): Promise<void> {
+  // Integrated board type (PG0001) — the standard list board.
+  const boardTypes = await payload.find({
+    collection: 'boardTypes',
+    where: { kind: { equals: 'integrated' } },
+    limit: 1,
+    pagination: false,
+    overrideAccess: true,
+  })
+  const boardTypeId = boardTypes.docs[0]?.id
+  if (boardTypeId === undefined) {
+    return // board types not seeded yet — skip (idempotent re-run will pick it up)
+  }
+
+  const existingBoard = await payload.find({
+    collection: 'boards',
+    where: { and: [{ tenant: { equals: tenantId } }, { name: { equals: SEED_BOARD_NOTICES } }] },
+    limit: 1,
+    pagination: false,
+    overrideAccess: true,
+  })
+  let board = existingBoard.docs[0]
+  if (!board) {
+    board = await payload.create({
+      collection: 'boards',
+      data: {
+        tenant: tenantId,
+        name: SEED_BOARD_NOTICES,
+        boardType: boardTypeId,
+        attachmentsEnabled: true,
+        attachmentMaxCount: 3,
+        listCount: 10,
+        pageCount: 10,
+      },
+      overrideAccess: true,
+    })
+    payload.logger.info('[seed:public-site] created Notice board.')
+  }
+
+  // A top-level board menu so the board appears in the GNB and its owning-menu
+  // gate (MEDIUM-1) is satisfied for direct-URL access.
+  await ensureMenu(payload, tenantId, SEED_MENU_NOTICES, {
+    contentType: 'board',
+    board: board.id,
+    order: 5,
+  })
+
+  // Seed an admin HTML header notice that INCLUDES a script-injection attempt —
+  // the public render must sanitize it (the `<script>` is stripped, the safe
+  // markup survives). The e2e asserts the neutralization at runtime. Idempotent:
+  // rewritten only until it carries the script marker.
+  const currentNotice = typeof board.headerNotice === 'string' ? board.headerNotice : ''
+  if (!currentNotice.includes('<script')) {
+    await payload.update({
+      collection: 'boards',
+      id: board.id,
+      data: {
+        headerNotice:
+          '<p class="notice-text">This is the Notice board.</p><script>window.__xss=1</script>',
+      },
+      overrideAccess: true,
+    })
+    payload.logger.info('[seed:public-site] set Notice board header notice (with XSS probe).')
+  }
+
+  // One post with an attachment (the e2e follows its managed-download link).
+  const existingPost = await payload.find({
+    collection: 'posts',
+    where: {
+      and: [{ board: { equals: board.id } }, { title: { equals: SEED_NOTICE_POST_TITLE } }],
+    },
+    limit: 1,
+    pagination: false,
+    overrideAccess: true,
+  })
+  if (existingPost.docs.length === 0) {
+    const data = Buffer.from(SEED_PNG_BASE64, 'base64')
+    const attachment = await payload.create({
+      collection: 'attachments',
+      data: { alt: 'Demo notice attachment', tenant: tenantId } as never,
+      file: {
+        data,
+        name: `demo-notice-${Date.now()}.png`,
+        mimetype: 'image/png',
+        size: data.length,
+      },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'posts',
+      data: {
+        board: board.id,
+        title: SEED_NOTICE_POST_TITLE,
+        author: 'Demo Admin',
+        content: lexical('This is a demo notice with an attachment.'),
+        attachments: [{ media: attachment.id, description: 'Demo attachment' }],
+      } as never,
+      overrideAccess: true,
+    })
+    payload.logger.info('[seed:public-site] created Notice post + attachment.')
+  }
+}
+
 export const publicSiteStep: SeedStep = {
   name: 'public-site',
   async run(payload: Payload) {
@@ -230,5 +343,8 @@ export const publicSiteStep: SeedStep = {
       displayOrder: 0,
       active: true,
     })
+
+    // ── a real board + post + attachment (Task 4C list/detail + e2e) ──────────
+    await ensureNoticeBoard(payload, tenantId)
   },
 }

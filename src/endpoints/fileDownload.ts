@@ -7,6 +7,7 @@ import { getAssignedTenantIds } from '../access/tenantAccess'
 import { toRelationId } from '../collections/utils'
 import { POSTS_MENU_KEY } from '../collections/posts/defaults'
 import type { Post } from '../payload-types'
+import { findAccessibleDoc, notFoundResponse } from '../security/existenceOracle'
 
 /**
  * Secure managed download endpoint (Task 3B Part 3; ref 1-81 — replaces the
@@ -389,34 +390,32 @@ export async function handleFileDownload(args: {
     return json(400, 'A valid fileSn is required.')
   }
 
-  // Existence first (overrideAccess) so we can distinguish 404 (missing) from
-  // 403 (exists but forbidden) precisely.
-  const post = (await payload.findByID({
+  // Existence-then-access via the shared guard (D1/D2/D3): missing, forbidden,
+  // secret, cross-tenant, and anonymous ALL collapse to the SAME 404 so a caller
+  // cannot use the status code as an existence oracle for post ids. The bespoke
+  // visibility rule `canDownloadPost` is the access predicate here.
+  const post = await findAccessibleDoc<Post>({
+    payload,
     collection: 'posts',
     id: postId,
-    depth: 0,
-    overrideAccess: true,
+    user,
     req,
-    disableErrors: true,
-  })) as Post | null
+    access: (candidate) => canDownloadPost({ payload, user, post: candidate }),
+  })
   if (!post) {
-    return json(404, 'File not found.')
-  }
-
-  if (!(await canDownloadPost({ payload, user, post }))) {
-    return json(403, 'You are not allowed to download this file.')
+    return notFoundResponse()
   }
 
   const attachments = Array.isArray(post.attachments) ? post.attachments : []
   const index = attachments.findIndex((a) => a?.fileSn === fileSn)
   const attachment = index === -1 ? undefined : attachments[index]
   if (!attachment) {
-    return json(404, 'File not found.')
+    return notFoundResponse()
   }
 
   const mediaId = toRelationId(attachment.media)
   if (mediaId === undefined) {
-    return json(404, 'File not found.')
+    return notFoundResponse()
   }
   // Attachments live in the tenant-scoped `attachments` collection (Task
   // 4-zero), NOT the public `media` pool. `overrideAccess:true` here is safe:
@@ -437,7 +436,7 @@ export async function handleFileDownload(args: {
     tenant?: unknown
   } | null
   if (!media || typeof media.filename !== 'string' || media.filename.length === 0) {
-    return json(404, 'File not found.')
+    return notFoundResponse()
   }
 
   // Coherence: the attachment must belong to the SAME tenant (site) as its post.
@@ -453,7 +452,7 @@ export async function handleFileDownload(args: {
     attachmentTenant !== undefined &&
     String(postTenant) !== String(attachmentTenant)
   ) {
-    return json(404, 'File not found.')
+    return notFoundResponse()
   }
 
   // Byte SOURCE by storage driver — the ONLY thing that differs between local

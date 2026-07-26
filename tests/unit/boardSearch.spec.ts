@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildPostSearchWhere,
+  isTextQueryableFieldKey,
   postColumnForFieldKey,
   searchableFieldKeys,
+  textSearchableFieldKeys,
 } from '@/content/boardSearch'
 import type { BoardLike } from '@/content/boardSearch'
 
@@ -30,6 +32,54 @@ describe('postColumnForFieldKey (Task 3D board search)', () => {
 describe('searchableFieldKeys', () => {
   it('returns only fields with both useFlag and searchFlag', () => {
     expect(searchableFieldKeys(board)).toEqual(['title', 'author', 'registrationDate'])
+  })
+})
+
+describe('D6 — text-column allowlist (relationship/column-less keys never 500)', () => {
+  // A board that (mis)configures a RELATIONSHIP column (department) and a
+  // column-less legacy key (division) as searchable — the exact trigger for the
+  // Phase-3 boardSearch 500.
+  const trickyBoard: BoardLike = {
+    fields: [
+      { fieldKey: 'title', useFlag: true, searchFlag: true },
+      { fieldKey: 'department', useFlag: true, searchFlag: true }, // relationship
+      { fieldKey: 'division', useFlag: true, searchFlag: true }, // no posts column
+      { fieldKey: 'number', useFlag: true, searchFlag: true }, // id (non-text)
+    ],
+  }
+
+  it('isTextQueryableFieldKey accepts real text columns and rejects the rest', () => {
+    expect(isTextQueryableFieldKey('title')).toBe(true)
+    expect(isTextQueryableFieldKey('extraContent4')).toBe(true)
+    expect(isTextQueryableFieldKey('department')).toBe(false) // relationship
+    expect(isTextQueryableFieldKey('division')).toBe(false) // no column
+    expect(isTextQueryableFieldKey('number')).toBe(false) // id
+    expect(isTextQueryableFieldKey('registrationDate')).toBe(false) // date
+  })
+
+  it('textSearchableFieldKeys drops relationship / column-less searchable keys', () => {
+    // searchableFieldKeys still reports every flagged key…
+    expect(searchableFieldKeys(trickyBoard)).toEqual(['title', 'department', 'division', 'number'])
+    // …but only `title` is safe to `like`.
+    expect(textSearchableFieldKeys(trickyBoard)).toEqual(['title'])
+  })
+
+  it('an unscoped keyword only ORs across safe text columns (no department/division/id)', () => {
+    const where = buildPostSearchWhere(trickyBoard, 7, { keyword: 'x' })
+    const and = (where as { and: unknown[] }).and
+    const orClause = and.find((c) => (c as { or?: unknown }).or) as { or: unknown[] }
+    expect(orClause.or).toEqual([{ title: { like: 'x' } }])
+  })
+
+  it('a keyword scoped to a searchable-but-relationship field yields no like clause', () => {
+    const where = buildPostSearchWhere(trickyBoard, 7, { keyword: 'x', field: 'department' })
+    // department is searchable per config but not text-queryable → ignored (no 500).
+    expect(where).toEqual({ board: { equals: 7 } })
+  })
+
+  it('a keyword scoped to a column-less legacy key (division) yields no like clause', () => {
+    const where = buildPostSearchWhere(trickyBoard, 7, { keyword: 'x', field: 'division' })
+    expect(where).toEqual({ board: { equals: 7 } })
   })
 })
 

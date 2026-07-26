@@ -266,7 +266,7 @@ describe('Task TR2: storage-driver-aware /api/files/download', () => {
       postId: String(nonSecretPostId),
       fileSn: 1,
     })
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(handler).not.toHaveBeenCalled()
   })
 
@@ -278,7 +278,7 @@ describe('Task TR2: storage-driver-aware /api/files/download', () => {
       postId: String(secretPostId),
       fileSn: 1,
     })
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(handler).not.toHaveBeenCalled()
   })
 
@@ -290,7 +290,7 @@ describe('Task TR2: storage-driver-aware /api/files/download', () => {
       postId: String(nonSecretPostId),
       fileSn: 1,
     })
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
     expect(handler).not.toHaveBeenCalled()
   })
 

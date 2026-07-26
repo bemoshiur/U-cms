@@ -205,6 +205,59 @@ export function buildNav(menus: NavMenu[], options: { member: CurrentMember }): 
   return (childrenByParent.get(undefined) ?? []).slice().sort(compareMenus).map(toNode)
 }
 
+/**
+ * The set of menu ids VISIBLE to `member` (Task 4C — the MEDIUM-1 direct-URL
+ * gate). A menu id is in the set iff it AND every ancestor pass
+ * {@link isMenuVisible} (active + exposureCondition) — exactly the
+ * {@link buildNav} filter, flattened. The route resolvers consult this so a
+ * menu hidden from the nav (inactive, or `loggedInOnly` for an anonymous
+ * visitor) also 404s on a DIRECT URL, not just disappears from the header.
+ */
+export function visibleMenuIds(menus: NavMenu[], member: CurrentMember): Set<string> {
+  const ids = new Set<string>()
+  const walk = (nodes: NavNode[]): void => {
+    for (const node of nodes) {
+      ids.add(String(node.menu.id))
+      walk(node.children)
+    }
+  }
+  walk(buildNav(menus, { member }))
+  return ids
+}
+
+/**
+ * Whether the board with `bbsId` is reachable by DIRECT URL for `member`
+ * (Task 4C — MEDIUM-1). A board is gated by the `board`-type menu(s) that open
+ * it: if one or more menus point at the board, it is accessible iff at least
+ * one of those owning menus is visible ({@link visibleMenuIds}); if EVERY owning
+ * menu is hidden (inactive / exposure-denied), the board 404s. A board that NO
+ * menu references is left directly addressable (there is no owning menu to gate
+ * it — the legacy/T4A behavior for un-menued boards), so this never hides a
+ * board purely for lacking a nav entry.
+ */
+export function isBoardMenuAccessible(
+  menus: NavMenu[],
+  bbsId: string,
+  member: CurrentMember,
+): boolean {
+  const owningMenuIds: string[] = []
+  for (const menu of menus) {
+    if (menu.contentType !== 'board') {
+      continue
+    }
+    const board = menu.board
+    const menuBbsId = board && typeof board === 'object' ? board.bbsId : undefined
+    if (typeof menuBbsId === 'string' && menuBbsId === bbsId) {
+      owningMenuIds.push(String(menu.id))
+    }
+  }
+  if (owningMenuIds.length === 0) {
+    return true // un-menued board — no owning menu to gate it
+  }
+  const visible = visibleMenuIds(menus, member)
+  return owningMenuIds.some((id) => visible.has(id))
+}
+
 /** One breadcrumb hop: the menu and its resolved link (the leaf is usually current). */
 export type BreadcrumbItem = { menu: NavMenu; link: ResolvedLink }
 

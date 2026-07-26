@@ -1,9 +1,9 @@
 import type { Endpoint, Payload, PayloadRequest } from 'payload'
 
-import { buildPostSearchWhere, postColumnForFieldKey } from '../content/boardSearch'
+import { buildPostSearchWhere } from '../content/boardSearch'
 import type { BoardFieldRow, PostSearchParams } from '../content/boardSearch'
-import { extractLexicalText } from '../content/wordFilter'
-import { toRelationId } from '../collections/utils'
+import { formatPostCell } from '../content/boardList'
+import { findAccessibleDoc, notFoundResponse } from '../security/existenceOracle'
 
 /**
  * Board post EXCEL/CSV export (Task 3D Part 5 / TODO 3.10; ref 2-7 excel
@@ -34,37 +34,6 @@ type BoardLike = {
   name?: unknown
   fields?: (BoardFieldRow & { label?: unknown })[] | null
   listFieldOrder?: unknown
-}
-
-/** Renders one post's value for a given board list-field key. */
-function formatValue(post: Record<string, unknown>, fieldKey: string, rowNumber: number): string {
-  switch (fieldKey) {
-    case 'number':
-      return String(rowNumber)
-    case 'registrationDate':
-      return typeof post.createdAt === 'string' ? post.createdAt : ''
-    case 'modificationDate':
-      return typeof post.updatedAt === 'string' ? post.updatedAt : ''
-    case 'attachment':
-      return String(Array.isArray(post.attachments) ? post.attachments.length : 0)
-    case 'content':
-      return extractLexicalText(post.content)
-    default: {
-      const raw = post[postColumnForFieldKey(fieldKey)]
-      if (raw === null || raw === undefined) {
-        return ''
-      }
-      if (typeof raw === 'object') {
-        // Relationship (e.g. department) — prefer a human label, else the id.
-        const rel = raw as { name?: unknown; title?: unknown; id?: unknown }
-        if (typeof rel.name === 'string') return rel.name
-        if (typeof rel.title === 'string') return rel.title
-        const id = toRelationId(raw)
-        return id === undefined ? '' : String(id)
-      }
-      return String(raw)
-    }
-  }
 }
 
 function readSearchParams(sp: URLSearchParams | undefined): PostSearchParams {
@@ -100,30 +69,21 @@ export async function handleBoardExport(args: {
   if (id === null || id === undefined || id === '') {
     return Response.json({ ok: false, message: 'A board id is required.' }, { status: 400 })
   }
-  if (!user) {
-    return Response.json({ ok: false, message: 'Authentication required.' }, { status: 403 })
-  }
 
-  // Access gate — must be able to READ the board (content.boards + tenant).
-  let board: BoardLike | null = null
-  try {
-    board = (await payload.findByID({
-      collection: 'boards',
-      id,
-      depth: 0,
-      overrideAccess: false,
-      user: user as PayloadRequest['user'],
-      req,
-      disableErrors: true,
-    })) as BoardLike | null
-  } catch {
-    board = null
-  }
+  // Existence-then-access via the shared guard (D1/D2/D3): a missing board, a
+  // cross-tenant board, and an anonymous/ungranted caller ALL collapse to the
+  // SAME 404 — the export never confirms a board id exists to someone who may
+  // not read it. No custom predicate → the collection's tenant-scoped
+  // `content.boards` read access decides.
+  const board = await findAccessibleDoc<BoardLike>({
+    payload,
+    collection: 'boards',
+    id,
+    user,
+    req,
+  })
   if (!board) {
-    return Response.json(
-      { ok: false, message: 'Board not found or not accessible.' },
-      { status: 403 },
-    )
+    return notFoundResponse()
   }
 
   // Column keys from the board's list-field order (fallback to a title column).
@@ -157,7 +117,7 @@ export async function handleBoardExport(args: {
   const header = columns.map((key) => csvCell(labelByKey.get(key) ?? key)).join(',')
   const rows = posts.docs.map((post, i) =>
     columns
-      .map((key) => csvCell(formatValue(post as unknown as Record<string, unknown>, key, i + 1)))
+      .map((key) => csvCell(formatPostCell(post as unknown as Record<string, unknown>, key, i + 1)))
       .join(','),
   )
   // Prepend a UTF-8 BOM so Excel opens Korean/Unicode content correctly.

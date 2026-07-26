@@ -247,7 +247,7 @@ describe('Task 4-zero: attachment confidentiality (cross-tenant + secret + unaut
         postId: String(nonSecretPostId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
   })
 
@@ -267,7 +267,7 @@ describe('Task 4-zero: attachment confidentiality (cross-tenant + secret + unaut
         postId: String(secretPostId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
 
     it('an authenticated user with the posts grant but NO tenant cannot read or download it', async () => {
@@ -288,7 +288,7 @@ describe('Task 4-zero: attachment confidentiality (cross-tenant + secret + unaut
         postId: String(secretPostId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
   })
 
@@ -364,7 +364,7 @@ describe('Task 4-zero: attachment confidentiality (cross-tenant + secret + unaut
         postId: String(nonSecretPostId),
         fileSn: 1,
       })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
   })
 

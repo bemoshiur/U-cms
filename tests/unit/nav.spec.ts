@@ -5,11 +5,13 @@ import type { GuideMenu, NavMenu } from '@/site/nav'
 import {
   buildBreadcrumb,
   buildNav,
+  isBoardMenuAccessible,
   isMenuVisible,
   orderedGuideMenus,
   resolveGuideLink,
   resolveMenuLink,
   visibleFooterItems,
+  visibleMenuIds,
 } from '@/site/nav'
 
 const LOGGED_OUT: CurrentMember = null
@@ -188,6 +190,50 @@ describe('site nav helpers (Task 4A)', () => {
         external: false,
         newWindow: false,
       })
+    })
+  })
+
+  describe('MEDIUM-1 direct-URL gate: visibleMenuIds + isBoardMenuAccessible', () => {
+    it('visibleMenuIds includes only menus visible (self + ancestors) to the visitor', () => {
+      const menus = [
+        menu({ id: 1, name: 'Root' }),
+        menu({ id: 2, name: 'Inactive', parent: 1, active: false }),
+        menu({ id: 3, name: 'MembersOnly', parent: 1, exposureCondition: 'loggedInOnly' }),
+        menu({ id: 4, name: 'Public', parent: 1 }),
+        menu({ id: 5, name: 'HiddenParent', active: false }),
+        menu({ id: 6, name: 'ChildOfHidden', parent: 5 }),
+      ]
+      const anon = visibleMenuIds(menus, LOGGED_OUT)
+      expect(anon.has('1')).toBe(true)
+      expect(anon.has('4')).toBe(true)
+      expect(anon.has('2')).toBe(false) // inactive
+      expect(anon.has('3')).toBe(false) // loggedInOnly, visitor is anon
+      expect(anon.has('6')).toBe(false) // parent inactive → whole branch hidden
+
+      const member = visibleMenuIds(menus, MEMBER)
+      expect(member.has('3')).toBe(true) // loggedInOnly now visible to a member
+    })
+
+    it('isBoardMenuAccessible gates a board by its owning menu visibility', () => {
+      const boardMenu = (id: number, bbsId: string, extra: Partial<NavMenu> = {}) =>
+        menu({ id, name: `M${id}`, contentType: 'board', board: { id, bbsId }, ...extra })
+
+      const menus = [
+        boardMenu(1, 'B0000001'), // active always → accessible
+        boardMenu(2, 'B0000002', { active: false }), // inactive → hidden
+        boardMenu(3, 'B0000003', { exposureCondition: 'loggedInOnly' }), // member-only
+      ]
+
+      // Active menu → accessible to anyone.
+      expect(isBoardMenuAccessible(menus, 'B0000001', LOGGED_OUT)).toBe(true)
+      // Inactive owning menu → 404 for everyone.
+      expect(isBoardMenuAccessible(menus, 'B0000002', LOGGED_OUT)).toBe(false)
+      expect(isBoardMenuAccessible(menus, 'B0000002', MEMBER)).toBe(false)
+      // loggedInOnly owning menu → hidden to anon, visible to a member.
+      expect(isBoardMenuAccessible(menus, 'B0000003', LOGGED_OUT)).toBe(false)
+      expect(isBoardMenuAccessible(menus, 'B0000003', MEMBER)).toBe(true)
+      // No owning menu → directly addressable (not hidden for lacking a nav entry).
+      expect(isBoardMenuAccessible(menus, 'B9999999', LOGGED_OUT)).toBe(true)
     })
   })
 
