@@ -52,6 +52,18 @@ export const DEFAULT_PUBLIC_RATE_LIMIT_MAX = 10
 /** Default window length (minutes) when `PUBLIC_RATE_LIMIT_WINDOW_MIN` is unset/invalid. */
 export const DEFAULT_PUBLIC_RATE_LIMIT_WINDOW_MIN = 10
 
+/**
+ * The `/track` beacon (Task 5A Part 0) gets its OWN, MUCH higher rate limit,
+ * because a normal visitor legitimately fires it on every page/navigation — the
+ * abuse-flow default (10/10min) would drop honest traffic. This cap only backs
+ * out gross flooding from a single trusted IP; the FINER "a client can't inflate
+ * counts by re-firing the same page" control is the per-(session,path) dedup in
+ * `src/site/trafficDedup.ts`, not this coarse limiter. Same per-instance caveat
+ * as the public limiter (Redis = Phase 7).
+ */
+export const DEFAULT_TRACK_RATE_LIMIT_MAX = 300
+export const DEFAULT_TRACK_RATE_LIMIT_WINDOW_MIN = 10
+
 /** Sentinel client key shared by all requests without a trustworthy IP. */
 export const UNTRUSTED_IP_KEY = 'untrusted'
 
@@ -210,6 +222,58 @@ export function getPublicRateLimiter(): RateLimiter {
  */
 export function resetPublicRateLimiter(): void {
   singleton = new RateLimiter(getPublicRateLimitConfig())
+}
+
+/** Resolves the dedicated `/track` limiter config from env (higher defaults). */
+export function getTrackRateLimitConfig(): RateLimitConfig {
+  const max = parsePositiveInt(process.env.TRACK_RATE_LIMIT_MAX, DEFAULT_TRACK_RATE_LIMIT_MAX)
+  const windowMin = parsePositiveInt(
+    process.env.TRACK_RATE_LIMIT_WINDOW_MIN,
+    DEFAULT_TRACK_RATE_LIMIT_WINDOW_MIN,
+  )
+  return { max, windowMs: windowMin * 60_000 }
+}
+
+let trackSingleton: RateLimiter | null = null
+
+/** The process-wide, higher-cap limiter dedicated to the `/track` beacon. */
+export function getTrackRateLimiter(): RateLimiter {
+  if (!trackSingleton) {
+    trackSingleton = new RateLimiter(getTrackRateLimitConfig())
+  }
+  return trackSingleton
+}
+
+/** Rebuilds the `/track` limiter from the CURRENT env and drops all state (tests/ops). */
+export function resetTrackRateLimiter(): void {
+  trackSingleton = new RateLimiter(getTrackRateLimitConfig())
+}
+
+/**
+ * `/track`-specific gate: returns a ready 429 (or `null` to proceed) using the
+ * DEDICATED higher-cap {@link getTrackRateLimiter}, keyed the same spoof-proof
+ * way as the public limiter. Separate from {@link enforceRateLimit} so the
+ * beacon's generous cap never widens the strict abuse-flow limits.
+ */
+export function enforceTrackRateLimit(req: { headers?: Headers } | undefined): Response | null {
+  const decision = getTrackRateLimiter().check(
+    resolveRateLimitKey(PUBLIC_ENDPOINT_NAMES.trackView, req?.headers),
+  )
+  if (decision.allowed) {
+    return null
+  }
+  return Response.json(
+    { ok: false, message: GENERIC_RATE_LIMITED_MESSAGE },
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(decision.retryAfterSeconds),
+        'X-RateLimit-Limit': String(decision.limit),
+        'X-RateLimit-Remaining': String(decision.remaining),
+        'X-RateLimit-Reset': String(Math.ceil(decision.resetAt / 1000)),
+      },
+    },
+  )
 }
 
 /**

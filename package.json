@@ -5,6 +5,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "aggregate:traffic": "tsx scripts/aggregate-traffic.ts",
     "build": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=8000\" next build",
     "ci:migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
     "ci:seed": "cross-env NODE_OPTIONS=--no-deprecation tsx scripts/seedOnDeploy.ts",

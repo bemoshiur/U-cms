@@ -2,9 +2,12 @@ import { createHmac } from 'crypto'
 import type { Payload } from 'payload'
 
 import {
+  browserFamilyFromUserAgent,
+  classifyPath,
   deviceTypeFromUserAgent,
-  menuNumberFromPath,
   normalizePath,
+  osFamilyFromUserAgent,
+  OTHER_PATH_BUCKET,
   referrerHost,
 } from '../content/traffic'
 
@@ -42,16 +45,12 @@ function computeSessionKey(
   return createHmac('sha256', trafficSecret()).update(material).digest('hex')
 }
 
-/** Resolves the owning menu id for a `/page/{menuNumber}` path on a site, or null. */
-async function resolveMenuForPath(
+/** Looks up the owning menu id for a `/page/{menuNumber}` on a site, or null. */
+async function findMenuByNumber(
   payload: Payload,
   tenantId: string | number,
-  path: string,
+  menuNumber: number,
 ): Promise<string | number | null> {
-  const menuNumber = menuNumberFromPath(path)
-  if (menuNumber === null) {
-    return null
-  }
   const found = await payload.find({
     collection: 'menus',
     where: { and: [{ tenant: { equals: tenantId } }, { menuNumber: { equals: menuNumber } }] },
@@ -61,6 +60,57 @@ async function resolveMenuForPath(
     overrideAccess: true,
   })
   return found.docs[0]?.id ?? null
+}
+
+/** True iff a board with `bbsId` exists on the site (bounds `/board/{bbsId}`). */
+async function boardExists(
+  payload: Payload,
+  tenantId: string | number,
+  bbsId: string,
+): Promise<boolean> {
+  const found = await payload.find({
+    collection: 'boards',
+    where: { and: [{ tenant: { equals: tenantId } }, { bbsId: { equals: bbsId } }] },
+    depth: 0,
+    limit: 1,
+    pagination: false,
+    overrideAccess: true,
+  })
+  return found.docs.length > 0
+}
+
+/**
+ * Resolves the CANONICAL stored path + owning menu id for a captured path (Task
+ * 5A Part 0 / D6). The path is classified against the site's REAL routes: a
+ * concrete `/page/{n}` / `/board/{bbsId}` is confirmed to exist on THIS site
+ * (else bucketed), id-bearing routes are template-collapsed, and anything
+ * unknown collapses to {@link OTHER_PATH_BUCKET} — so an attacker-chosen path can
+ * never mint a distinct fake page in the (bounded) stats/log.
+ */
+async function resolveCanonicalPath(
+  payload: Payload,
+  tenantId: string | number,
+  normalized: string,
+): Promise<{ path: string; menuId: string | number | null }> {
+  const classified = classifyPath(normalized)
+  switch (classified.kind) {
+    case 'known':
+      return { path: classified.path, menuId: null }
+    case 'page': {
+      const menuId = await findMenuByNumber(payload, tenantId, classified.menuNumber)
+      return menuId != null
+        ? { path: classified.path, menuId }
+        : { path: OTHER_PATH_BUCKET, menuId: null }
+    }
+    case 'board': {
+      const exists = await boardExists(payload, tenantId, classified.bbsId)
+      return exists
+        ? { path: classified.path, menuId: null }
+        : { path: OTHER_PATH_BUCKET, menuId: null }
+    }
+    default:
+      return { path: OTHER_PATH_BUCKET, menuId: null }
+  }
 }
 
 export type PageViewInput = {
@@ -83,8 +133,8 @@ export async function recordPageView(
   now: Date = new Date(),
 ): Promise<string | number | null> {
   try {
-    const path = normalizePath(input.path)
-    const menuId = await resolveMenuForPath(payload, input.tenantId, path)
+    const normalized = normalizePath(input.path)
+    const { path, menuId } = await resolveCanonicalPath(payload, input.tenantId, normalized)
     const created = await payload.create({
       collection: 'pageViews',
       data: {
@@ -92,6 +142,8 @@ export async function recordPageView(
         path,
         ...(menuId != null ? { menu: menuId } : {}),
         deviceType: deviceTypeFromUserAgent(input.userAgent),
+        osFamily: osFamilyFromUserAgent(input.userAgent),
+        browserFamily: browserFamilyFromUserAgent(input.userAgent),
         referrerHost: referrerHost(input.referrer),
         sessionKey: computeSessionKey(input.clientIp ?? null, input.userAgent ?? null, now),
         ts: now.toISOString(),

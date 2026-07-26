@@ -31,6 +31,7 @@ import { WebContents } from './collections/WebContents'
 import { TermsDocuments } from './collections/TermsDocuments'
 import { SatisfactionRatings } from './collections/SatisfactionRatings'
 import { PageViews } from './collections/PageViews'
+import { TrafficDaily } from './collections/TrafficDaily'
 import { ShortUrls } from './collections/ShortUrls'
 import { HelpEntries } from './collections/HelpEntries'
 import { Surveys } from './collections/surveys/Surveys'
@@ -178,6 +179,9 @@ const plugins: Plugin[] = [
       // TODO 4.9) — tenant-scoped; both feed the Phase-5 statistics module.
       satisfactionRatings: {},
       pageViews: {},
+      // Aggregated per-(site, day) traffic rollups (Task 5A; TODO 5.1) —
+      // tenant-scoped, written by the aggregation job, read by the stats tabs.
+      trafficDaily: {},
       shortUrls: {},
       // Survey system (Task 4D; refs 2-9..2-12) — all three tenant-scoped
       // (per-site). Questions/responses derive their tenant from the parent
@@ -257,7 +261,18 @@ export default buildConfig({
       // admin views (actions render inside the auth/config context); a no-op on
       // the login view. See src/components/admin/IdleLogout.tsx.
       actions: ['/components/admin/IdleLogout#IdleLogout'],
+      // Task 5A: nav link to the custom Traffic Statistics view (a custom
+      // top-level view has no auto nav entry). Hidden for users without the
+      // statistics.traffic grant. See src/components/statistics/StatisticsNavLink.tsx.
+      afterNavLinks: ['/components/statistics/StatisticsNavLink#StatisticsNavLink'],
       views: {
+        // Task 5A (TODO 5.2): the traffic statistics dashboard (5 tabs), gated
+        // on statistics.traffic + tenant-scoped. See TrafficStatisticsView.tsx.
+        trafficStatistics: {
+          Component: '/components/statistics/TrafficStatisticsView#TrafficStatisticsView',
+          path: '/traffic-statistics',
+          exact: true,
+        },
         // Task 2B: replace the built-in login view with a branded two-step
         // (password → Google-OTP) form that also shows the conditional
         // Account-Request / Find-ID / Find-PW links (ref 1-1). The actual 2FA
@@ -316,6 +331,9 @@ export default buildConfig({
     // both feed the Phase-5 statistics module.
     SatisfactionRatings,
     PageViews,
+    // Aggregated per-(site, day) traffic rollups (Task 5A) — the statistics tabs
+    // read these; written by the aggregation job (src/site/trafficAggregation.ts).
+    TrafficDaily,
     Roles,
     AdminMenus,
     PasswordPolicies,

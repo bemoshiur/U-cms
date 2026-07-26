@@ -97,6 +97,7 @@ export interface Config {
     surveyResponses: SurveyResponse;
     satisfactionRatings: SatisfactionRating;
     pageViews: PageView;
+    trafficDaily: TrafficDaily;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -145,6 +146,7 @@ export interface Config {
     surveyResponses: SurveyResponsesSelect<false> | SurveyResponsesSelect<true>;
     satisfactionRatings: SatisfactionRatingsSelect<false> | SatisfactionRatingsSelect<true>;
     pageViews: PageViewsSelect<false> | PageViewsSelect<true>;
+    trafficDaily: TrafficDailySelect<false> | TrafficDailySelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -1661,9 +1663,17 @@ export interface PageView {
    */
   menu?: (number | null) | Menu;
   /**
-   * Coarse device class from the UA (no OS/browser stored).
+   * Coarse device class from the UA.
    */
   deviceType?: ('mobile' | 'desktop') | null;
+  /**
+   * Coarse OS family derived from the UA (no version — privacy-safe).
+   */
+  osFamily?: ('windows' | 'macos' | 'ios' | 'android' | 'linux' | 'other') | null;
+  /**
+   * Coarse browser family derived from the UA (no version — privacy-safe).
+   */
+  browserFamily?: ('chrome' | 'safari' | 'firefox' | 'edge' | 'opera' | 'samsung' | 'ie' | 'other') | null;
   /**
    * Referrer HOST only (never the full referring URL).
    */
@@ -1676,6 +1686,76 @@ export interface PageView {
    * Server-stamped view time.
    */
   ts: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "trafficDaily".
+ */
+export interface TrafficDaily {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * UTC calendar day (YYYY-MM-DD) this rollup covers.
+   */
+  date: string;
+  /**
+   * Total page views on this site this day.
+   */
+  totalViews: number;
+  /**
+   * Distinct daily session hashes this day (session rotates daily — monthly unique = Σ daily).
+   */
+  uniqueVisitors: number;
+  /**
+   * Path/menu breakdown: [{ path, menuNumber, views }] (Menu/Page tab).
+   */
+  byPath?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * OS-family breakdown: [{ key, views }] (OS tab).
+   */
+  byOs?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Browser-family breakdown: [{ key, views }] (Browser tab).
+   */
+  byBrowser?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Device-class breakdown: [{ key, views }] (Device tab).
+   */
+  byDevice?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2047,6 +2127,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'pageViews';
         value: number | PageView;
+      } | null)
+    | ({
+        relationTo: 'trafficDaily';
+        value: number | TrafficDaily;
       } | null)
     | ({
         relationTo: 'roles';
@@ -2788,9 +2872,27 @@ export interface PageViewsSelect<T extends boolean = true> {
   path?: T;
   menu?: T;
   deviceType?: T;
+  osFamily?: T;
+  browserFamily?: T;
   referrerHost?: T;
   sessionKey?: T;
   ts?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "trafficDaily_select".
+ */
+export interface TrafficDailySelect<T extends boolean = true> {
+  tenant?: T;
+  date?: T;
+  totalViews?: T;
+  uniqueVisitors?: T;
+  byPath?: T;
+  byOs?: T;
+  byBrowser?: T;
+  byDevice?: T;
   updatedAt?: T;
   createdAt?: T;
 }
