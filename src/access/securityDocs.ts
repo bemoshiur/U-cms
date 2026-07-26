@@ -82,3 +82,43 @@ export function securityDocScopedAccess(
     return { and: [classWhere, { [tenantFieldName]: { in: tenantIds } }] }
   }
 }
+
+/**
+ * READ access for the `attachments` upload pool (Task 6D — round-3 fix). The raw
+ * Payload-auto routes `GET /api/attachments` (REST list) and
+ * `GET /api/attachments/file/:filename` (Payload gates the file route on the
+ * collection's `read`) are an ALTERNATE download door that bypasses the
+ * sanctioned `/api/files/download` + `canDownloadPost` gate. `tenantMembershipAccess`
+ * alone let a SAME-TENANT content-only admin (no `privacy.securityDocs`) list/fetch
+ * a §3 security-doc post's attachment bytes. This tightens READ so a
+ * `securityDoc: true` attachment (the denormalized flag, kept in sync from its
+ * post) is readable ONLY by an admin holding `privacy.securityDocs` (or `isSuper`),
+ * within tenant — composing the existing tenant scoping, never dropping it.
+ *
+ * Mirrors `tenantMembershipAccess`: no user → deny; `isSuper` → all; no assigned
+ * tenants (non-super — members included, they carry no `users.tenants`) → deny.
+ * Then: a privacy-grant holder sees every attachment in their tenants (ordinary +
+ * security-doc); everyone else is restricted to ordinary attachments
+ * (`securityDoc` NULL/false) in their tenants. The sanctioned `/api/files/download`
+ * reads bytes with `overrideAccess`, so tightening this does NOT break the gated
+ * download for the allowed audiences.
+ */
+export function securityDocAttachmentRead(tenantFieldName = 'tenant'): Access {
+  return async ({ req }) => {
+    if (!req.user) {
+      return false
+    }
+    if (isSuperUser(req.user)) {
+      return true
+    }
+    const tenantIds = getAssignedTenantIds(req.user)
+    if (tenantIds.length === 0) {
+      return false
+    }
+    const tenantWhere: Where = { [tenantFieldName]: { in: tenantIds } }
+    if (await hasMenuAccess(req, SECURITY_DOCS_MENU_KEY)) {
+      return tenantWhere
+    }
+    return { and: [{ securityDoc: { not_equals: true } }, tenantWhere] }
+  }
+}

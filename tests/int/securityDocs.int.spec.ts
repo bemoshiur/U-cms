@@ -723,7 +723,9 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
 
     let secPost: Awaited<ReturnType<typeof payload.create>>
     let secFileSn: number
+    let secMediaId: number
     let ordPost: Awaited<ReturnType<typeof payload.create>>
+    let ordMediaId: number
     let member: Awaited<ReturnType<typeof payload.create>>
     let contentAdmin: Awaited<ReturnType<typeof payload.create>>
     let privacyOfficer: Awaited<ReturnType<typeof payload.create>>
@@ -741,12 +743,13 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
         },
         overrideAccess: true,
       })
+      secMediaId = await makeAttachment()
       secPost = await payload.create({
         collection: 'posts',
         data: {
           board: secBoard.id,
           title: marker('DlSecPost'),
-          attachments: [{ media: await makeAttachment() }],
+          attachments: [{ media: secMediaId }],
         } as never,
         overrideAccess: true,
       })
@@ -763,12 +766,13 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
         },
         overrideAccess: true,
       })
+      ordMediaId = await makeAttachment()
       ordPost = await payload.create({
         collection: 'posts',
         data: {
           board: ordBoard.id,
           title: marker('DlOrdPost'),
-          attachments: [{ media: await makeAttachment() }],
+          attachments: [{ media: ordMediaId }],
         } as never,
         overrideAccess: true,
       })
@@ -893,6 +897,145 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
       expect(await canDownloadPost({ payload, user: contentAdmin, post: ordPost as never })).toBe(
         true,
       )
+    })
+
+    // ── The raw /api/attachments[/file] door (round-3 fix) ──────────────────
+    it('denormalizes securityDoc onto the security-doc post’s attachment', async () => {
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: secMediaId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBe(true)
+      const ord = await payload.findByID({
+        collection: 'attachments',
+        id: ordMediaId,
+        overrideAccess: true,
+      })
+      expect(ord.securityDoc).toBeFalsy()
+    })
+
+    it('the raw attachments read (list + file route) DENIES a security-doc attachment to a content-only admin and a member', async () => {
+      // findByID over the collection read access = the exact gate the REST
+      // /api/attachments/:id and /api/attachments/file/:filename routes run.
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: secMediaId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+      // List: the security-doc attachment is not present for a content admin.
+      const listed = await payload.find({
+        collection: 'attachments',
+        user: contentAdmin,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      expect(listed.docs.map((d) => d.id)).not.toContain(secMediaId)
+      // A member (no users.tenants) is denied entirely.
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: secMediaId,
+          user: member,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('the raw attachments read ALLOWS a security-doc attachment to a privacy officer and super; ordinary stays readable by the content admin', async () => {
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: secMediaId,
+          user: privacyOfficer,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: secMediaId,
+          user: superUser,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+      // No regression: an ORDINARY attachment is still readable by the tenant
+      // content admin.
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: ordMediaId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+    })
+
+    it('re-syncs the attachment securityDoc flag when the owning board flips (board→posts→attachments)', async () => {
+      const board = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('FlipAttBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+        },
+        overrideAccess: true,
+      })
+      const flipMediaId = await makeAttachment()
+      await payload.create({
+        collection: 'posts',
+        data: {
+          board: board.id,
+          title: marker('FlipAttPost'),
+          attachments: [{ media: flipMediaId }],
+        } as never,
+        overrideAccess: true,
+      })
+      // Ordinary to start.
+      const before = await payload.findByID({
+        collection: 'attachments',
+        id: flipMediaId,
+        overrideAccess: true,
+      })
+      expect(before.securityDoc).toBeFalsy()
+      // A content admin can read it now...
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: flipMediaId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+
+      // Flip the board → propagates to posts → propagates to their attachments.
+      await payload.update({
+        collection: 'boards',
+        id: board.id,
+        data: { securityDoc: true },
+        overrideAccess: true,
+      })
+
+      const after = await payload.findByID({
+        collection: 'attachments',
+        id: flipMediaId,
+        overrideAccess: true,
+      })
+      expect(after.securityDoc).toBe(true)
+      // ...and the content admin can no longer read it via the raw route.
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: flipMediaId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
     })
   })
 })

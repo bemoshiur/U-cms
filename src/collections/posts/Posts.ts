@@ -1,5 +1,6 @@
 import { extname } from 'path'
 import type {
+  CollectionAfterChangeHook,
   CollectionBeforeChangeHook,
   CollectionBeforeValidateHook,
   CollectionConfig,
@@ -393,6 +394,44 @@ const stampAnswerAttribution: CollectionBeforeChangeHook = ({ data, req }) => {
   return data
 }
 
+/**
+ * Denormalizes the post's `securityDoc` class onto the `attachments` it
+ * references (Task 6D — round-3 fix). The raw `/api/attachments[/file]` routes
+ * gate on the attachment's own `read` access, which keys off
+ * `attachments.securityDoc`; that flag has to be kept in sync with the owning
+ * post or a §3 security-doc file would be reachable by a content-only admin via
+ * that alternate door. On every post write, this bulk-updates the referenced
+ * attachments to match the post's class — ONLY the rows that actually differ, so
+ * ordinary writes touch nothing. Runs regardless of `skipPostSideEffects`, so it
+ * ALSO fires when the board→posts flag-flip propagation (`propagateSecurityDocToPosts`
+ * in Boards.ts) bulk-updates posts — that is what re-syncs attachment flags on a
+ * board flip. `overrideAccess` bypasses the attachment field's write-lock; runs
+ * inside the post write's `req`/transaction.
+ */
+const syncAttachmentSecurityDoc: CollectionAfterChangeHook = async ({ doc, req }) => {
+  const attachments = Array.isArray(doc.attachments) ? doc.attachments : []
+  const mediaIds = attachments
+    .map((a: unknown) => toRelationId((a as { media?: unknown })?.media))
+    .filter((id: string | number | undefined): id is number | string => id !== undefined)
+  if (mediaIds.length === 0) {
+    return doc
+  }
+  const target = doc.securityDoc === true
+  // Only touch attachments whose flag differs (true→false or false/NULL→true).
+  const staleWhere = target
+    ? { securityDoc: { not_equals: true } }
+    : { securityDoc: { equals: true } }
+  await req.payload.update({
+    collection: 'attachments',
+    where: { and: [{ id: { in: mediaIds } }, staleWhere] },
+    data: { securityDoc: target } as never,
+    overrideAccess: true,
+    req,
+    context: { skipAudit: true },
+  })
+  return doc
+}
+
 function categoryField(index: number): Field {
   return {
     name: `category${index}`,
@@ -628,7 +667,7 @@ export const Posts: CollectionConfig = {
     // D4: auto-stamp Q&A answer attribution (runs after field-access has already
     // gated who may write `answer`/`answeredBy`/`answeredAt`).
     beforeChange: [stampAnswerAttribution],
-    afterChange: [postsAudit.afterChange],
+    afterChange: [postsAudit.afterChange, syncAttachmentSecurityDoc],
     afterDelete: [postsAudit.afterDelete],
   },
 }

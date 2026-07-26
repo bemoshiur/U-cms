@@ -501,6 +501,10 @@ export interface Attachment {
   id: number;
   tenant?: (number | null) | Site;
   alt?: string | null;
+  /**
+   * Denormalized security-document flag (auto-set from the referencing post's board).
+   */
+  securityDoc?: boolean | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -2421,6 +2425,7 @@ export interface MediaSelect<T extends boolean = true> {
 export interface AttachmentsSelect<T extends boolean = true> {
   tenant?: T;
   alt?: T;
+  securityDoc?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;

@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 
+import { securityDocAttachmentRead } from '../access/securityDocs'
 import { tenantMembershipAccess, tenantMembershipGuard } from '../access/tenantAccess'
 
 /**
@@ -66,8 +67,15 @@ export const Attachments: CollectionConfig = {
     group: 'Content',
     useAsTitle: 'filename',
   },
+  // READ is §3-aware (Task 6D): a `securityDoc` attachment is readable ONLY by an
+  // admin holding `privacy.securityDocs` (or super), within tenant — this closes
+  // the raw `/api/attachments` + `/api/attachments/file/:filename` door for a
+  // content-only admin. create/update/delete keep the plain tenant-membership
+  // gate (the `securityDoc` flag is machine-set from the post, not client-set, so
+  // there is no privilege to gate on write; the read gate is the confidentiality
+  // boundary and backs the file route). See src/access/securityDocs.ts.
   access: {
-    read: tenantMembershipAccess(),
+    read: securityDocAttachmentRead(),
     create: tenantMembershipAccess(),
     update: tenantMembershipAccess(),
     delete: tenantMembershipAccess(),
@@ -79,6 +87,22 @@ export const Attachments: CollectionConfig = {
       // (pdf/hwp/…), unlike `media` which requires `alt` for rendered images.
       name: 'alt',
       type: 'text',
+    },
+    // §3 security-document class, denormalized from the owning post (Task 6D).
+    // Machine-managed: set true when this attachment is referenced by a
+    // security-doc post (via the posts `syncAttachmentSecurityDoc` hook + the
+    // board→posts flag-flip propagation). Write-locked (never client-set); the
+    // hooks write it with `overrideAccess`. Drives `securityDocAttachmentRead`.
+    {
+      name: 'securityDoc',
+      type: 'checkbox',
+      defaultValue: false,
+      access: { create: () => false, update: () => false },
+      admin: {
+        readOnly: true,
+        description:
+          "Denormalized security-document flag (auto-set from the referencing post's board).",
+      },
     },
   ],
   hooks: {
