@@ -145,14 +145,14 @@
 
 ## Phase 6 — Privacy protection system
 
-- [ ] 6.1 `personalInfoAccessLogs` + hooks on member views/edits (screen, subject, URL, purpose category view/edit, viewer, ts, IP) — ref 3-8
-- [ ] 6.2 Confirm-gate before member-info view (logged); purpose-modal gate before ANY member/log Excel export, reason logged — refs 1-36, 3-8
-- [ ] 6.3 Watermark overlay (mgmt number + viewer ID + timestamp) on member detail view/print — ref 1-37
-- [ ] 6.4 Member management screens w/ masking + audit integration — refs 1-36, 1-37
-- [ ] 6.5 `passwordPolicies` mgmt UI (versioned text, most-recent-active-wins) — ref 3-9
-- [ ] 6.6 Privacy org chart auto-generated from privacy-role assignments (officer→deputy→team→staff w/ duty labels) — ref 3-10
-- [ ] 6.7 Mount 4 security-document boards (education/cases/mgmt-plan/incident-response) — ref 3-4
-- [ ] 6.8 §3 menu wiring: access-history, permission-history, menu-permission-history, login-history views under the Privacy 1-depth system, privacy-role gated
+- [x] 6.1 `personalInfoAccessLogs` + hooks on member views/edits (screen, subject, URL, purpose category view/edit, viewer, ts, IP) — ref 3-8
+- [x] 6.2 Confirm-gate before member-info view (logged); purpose-modal gate before ANY member/log Excel export, reason logged — refs 1-36, 3-8
+- [x] 6.3 Watermark overlay (mgmt number + viewer ID + timestamp) on member detail view/print — ref 1-37
+- [x] 6.4 Member management screens w/ masking + audit integration — refs 1-36, 1-37
+- [x] 6.5 `passwordPolicies` mgmt UI (versioned text, most-recent-active-wins) — ref 3-9
+- [x] 6.6 Privacy org chart auto-generated from privacy-role assignments (officer→deputy→team→staff w/ duty labels) — ref 3-10
+- [x] 6.7 Mount 4 security-document boards (education/cases/mgmt-plan/incident-response) — ref 3-4
+- [x] 6.8 §3 menu wiring: access-history, permission-history, menu-permission-history, login-history views under the Privacy 1-depth system, privacy-role gated
 
 **Exit criteria:** every personal-info touch produces an audit row; exports impossible without purpose; watermark visible on print; org chart reflects role changes.
 
