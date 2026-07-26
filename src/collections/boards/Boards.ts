@@ -1,4 +1,5 @@
 import type {
+  CollectionAfterChangeHook,
   CollectionBeforeValidateHook,
   CollectionConfig,
   Field,
@@ -142,6 +143,43 @@ const assignBbsIdAndEnforce: CollectionBeforeValidateHook = async ({
   }
 
   return data
+}
+
+/**
+ * Keeps the denormalized `posts.securityDoc` in sync when a board's own
+ * `securityDoc` flag flips (Task 6D M1). Each post's flag is normally set from
+ * its board at write time (`validatePostAgainstBoard`), so flipping an
+ * ALREADY-POPULATED board would otherwise strand its existing posts on the stale
+ * class — e.g. an ordinary board promoted to a security-doc board would keep its
+ * posts readable by content-only admins (a §3 mis-route). On a real change, this
+ * bulk-updates every child post to match, via `overrideAccess` (bypasses the
+ * post field's write lock) with `skipPostSideEffects`/`skipAudit` (the value is
+ * set explicitly — no re-validation or audit noise). Only fires on `update` with
+ * an actual change; runs inside the board update's `req`/transaction.
+ */
+const propagateSecurityDocToPosts: CollectionAfterChangeHook = async ({
+  doc,
+  operation,
+  previousDoc,
+  req,
+}) => {
+  if (operation !== 'update') {
+    return doc
+  }
+  const next = doc.securityDoc === true
+  const prev = previousDoc?.securityDoc === true
+  if (next === prev) {
+    return doc
+  }
+  await req.payload.update({
+    collection: 'posts',
+    where: { board: { equals: doc.id } },
+    data: { securityDoc: next } as never,
+    overrideAccess: true,
+    req,
+    context: { skipPostSideEffects: true, skipAudit: true },
+  })
+  return doc
 }
 
 /**
@@ -472,7 +510,7 @@ export const Boards: CollectionConfig = {
   endpoints: [boardExportEndpoint],
   hooks: {
     beforeValidate: [assignBbsIdAndEnforce],
-    afterChange: [boardsAudit.afterChange],
+    afterChange: [boardsAudit.afterChange, propagateSecurityDocToPosts],
     afterDelete: [boardsAudit.afterDelete],
   },
 }

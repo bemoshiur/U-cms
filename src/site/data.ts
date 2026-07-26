@@ -142,6 +142,17 @@ export async function resolveContentPage(
  * Resolves a board by its `bbsId` on the active site for `/board/[bbsId]`, or
  * `null` (→ 404) when it does not exist on THIS site. Tenant-scoped: a bbsId
  * belonging to another site resolves to `null`.
+ *
+ * §3 SECURITY-DOCUMENT EXCLUSION (Task 6D C1): the four privacy security-doc
+ * boards (`securityDoc: true`) are NOT public content — they are admin-only §3
+ * libraries. `bbsId` is a sequential, enumerable `Bxxxxxxx`, so without this
+ * exclusion an anonymous visitor could enumerate `/board/{bbsId}` and read them
+ * (they have no public menu, and `isBoardMenuAccessible` treats an un-menued
+ * board as accessible). Excluding them here makes every public board/post route
+ * 404 for a security-doc board (this resolver backs both `/board/[bbsId]` via
+ * `resolveVisibleBoard` and `/board/[bbsId]/[postId]` via `resolvePostForBoard`).
+ * Payload's `not_equals: true` compiles to `(col IS NULL OR col <> true)`, so
+ * ordinary boards (NULL/false) are unaffected.
  */
 export async function resolveBoardByBbsId(
   payload: Payload,
@@ -153,7 +164,13 @@ export async function resolveBoardByBbsId(
   }
   const found = await payload.find({
     collection: 'boards',
-    where: { and: [{ tenant: { equals: tenantId } }, { bbsId: { equals: bbsId } }] },
+    where: {
+      and: [
+        { tenant: { equals: tenantId } },
+        { bbsId: { equals: bbsId } },
+        { securityDoc: { not_equals: true } },
+      ],
+    },
     depth: 0,
     limit: 1,
     pagination: false,
@@ -201,6 +218,9 @@ export async function resolvePostForBoard(
   }
   if (post.isSecret) {
     return null // T4C: real secret/member gating
+  }
+  if (post.securityDoc === true) {
+    return null // §3 security-doc post — never public (Task 6D C1; board is already excluded)
   }
   return { board, post }
 }

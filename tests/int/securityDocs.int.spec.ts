@@ -7,6 +7,11 @@ import { SECURITY_DOCS_MENU_KEY } from '@/access/securityDocs'
 import { PASSWORD_POLICY_MENU_KEY } from '@/privacy/passwordPolicyData'
 import { PERSONAL_INFO_LOGS_MENU_KEY } from '@/endpoints/personalInfoLogsExport'
 import { PRIVACY_ORG_MENU_KEY, PRIVACY_ROLE_OFFICER, PRIVACY_ROLE_STAFF } from '@/privacy/orgChart'
+import { resolveBoardByBbsId, resolvePostForBoard } from '@/site/data'
+import { loadAllBoardPosts, loadBoardDetail } from '@/site/board'
+import { resolveVisibleBoard, resolveVisiblePost } from '@/site/access'
+import { loadDownloadRows } from '@/site/downloadStatsData'
+import type { Board } from '@/payload-types'
 import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
 import { rolesStep } from '@/seed/steps/roles'
@@ -468,6 +473,230 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
       expect(ids).toContain(ordinaryBoardId)
       expect(ids).toContain(secBoardId)
       expect(ids).toContain(otherSiteSecBoardId)
+    })
+  })
+
+  // ── C1: the public site never exposes security docs (fail-without-fix) ────
+  describe('public-site security-doc exclusion (C1)', () => {
+    let secBbsId: string
+    let secBoard: Board
+    let secPostId: number
+    let ordinaryBbsId: string
+    let ordinaryPostId: number
+
+    beforeAll(async () => {
+      // A SEEDED security-doc board (on the public demo site) + one of its posts.
+      const sec = await payload.find({
+        collection: 'boards',
+        where: {
+          and: [{ tenant: { equals: demoSiteId } }, { name: { equals: 'Security Education' } }],
+        },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      secBoard = sec.docs[0]!
+      secBbsId = secBoard.bbsId as string
+      const secPosts = await payload.find({
+        collection: 'posts',
+        where: { board: { equals: secBoard.id } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      secPostId = secPosts.docs[0]!.id
+
+      // A normal public board + post (positive control).
+      const ord = await payload.create({
+        collection: 'boards',
+        data: { tenant: demoSiteId, name: marker('PublicOrdinary'), boardType: photoTypeId },
+        overrideAccess: true,
+      })
+      ordinaryBbsId = ord.bbsId as string
+      const ordPost = await payload.create({
+        collection: 'posts',
+        data: { board: ord.id, title: marker('PublicPost'), author: 'A' },
+        overrideAccess: true,
+      })
+      ordinaryPostId = ordPost.id
+    })
+
+    it('every public board/post resolver returns null for a security-doc board (anon → 404)', async () => {
+      // Board-level (the reliable exclusion).
+      expect(await resolveBoardByBbsId(payload, demoSiteId, secBbsId)).toBeNull()
+      expect(await loadBoardDetail(payload, demoSiteId, secBbsId)).toBeNull()
+      // Even with NO menus (un-menued board = the leak scenario) it stays hidden.
+      expect(await resolveVisibleBoard(payload, demoSiteId, secBbsId, [], null)).toBeNull()
+      // Post-level (direct post URL).
+      expect(await resolvePostForBoard(payload, demoSiteId, secBbsId, secPostId)).toBeNull()
+      expect(
+        await resolveVisiblePost(payload, demoSiteId, secBbsId, secPostId, [], null),
+      ).toBeNull()
+      // List/all-posts loaders exclude security-doc posts even if handed the board.
+      expect(await loadAllBoardPosts(payload, secBoard)).toHaveLength(0)
+    })
+
+    it('a normal public board + post still resolve (no over-blocking)', async () => {
+      const board = await resolveBoardByBbsId(payload, demoSiteId, ordinaryBbsId)
+      expect(board).not.toBeNull()
+      const resolved = await resolvePostForBoard(payload, demoSiteId, ordinaryBbsId, ordinaryPostId)
+      expect(resolved).not.toBeNull()
+    })
+  })
+
+  // ── M1: posts.securityDoc re-syncs when a board flips the flag ────────────
+  describe('board securityDoc flip propagates to child posts (M1)', () => {
+    it('flipping an ordinary board to security-doc updates its posts + locks out content admins', async () => {
+      const board = await payload.create({
+        collection: 'boards',
+        data: { tenant: demoSiteId, name: marker('FlipBoard'), boardType: photoTypeId },
+        overrideAccess: true,
+      })
+      const postA = await payload.create({
+        collection: 'posts',
+        data: { board: board.id, title: marker('FlipA'), author: 'A' },
+        overrideAccess: true,
+      })
+      const postB = await payload.create({
+        collection: 'posts',
+        data: { board: board.id, title: marker('FlipB'), author: 'B' },
+        overrideAccess: true,
+      })
+      expect(postA.securityDoc).toBeFalsy()
+      expect(postB.securityDoc).toBeFalsy()
+
+      // A content admin can read both while the board is ordinary.
+      const contentRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_FLIP_${lettersOnly().toUpperCase()}`,
+          name: 'Content flip test role',
+          description: 'content.boards + content.posts',
+          menuGrants: [await menuId('content.boards'), await menuId('content.posts')],
+        },
+        overrideAccess: true,
+      })
+      const contentAdmin = await payload.create({
+        collection: 'users',
+        data: {
+          email: `flip-${marker('u')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [contentRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+      await expect(
+        payload.findByID({
+          collection: 'posts',
+          id: postA.id,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+
+      // Flip the board into the security-doc class.
+      await payload.update({
+        collection: 'boards',
+        id: board.id,
+        data: { securityDoc: true },
+        overrideAccess: true,
+      })
+
+      // The denorm rode down onto BOTH posts...
+      const reA = await payload.findByID({
+        collection: 'posts',
+        id: postA.id,
+        overrideAccess: true,
+      })
+      const reB = await payload.findByID({
+        collection: 'posts',
+        id: postB.id,
+        overrideAccess: true,
+      })
+      expect(reA.securityDoc).toBe(true)
+      expect(reB.securityDoc).toBe(true)
+
+      // ...so the content admin can no longer read them.
+      await expect(
+        payload.findByID({
+          collection: 'posts',
+          id: postA.id,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+  })
+
+  // ── L1: download-stats never surface security-doc file metadata ───────────
+  describe('download-stats exclusion (L1)', () => {
+    /** A tiny 1×1 transparent PNG for the attachment fixtures. */
+    const PNG =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+
+    async function makeAttachment(): Promise<number> {
+      const created = await payload.create({
+        collection: 'attachments',
+        data: { alt: 'stats fixture', tenant: demoSiteId } as never,
+        file: {
+          data: Buffer.from(PNG, 'base64'),
+          name: `sd-stats-${Date.now()}-${Math.floor(Math.random() * 100000)}.png`,
+          mimetype: 'image/png',
+          size: Buffer.from(PNG, 'base64').length,
+        },
+        overrideAccess: true,
+      })
+      return created.id as number
+    }
+
+    it('a security-doc post with an attachment is absent from the download rows; an ordinary one is present', async () => {
+      const ordBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('StatsOrdinary'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+        },
+        overrideAccess: true,
+      })
+      const secBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('StatsSec'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+          securityDoc: true,
+        },
+        overrideAccess: true,
+      })
+      const ordPost = await payload.create({
+        collection: 'posts',
+        data: {
+          board: ordBoard.id,
+          title: marker('StatsOrdPost'),
+          attachments: [{ media: await makeAttachment() }],
+        } as never,
+        overrideAccess: true,
+      })
+      const secPost = await payload.create({
+        collection: 'posts',
+        data: {
+          board: secBoard.id,
+          title: marker('StatsSecPost'),
+          attachments: [{ media: await makeAttachment() }],
+        } as never,
+        overrideAccess: true,
+      })
+      expect(secPost.securityDoc).toBe(true)
+
+      const rows = await loadDownloadRows(payload, { tenantId: demoSiteId })
+      const postIds = rows.map((r) => String(r.postId))
+      expect(postIds).toContain(String(ordPost.id))
+      expect(postIds).not.toContain(String(secPost.id))
     })
   })
 })
