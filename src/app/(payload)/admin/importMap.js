@@ -31,6 +31,7 @@ import { IdleLogout as IdleLogout_9a2706a383e1ae800d015c2468e5c9bc } from '../..
 import { StatisticsNavLink as StatisticsNavLink_090ed7d34dc872de92e5b1d9343dce14 } from '../../../components/statistics/StatisticsNavLink'
 import { TenantSelector as TenantSelector_d6d5f193a167989e2ee7d14202901e62 } from '@payloadcms/plugin-multi-tenant/rsc'
 import { TenantSelectionProvider as TenantSelectionProvider_d6d5f193a167989e2ee7d14202901e62 } from '@payloadcms/plugin-multi-tenant/rsc'
+import { AdminDashboardView as AdminDashboardView_d9ea5f032f3ccf5d5eecd9765d2f9fb8 } from '../../../components/dashboard/AdminDashboardView'
 import { TrafficStatisticsView as TrafficStatisticsView_172e9f66506a711344c8c015ec5c890a } from '../../../components/statistics/TrafficStatisticsView'
 import { DownloadStatisticsView as DownloadStatisticsView_27b729628e2e82abd9c6fa2d5cd3f645 } from '../../../components/statistics/DownloadStatisticsView'
 import { SatisfactionStatisticsView as SatisfactionStatisticsView_abffd592819bcd445f57d1d7437396b8 } from '../../../components/statistics/SatisfactionStatisticsView'
@@ -103,6 +104,8 @@ export const importMap = {
     TenantSelector_d6d5f193a167989e2ee7d14202901e62,
   '@payloadcms/plugin-multi-tenant/rsc#TenantSelectionProvider':
     TenantSelectionProvider_d6d5f193a167989e2ee7d14202901e62,
+  '/components/dashboard/AdminDashboardView#AdminDashboardView':
+    AdminDashboardView_d9ea5f032f3ccf5d5eecd9765d2f9fb8,
   '/components/statistics/TrafficStatisticsView#TrafficStatisticsView':
     TrafficStatisticsView_172e9f66506a711344c8c015ec5c890a,
   '/components/statistics/DownloadStatisticsView#DownloadStatisticsView':

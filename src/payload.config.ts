@@ -268,6 +268,15 @@ export default buildConfig({
       // statistics.traffic grant. See src/components/statistics/StatisticsNavLink.tsx.
       afterNavLinks: ['/components/statistics/StatisticsNavLink#StatisticsNavLink'],
       views: {
+        // Task 5D (TODO 5.7; refs 1-7/1-8): the permission-filtered admin landing
+        // dashboard. Payload's built-in DashboardView renders this IN PLACE OF its
+        // DefaultDashboard at `/admin` (it reads
+        // `admin.components.views.dashboard.Component`, falling back to the default
+        // collection-cards view). Every widget is gated server-side on
+        // hasMenuAccess + scoped to the active site. See AdminDashboardView.tsx.
+        dashboard: {
+          Component: '/components/dashboard/AdminDashboardView#AdminDashboardView',
+        },
         // Task 5A (TODO 5.2): the traffic statistics dashboard (5 tabs), gated
         // on statistics.traffic + tenant-scoped. See TrafficStatisticsView.tsx.
         trafficStatistics: {
