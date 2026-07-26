@@ -124,47 +124,63 @@ const SENSITIVE_KEY = `[A-Za-z0-9_.-]{0,8}(?:${SENSITIVE_TERM})[A-Za-z0-9_.-]{0,
 /** The KEY→value separator: `:`/`=`, incl. URL-encoded (`%3A`/`%3D`), with optional spaces. */
 const SEP = `\\s*(?:[:=]|%3[aAdD])\\s*`
 
-/** JSON-shaped `"key":"value"` where the key is sensitive (`{"password":"…"}`). */
-const SENSITIVE_JSON = new RegExp(`"(${SENSITIVE_KEY})"\\s*:\\s*"[^"]{0,512}"`, 'gi')
+/** A tempered, BOUNDED quoted-value body up to (but not consuming) the closing quote `\N`. */
+const QUOTED_BODY = (backref: number): string => `(?:(?!\\${backref})[^\\r\\n]){0,512}`
 
 /**
- * A sensitive key followed by a QUOTED value (single OR double quote): redact the
- * ENTIRE quoted span, so a value WITH SPACES (`password="my secret pass"`,
- * `passphrase='correct horse battery staple'`) is fully removed, not truncated at
- * the first space. The value is a tempered, BOUNDED class
- * (`(?:(?!\2)[^\r\n]){0,512}`) — a single bounded quantifier, so no ReDoS.
+ * JSON-shaped `<quote>key<quote> : value` where the key is sensitive and quoted —
+ * handles BOTH `"password":"…"` (double) and `'password':'…'` (single), a quoted
+ * value (balanced OR UNCLOSED → the closing quote is optional, so a truncated
+ * `{'password':'topsecretval}` still redacts), and an unquoted JSON value (to the
+ * next `}` / delimiter). The value quote is group 2 (for the optional backref).
  */
-const SENSITIVE_KV_QUOTED = new RegExp(
-  `(${SENSITIVE_KEY})(?:${SEP})(["'])(?:(?!\\2)[^\\r\\n]){0,512}\\2`,
+const SENSITIVE_QKEY = new RegExp(
+  `["'](${SENSITIVE_KEY})["']\\s*[:=]\\s*(?:(["'])${QUOTED_BODY(2)}\\2?|[^\\r\\n,;&}]{0,512})`,
   'gi',
 )
 
 /**
- * A sensitive key in `KEY = value` ENV-ASSIGNMENT form — a space/tab AFTER the
- * separator (the shape of an env dump / assignment log:
- * `PAYLOAD_SECRET = a long secret value`) — redacted to end of the value RUN (end
- * of line). Requiring the trailing space distinguishes it from an inline
- * `key=value` (handled token-wise below), so a spaced env value isn't truncated at
- * its first space.
+ * A bare sensitive key + separator + a QUOTED value (single OR double), redacting
+ * the ENTIRE quoted span so a value WITH SPACES (`password="my secret pass"`) is
+ * fully removed. The closing quote is OPTIONAL (`\2?`), so an UNBALANCED/unclosed
+ * quote (`token="my secret` with no close) is redacted to end of line rather than
+ * leaking its tail. Tempered, BOUNDED body — single bounded quantifier, no ReDoS.
  */
-const SENSITIVE_ENV_ASSIGN = new RegExp(
-  `(${SENSITIVE_KEY})(?:\\s*(?:[:=]|%3[aAdD])[ \\t]+)[^\\r\\n]{1,512}`,
-  'gi',
-)
+const SENSITIVE_BARE_Q = new RegExp(`(${SENSITIVE_KEY})(?:${SEP})(["'])${QUOTED_BODY(2)}\\2?`, 'gi')
 
 /**
- * Inline `KEY=token` / `KEY: token` / `KEY%3Dtoken` (unquoted, no space after the
- * separator): redact the token to its end. The value is a BOUNDED negated class
- * (`{1,512}`, single quantifier) — no ReDoS; an over-long value's tail is caught by
- * the opaque-blob pass as a backstop.
+ * A bare sensitive key + separator + an UNQUOTED value, redacted to the end of the
+ * value RUN — up to a clear delimiter (newline, `&`, `;`, `,`) or end-of-string.
+ * This is what catches a spaced value (`password=my secret pass`) that a
+ * stop-at-whitespace rule would leak. The leading negative lookahead skips a quoted
+ * value (handled above) and an already-inserted `[REDACTED]` (so a prior pass's
+ * result isn't re-matched and its trailing context clobbered). A SEPARATOR is
+ * REQUIRED, so a bare mention of a secret word without one (`password field`,
+ * `invalid token supplied`) is never redacted. Single bounded quantifier — no ReDoS.
  */
-const SENSITIVE_KV = new RegExp(`(${SENSITIVE_KEY})(?:${SEP})"?[^\\s"'&,;)}\\]]{1,512}`, 'gi')
+const SENSITIVE_BARE_U = new RegExp(
+  `(${SENSITIVE_KEY})(?:${SEP})(?!["']|\\[REDACTED\\])[^\\r\\n,;&]{1,512}`,
+  'gi',
+)
 
 /** URL / connection-string userinfo: redact the WHOLE userinfo up to the LAST `@`. */
 const URI_USERINFO = /\b([a-z][a-z0-9+.-]{0,20}):\/\/[^\s/]{1,256}@/gi
 
-/** `Bearer|Basic|Digest <credential>` authorization values (single bounded quantifier). */
-const AUTH_SCHEME = /\b(Bearer|Basic|Digest)\s+[A-Za-z0-9._~+/=-]{1,4096}/gi
+/** `Bearer|Basic <credential>` — a single contiguous token (JWT / base64), single bounded quantifier. */
+const AUTH_TOKEN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{1,4096}/gi
+
+/**
+ * `Digest <param=…, param=…>` — a Digest credential is a COMMA-separated param
+ * list (`username="x", nonce="y", response="hash"`), so its sensitive parts
+ * (`response`/`nonce`) sit past a comma and a token match would miss them; redact
+ * the whole list to end of line. The `(?=[\w.-]{1,64}\s*=)` lookahead requires a
+ * `param=` shape so an ordinary "Digest" mention isn't over-redacted (both bounded).
+ */
+const DIGEST_AUTH = /\bDigest\s+(?=[\w.-]{1,64}\s*=)[^\r\n]{1,4096}/gi
+
+/** Collapse redaction artifacts: adjacent `[REDACTED][REDACTED]` and a stray trailing `]`. */
+const REDACTED_ADJACENT = /(?:\[REDACTED\])(?:\s*\[REDACTED\])+/g
+const REDACTED_TRAIL_BRACKET = /\[REDACTED\]\]+/g
 
 /**
  * Scrubs a string of the known-sensitive patterns. Pass 0 is the PRIMARY,
@@ -177,17 +193,22 @@ const AUTH_SCHEME = /\b(Bearer|Basic|Digest)\s+[A-Za-z0-9._~+/=-]{1,4096}/gi
  *  1. URL / connection-string USERINFO → `<scheme>://[REDACTED]@host` (whole
  *     userinfo up to the LAST `@`, so a `@` in the password is fully removed).
  *  2. `Bearer|Basic|Digest <credential>` authorization values.
- *  3. JSON-shaped `"key":"value"` for a sensitive key.
- *  4. sensitive key with a QUOTED value (entire quoted span, spaces and all).
- *  5. sensitive `KEY = value` env-assignment (to end of line).
- *  6. inline sensitive `KEY=token` (to end of token).
- *  7. JWT-shaped tokens (`eyJ….….…`).
- *  8. Email addresses (PII).
- *  9. Opaque token/secret blobs — hex runs (20+) and long base64 (40+).
+ *  3. JSON-shaped `<q>key<q>:value` for a sensitive quoted key (single/double,
+ *     quoted-or-unquoted value, closing quote optional so an unclosed value redacts).
+ *  4. bare sensitive key with a QUOTED value (whole span; closing quote optional,
+ *     so an UNCLOSED quote redacts to end of line).
+ *  5. bare sensitive `KEY=value` UNQUOTED → to the end of the value run (delimiter
+ *     newline/`&`/`;`/`,` or end-of-string) — catches spaced values.
+ *  6. JWT-shaped tokens (`eyJ….….…`).
+ *  7. Email addresses (PII).
+ *  8. Opaque token/secret blobs — hex runs (20+) and long base64 (40+).
+ *  9. Cleanup: collapse adjacent redactions + a stray trailing `]`.
  *
- * Over-redaction is intentional and safe: this store is admin-readable +
- * exportable, so a false positive (a redacted non-secret) is always preferable
- * to a false negative (a leaked secret).
+ * A SEPARATOR (`:`/`=`/`%3D`) is REQUIRED for passes 3-5, so a message that merely
+ * mentions a secret word without one (`password field`, `invalid token supplied`)
+ * is NEVER redacted — it stays readable. Where a secret IS matched, over-redaction
+ * (to the end of the run/line) is intentional and safe: this store is admin-readable
+ * + exportable, so a redacted non-secret always beats a leaked secret.
  */
 export function scrubSensitive(
   input: string,
@@ -208,35 +229,38 @@ export function scrubSensitive(
   //    embedded `@` in the password (`user:p@ss@host`) is fully redacted.
   out = out.replace(URI_USERINFO, `$1://${REDACTED}@`)
 
-  // 2. Authorization scheme credentials (Bearer / Basic / Digest).
-  out = out.replace(AUTH_SCHEME, `$1 ${REDACTED}`)
+  // 2. Authorization scheme credentials: Bearer/Basic (token) + Digest (param list).
+  out = out.replace(AUTH_TOKEN, `$1 ${REDACTED}`)
+  out = out.replace(DIGEST_AUTH, `Digest ${REDACTED}`)
 
-  // 3. JSON `"key":"value"` for a sensitive key → redact the value in place.
-  out = out.replace(SENSITIVE_JSON, (_m, key: string) => `"${key}":"${REDACTED}"`)
+  // 3. Quoted-key JSON (`"password":"…"`, `'password':'…'`, unclosed value) → value.
+  out = out.replace(SENSITIVE_QKEY, (_m, key: string) => `"${key}":${REDACTED}`)
 
-  // 4. sensitive key with a QUOTED value → redact the whole quoted span.
-  out = out.replace(SENSITIVE_KV_QUOTED, (_m, key: string) => `${key}=${REDACTED}`)
+  // 4. bare key with a QUOTED value (balanced OR unclosed) → redact the span.
+  out = out.replace(SENSITIVE_BARE_Q, (_m, key: string) => `${key}=${REDACTED}`)
 
-  // 5. sensitive `KEY = value` env-assignment (space after sep) → redact to EOL.
-  out = out.replace(SENSITIVE_ENV_ASSIGN, (_m, key: string) => `${key}=${REDACTED}`)
+  // 5. bare key with an UNQUOTED value → redact to the end of the value run.
+  out = out.replace(SENSITIVE_BARE_U, (_m, key: string) => `${key}=${REDACTED}`)
 
-  // 6. inline sensitive `KEY=token` → redact the token.
-  out = out.replace(SENSITIVE_KV, (_m, key: string) => `${key}=${REDACTED}`)
-
-  // 7. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
+  // 6. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
   //    header `{"` in base64url — a strong, low-false-positive signal).
   out = out.replace(
     /\beyJ[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,4096}/g,
     REDACTED,
   )
 
-  // 8. Email addresses (PII — never stored in the error log).
+  // 7. Email addresses (PII — never stored in the error log).
   out = out.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, REDACTED)
 
-  // 9. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
+  // 8. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
   //    session/CSRF tokens, hashes, keys) and long base64 (40+).
   out = out.replace(/\b[A-Fa-f0-9]{20,}\b/g, REDACTED)
   out = out.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, REDACTED)
+
+  // 9. Cosmetic cleanup: a re-matched / adjacent redaction, or a stray `]` right
+  //    after a redaction (e.g. an env value replaced inside `[...]`) → one token.
+  out = out.replace(REDACTED_ADJACENT, REDACTED)
+  out = out.replace(REDACTED_TRAIL_BRACKET, REDACTED)
 
   return out
 }

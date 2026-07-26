@@ -131,6 +131,12 @@ describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
     const t1 = performance.now()
     sanitizeErrorMessage(evil2)
     expect(performance.now() - t1).toBeLessThan(100)
+    // Round-4 shapes: dense quotes + UNBALANCED quotes + separators + secret terms —
+    // probes the new quoted/single-quote/unquoted-to-delimiter passes for backtracking.
+    const evil3 = `password="x',secret=y;token='z& `.repeat(Math.floor((256 * 1024) / 31))
+    const t2 = performance.now()
+    sanitizeErrorMessage(evil3)
+    expect(performance.now() - t2).toBeLessThan(100)
   })
 
   it('bypass 1 — a DB-URI password containing @ is FULLY redacted (up to the last @)', () => {
@@ -216,6 +222,51 @@ describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
     expect(values).not.toContain('https://example.com')
     // Longest-first so a longer secret is replaced before a shorter overlapping one.
     expect(values[0]!.length).toBeGreaterThanOrEqual(values[values.length - 1]!.length)
+  })
+
+  // ── Round-4: heuristic-net shape leaks (fail-without-fix) ──────────────────
+  it('shape 1 — an UNQUOTED spaced value redacts its whole tail (to a delimiter)', () => {
+    expect(sanitizeErrorMessage('rejected password=my secret pass phrase now')).not.toContain(
+      'secret pass',
+    )
+    // A clear delimiter (comma) still bounds it — trailing context after it survives.
+    const out = sanitizeErrorMessage('token=abc secret def, and retrying the request')
+    expect(out).not.toContain('abc secret def')
+    expect(out).toContain('retrying the request')
+  })
+
+  it('shape 2 — an UNBALANCED double-quote (no close) is redacted to end of line', () => {
+    expect(sanitizeErrorMessage('failed token="my unclosed secret value')).not.toContain(
+      'unclosed secret value',
+    )
+  })
+
+  it('shape 3 — single-quoted values (unclosed + JSON single-quote key) are redacted', () => {
+    expect(sanitizeErrorMessage("token='secretval remainder")).not.toContain('secretval')
+    expect(sanitizeErrorMessage("{'password':'topsecretval}")).not.toContain('topsecretval')
+    expect(sanitizeErrorMessage("{'apiKey':'live_zzz111'}")).not.toContain('live_zzz111')
+  })
+
+  it('shape 4 — a redaction adjacent to a stray bracket collapses to a single [REDACTED]', () => {
+    vi.stubEnv('APP_SESSION_SECRET', 'envsecretvalue-xyz')
+    // The env-value replace inside `[...]` would otherwise leave `[REDACTED]]`.
+    const out = sanitizeErrorMessage('ids=[envsecretvalue-xyz] failed')
+    expect(out).not.toContain('[REDACTED]]')
+    expect(out).not.toContain('envsecretvalue-xyz')
+    expect(out).toContain('[REDACTED]')
+  })
+
+  it('NON-over-redaction — a secret WORD without a separator stays readable', () => {
+    // No `=`/`:`/`%3D` after the word → NOT a key/value → left intact for debugging.
+    expect(sanitizeErrorMessage('Failed to update password field for user')).toBe(
+      'Failed to update password field for user',
+    )
+    expect(sanitizeErrorMessage('invalid token supplied by the client')).toBe(
+      'invalid token supplied by the client',
+    )
+    expect(sanitizeErrorMessage('the secret handshake did not complete')).toBe(
+      'the secret handshake did not complete',
+    )
   })
 
   it('leaves an ordinary message untouched (no false redaction)', () => {
