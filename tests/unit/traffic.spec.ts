@@ -63,6 +63,41 @@ describe('traffic capture helpers (Task 4E — privacy-conscious)', () => {
     it('caps pathological lengths', () => {
       expect(normalizePath('/' + 'a'.repeat(2000)).length).toBeLessThanOrEqual(512)
     })
+
+    it('B2 — collapses a token-bearing reset-password path to a tokenless label (never stores the raw token)', () => {
+      const tokens = [
+        'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0', // crypto.randomBytes(20).hex shape
+        'deadBEEF0123456789',
+        'tok.en-with_odd.chars',
+      ]
+      for (const token of tokens) {
+        const out = normalizePath(`/reset-password/${token}`)
+        expect(out).toBe('/reset-password/[token]')
+        expect(out).not.toContain(token) // the raw single-use credential never survives
+      }
+      // Full URL form + trailing segments/query still collapse.
+      expect(normalizePath('https://demo.example.com/reset-password/SECRETTOKEN?x=1')).toBe(
+        '/reset-password/[token]',
+      )
+      expect(normalizePath('/reset-password/SECRETTOKEN/extra')).toBe('/reset-password/[token]')
+      // A bare /reset-password (no token) is left as-is.
+      expect(normalizePath('/reset-password')).toBe('/reset-password')
+    })
+
+    it('D8 — collapses a protocol-relative leading `//` or `/\\` so it can never be an open redirect', () => {
+      // A leading `//` (or `/\`, which browsers normalize to `//`) would resolve
+      // to a protocol-relative `//evil.com` when handed to redirect().
+      for (const evil of ['//evil.com', '//evil.com/path', '/\\evil.com', '/\\/evil.com', '///a']) {
+        const out = normalizePath(evil)
+        expect(out.startsWith('//')).toBe(false)
+        expect(out.startsWith('/\\')).toBe(false)
+        expect(out.startsWith('/')).toBe(true)
+        // Resolving against a real origin must NOT escape it (same-origin path).
+        expect(new URL(out, 'https://safe.invalid').origin).toBe('https://safe.invalid')
+      }
+      expect(normalizePath('//evil.com')).toBe('/evil.com')
+      expect(normalizePath('/\\evil')).toBe('/evil')
+    })
   })
 
   describe('menuNumberFromPath', () => {

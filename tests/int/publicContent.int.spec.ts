@@ -10,7 +10,7 @@ import {
   loadBoardListPage,
   resolveDataManager,
 } from '@/site/board'
-import { getSiteMenus } from '@/site/data'
+import { getSiteMenus, resolveContentPage } from '@/site/data'
 import type { CurrentMember } from '@/site/member'
 import { MemberAskError, submitMemberQuestion } from '@/members/ask'
 import { runSeed } from '@/seed'
@@ -125,9 +125,16 @@ describe('Task 4C public content + board frontends', () => {
         data: { tenant: siteId, name: marker('Active'), contentType: 'content' },
         overrideAccess: true,
       })
+      // Content must be PUBLISHED to render publicly (B3: `_status:'published'`
+      // is required now — the public read no longer surfaces unpublished drafts).
       await payload.create({
         collection: 'webContents',
-        data: { menu: activeMenu.id, title: 'Active Page', content: lexical('hi') },
+        data: {
+          menu: activeMenu.id,
+          title: 'Active Page',
+          content: lexical('hi'),
+          _status: 'published',
+        } as never,
         overrideAccess: true,
       })
 
@@ -138,7 +145,12 @@ describe('Task 4C public content + board frontends', () => {
       })
       await payload.create({
         collection: 'webContents',
-        data: { menu: inactiveMenu.id, title: 'Hidden Page', content: lexical('secret') },
+        data: {
+          menu: inactiveMenu.id,
+          title: 'Hidden Page',
+          content: lexical('secret'),
+          _status: 'published',
+        } as never,
         overrideAccess: true,
       })
 
@@ -154,7 +166,12 @@ describe('Task 4C public content + board frontends', () => {
       })
       await payload.create({
         collection: 'webContents',
-        data: { menu: memberOnlyMenu.id, title: 'Member Page', content: lexical('members') },
+        data: {
+          menu: memberOnlyMenu.id,
+          title: 'Member Page',
+          content: lexical('members'),
+          _status: 'published',
+        } as never,
         overrideAccess: true,
       })
 
@@ -191,7 +208,13 @@ describe('Task 4C public content + board frontends', () => {
       })
       const wc = await payload.create({
         collection: 'webContents',
-        data: { menu: menu.id, title: 'PUBLISHED-V1', content: lexical('v1') },
+        // PUBLISH V1 (B3: only published content renders publicly).
+        data: {
+          menu: menu.id,
+          title: 'PUBLISHED-V1',
+          content: lexical('v1'),
+          _status: 'published',
+        } as never,
         overrideAccess: true,
       })
       // Save a newer DRAFT on top — the published version must stay V1.
@@ -213,6 +236,33 @@ describe('Task 4C public content + board frontends', () => {
       )
       expect(resolved).not.toBeNull()
       expect(resolved!.content.title).toBe('PUBLISHED-V1')
+    })
+
+    it('B3 — a web content CREATED as a draft (draft-from-start) NEVER renders publicly (→ 404)', async () => {
+      const menu = await payload.create({
+        collection: 'menus',
+        data: { tenant: siteId, name: marker('DraftFromStart'), contentType: 'content' },
+        overrideAccess: true,
+      })
+      // Draft FROM THE START — never published. `db.create` still writes the row
+      // (with `_status='draft'`); without the `_status:'published'` filter the
+      // public loader would return and render this unpublished draft. The prior
+      // test only covers draft-ON-TOP-OF-published, which is why this slipped.
+      await payload.create({
+        collection: 'webContents',
+        data: { menu: menu.id, title: 'NEVER-PUBLISHED-DRAFT', content: lexical('secret draft') },
+        draft: true,
+        overrideAccess: true,
+      })
+
+      // Data layer: the tenant resolver returns null (no published doc).
+      expect(await resolveContentPage(payload, siteId, menu.menuNumber!)).toBeNull()
+
+      // Render layer (visibility-gated wrapper): also null → the route 404s.
+      const menus = await getSiteMenus(payload, siteId)
+      expect(
+        await resolveVisibleContentPage(payload, siteId, menu.menuNumber!, menus, null),
+      ).toBeNull()
     })
   })
 

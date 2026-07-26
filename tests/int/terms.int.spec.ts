@@ -164,6 +164,28 @@ describe('termsDocuments: versioning + scoping + consent seam (Task 4E)', () => 
     expect(active?.title).toBe('Terms v1')
   })
 
+  it('B3 — a terms doc CREATED as a draft (draft-from-start) is NEVER shown as the active policy', async () => {
+    const siteId = await makeSite()
+    // Draft FROM THE START — never published. Without the `_status:'published'`
+    // filter, `find()` returns this draft row (its body sits in the main table
+    // with `_status='draft'`) and it renders publicly as the active policy with
+    // an empty change history. The prior test only covers draft-over-published.
+    await payload.create({
+      collection: 'termsDocuments',
+      data: {
+        tenant: siteId,
+        category: 'termsOfUse',
+        title: 'NEVER-PUBLISHED-TERMS',
+        content: lexical('secret draft body'),
+      } as never,
+      draft: true,
+      overrideAccess: true,
+    })
+    // No published version → the public loader returns null (route shows the
+    // "not published yet" notice), NOT the draft.
+    expect(await loadActiveTerms(payload, siteId, 'termsOfUse')).toBeNull()
+  })
+
   it('enforces one document per (tenant, category)', async () => {
     const siteId = await makeSite()
     await payload.create({

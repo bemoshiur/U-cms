@@ -100,6 +100,36 @@ describe('pageViews: privacy-conscious traffic capture (Task 4E)', () => {
     expect(serialized).not.toContain('secret123')
   })
 
+  it('B2 — a reset-password token in the path is NEVER stored verbatim (collapsed to a tokenless label)', async () => {
+    const siteId = await makeSite()
+    // Real crypto.randomBytes(20)-hex shape + a couple of token-shaped values.
+    const tokens = [
+      'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0',
+      'deadBEEF0123456789cafef00d',
+      'tok-en_with.oddchars',
+    ]
+    for (const token of tokens) {
+      const id = await recordPageView(payload, {
+        tenantId: siteId,
+        path: `/reset-password/${token}`,
+        userAgent: MAC_UA,
+        referrer: null,
+        clientIp: '198.51.100.5',
+      })
+      expect(id).not.toBeNull()
+      const row = await payload.findByID({
+        collection: 'pageViews',
+        id: id as number,
+        overrideAccess: true,
+      })
+      // Collapsed to the stable, tokenless label...
+      expect(row.path).toBe('/reset-password/[token]')
+      // ...and the single-use account-takeover token appears NOWHERE in the row
+      // (fail-without-fix: the raw path would land verbatim in this exportable log).
+      expect(JSON.stringify(row)).not.toContain(token)
+    }
+  })
+
   it('derives desktop for a desktop UA and resolves the owning menu for /page/{n}', async () => {
     const siteId = await makeSite()
     const menu = await payload.create({

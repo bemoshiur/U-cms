@@ -55,9 +55,31 @@ export function referrerHost(referrer: string | null | undefined): string | null
 }
 
 /**
+ * A path segment that carries a secret token collapses to this stable, tokenless
+ * label so the raw token never lands in the (admin-readable, exportable)
+ * `pageViews.path`. Currently only the member password-reset link
+ * (`/reset-password/<token>`) is token-bearing; ADD any future token-in-path
+ * route to {@link collapseTokenBearingPath}.
+ */
+export const RESET_PASSWORD_PATH_LABEL = '/reset-password/[token]'
+
+/**
+ * B2 (security): collapse a token-bearing auth path to a stable label. The
+ * member password-reset link places a single-use, ~1h account-takeover token in
+ * the URL path; captured verbatim it would persist a live credential into the
+ * traffic log. `/reset-password/<anything>` (with or without trailing segments)
+ * → `/reset-password/[token]`; a bare `/reset-password` is left untouched.
+ */
+function collapseTokenBearingPath(path: string): string {
+  return path.replace(/^\/reset-password\/[^/]+.*$/i, RESET_PASSWORD_PATH_LABEL)
+}
+
+/**
  * Normalizes a captured path: keeps only the pathname portion (drops any query
- * string / fragment — those can carry identifiers), collapses to `/` when empty,
- * and caps the length. Accepts a full URL or a bare path.
+ * string / fragment — those can carry identifiers), forces a single-slash root
+ * (never a protocol-relative `//host` — see D8), collapses token-bearing auth
+ * paths to a tokenless label (never store a reset-password token — see B2), and
+ * caps the length. Accepts a full URL or a bare path.
  */
 export function normalizePath(rawPath: string | null | undefined): string {
   if (typeof rawPath !== 'string' || rawPath.trim() === '') {
@@ -80,6 +102,14 @@ export function normalizePath(rawPath: string | null | undefined): string {
   if (!path.startsWith('/')) {
     path = `/${path}`
   }
+  // D8 (security): collapse an authority-introducing leading `//` or `/\`
+  // (browsers normalize a backslash to a forward slash) down to a single `/`, so
+  // the result can NEVER be a protocol-relative `//evil.com` value. This path is
+  // reused as a `redirect()` target by `satisfactionActions.ts`, so a
+  // protocol-relative leak here would be an open redirect.
+  path = path.replace(/^[/\\]+/, '/')
+  // B2 (security): never store a token-bearing auth path verbatim.
+  path = collapseTokenBearingPath(path)
   // Guard against pathological lengths (defense in depth against a crafted body).
   return path.slice(0, 512)
 }

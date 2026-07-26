@@ -146,7 +146,15 @@ describe('public site data resolvers (Task 4A)', () => {
       })
       await payload.create({
         collection: 'webContents',
-        data: { menu: menu.id, name: 'a', title: 'A Title', content: lexical('body') },
+        // PUBLISH so the public read resolves it (B3: only published content is
+        // served — an unpublished draft returns null / 404).
+        data: {
+          menu: menu.id,
+          name: 'a',
+          title: 'A Title',
+          content: lexical('body'),
+          _status: 'published',
+        } as never,
         overrideAccess: true,
       })
 

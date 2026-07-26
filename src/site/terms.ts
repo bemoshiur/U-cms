@@ -13,10 +13,13 @@ import type { TermsDocument } from '../payload-types'
 import { isTermsCategory } from '../content/terms'
 
 /**
- * The ACTIVE terms document for a category on a site — the PUBLISHED version
- * (`payload.find` defaults to `draft:false`, so a draft saved on top never
- * shows). Returns `null` for an unknown category, cross-site, or when the site
- * has no published terms for it.
+ * The ACTIVE terms document for a category on a site — the PUBLISHED version.
+ * B3: `_status` is filtered to `published` EXPLICITLY. `find()` does NOT add a
+ * `_status` clause, so a doc CREATED as a draft (draft-from-start) keeps its
+ * draft body in the main table with `_status='draft'` and would otherwise render
+ * publicly as the active policy. A draft-over-published save is unaffected (the
+ * published row stays `published`). Returns `null` for an unknown category,
+ * cross-site, or when the site has no published terms for it.
  */
 export async function loadActiveTerms(
   payload: Payload,
@@ -28,11 +31,17 @@ export async function loadActiveTerms(
   }
   const found = await payload.find({
     collection: 'termsDocuments',
-    where: { and: [{ tenant: { equals: tenantId } }, { category: { equals: category } }] },
+    where: {
+      and: [
+        { tenant: { equals: tenantId } },
+        { category: { equals: category } },
+        { _status: { equals: 'published' } },
+      ],
+    },
     depth: 0,
     limit: 1,
     pagination: false,
-    overrideAccess: true, // find() returns the published version by default
+    overrideAccess: true,
   })
   return (found.docs[0] as TermsDocument | undefined) ?? null
 }

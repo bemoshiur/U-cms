@@ -324,6 +324,9 @@ export const publicSiteStep: SeedStep = {
           name: 'introduction',
           title: 'About — Introduction',
           content: lexical('An introduction to the demo organization.'),
+          // PUBLISH so /page/[menuNumber] renders it (B3: only published content
+          // is served publicly — an unpublished draft would 404).
+          _status: 'published',
         },
         overrideAccess: true,
       })

@@ -87,9 +87,16 @@ async function setTwoFactor(enabled: boolean): Promise<void> {
 
 /** Minimal PayloadRequest for driving an endpoint handler directly. */
 function endpointReq(user: unknown, body?: Record<string, unknown>): PayloadRequest {
+  // A real `req.user` ALWAYS carries its auth-collection slug (`users` for the
+  // back-office, `members` for the public site). Synthetic users default to the
+  // `users` collection; a member test passes `collection: 'members'` explicitly.
+  const withCollection =
+    user && typeof user === 'object'
+      ? { collection: 'users', ...(user as Record<string, unknown>) }
+      : user
   return {
     payload,
-    user,
+    user: withCollection,
     context: {},
     pathname: '/api/2fa/test',
     headers: new Headers(),
@@ -264,6 +271,63 @@ describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
       const user = await createActiveUser('no2fa-enroll')
       const res = await callEnroll(user)
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('Part 2b — B1 collection gate (a member session cannot touch admin 2FA)', () => {
+    it('B1 regression — enroll AND verify-enroll refuse a member session; no TOTP written to an id-colliding admin', async () => {
+      await setTwoFactor(true)
+
+      // A back-office admin whose users-row id a member id can collide with.
+      const admin = await createActiveUser('b1admin')
+
+      // A REAL public-site member (Task 4B auth collection). Its id sequence is
+      // independent of `users`, so this exercises the exact escalation: a member
+      // session whose id collides with the admin's users-row id. `loadSelf`
+      // resolves `req.user.id` against `users`, so an un-gated member request
+      // would findByID (and write TOTP onto) the id-colliding ADMIN row.
+      const publicSite = await payload.create({
+        collection: 'sites',
+        data: {
+          siteId: uniqueSiteId('b1pub'),
+          name: 'B1 Public Site',
+          url: 'https://b1.example.com',
+          isAdminSite: false,
+        },
+        overrideAccess: true,
+      })
+      const member = await payload.create({
+        collection: 'members',
+        data: {
+          loginId: `b1m${Date.now()}`.toLowerCase(),
+          email: uniqueEmail('b1member'),
+          name: 'B1 Member',
+          password: 'Member-Pass-99',
+          status: 'active',
+          tenant: publicSite.id,
+        } as never,
+        overrideAccess: true,
+      })
+
+      // The attacker's member session, carrying the admin's colliding id.
+      const attacker = { ...member, id: admin.id, collection: 'members' as const }
+
+      const enroll = await callEnroll(attacker)
+      expect([401, 403]).toContain(enroll.status)
+      const verify = await callVerifyEnroll(attacker, '000000')
+      expect([401, 403]).toContain(verify.status)
+
+      // The admin row is untouched — WITHOUT the fix, the enroll above would have
+      // minted + written a TOTP secret onto this id-colliding admin row (and the
+      // verify would have returned 400, not 401/403).
+      const target = await serverRead(admin.id)
+      expect((target as { totpSecret?: string | null }).totpSecret).toBeFalsy()
+      expect(target.totpConfirmed).toBeFalsy()
+
+      // Belt: a member session on its OWN id is refused too.
+      const own = { ...member, collection: 'members' as const }
+      expect([401, 403]).toContain((await callEnroll(own)).status)
+      expect([401, 403]).toContain((await callVerifyEnroll(own, '000000')).status)
     })
   })
 

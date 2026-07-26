@@ -14,8 +14,10 @@
  * a trusted read surface. Safety comes from these resolvers themselves: every
  * query is CONSTRAINED to the active site's `tenant`, so nothing cross-site is
  * ever returned, and the render layer additionally filters by `active` /
- * `exposureCondition` (`buildNav`) and drafts (find defaults to published).
- * Writes are never performed here.
+ * `exposureCondition` (`buildNav`). Public content reads filter `_status` to
+ * `published` EXPLICITLY (`resolveContentPage`) — `find()` does NOT default to
+ * published, so a draft-from-start doc would otherwise leak. Writes are never
+ * performed here.
  */
 
 import type { Payload } from 'payload'
@@ -117,11 +119,17 @@ export async function resolveContentPage(
   }
   const contents = await payload.find({
     collection: 'webContents',
-    where: { menu: { equals: menu.id } },
+    // B3: filter `_status` explicitly. `find()` does NOT add a `_status` clause,
+    // so a doc CREATED as a draft (draft-from-start) has its draft body in the
+    // main table with `_status='draft'` and would otherwise render publicly.
+    // Requiring `published` returns nothing for a never-published draft → 404.
+    where: {
+      and: [{ menu: { equals: menu.id } }, { _status: { equals: 'published' } }],
+    },
     depth: 0,
     limit: 1,
     pagination: false,
-    overrideAccess: true, // find() returns the published version by default
+    overrideAccess: true,
   })
   const content = contents.docs[0]
   if (!content) {

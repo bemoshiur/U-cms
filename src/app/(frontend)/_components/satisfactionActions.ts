@@ -19,8 +19,10 @@ import { SatisfactionError, submitSatisfactionRating } from '@/site/satisfaction
  * Redirects back to the rated page with a status flag (React escapes it on render).
  */
 export async function submitSatisfactionAction(formData: FormData): Promise<void> {
-  // `pageKey` is a site-relative path — normalize it to a safe path (leading `/`,
-  // query stripped) so it can never become an open redirect.
+  // `pageKey` is a site-relative path used below as a `redirect()` target.
+  // `normalizePath` strips the query/fragment AND collapses any leading `//` or
+  // `/\` to a single `/` (D8), so the result is always a same-origin relative
+  // path and can never resolve to a protocol-relative `//evil.com` open redirect.
   const pageKey = normalizePath(String(formData.get('pageKey') ?? '/'))
   const scoreRaw = String(formData.get('score') ?? '')
   const score = Number(scoreRaw)

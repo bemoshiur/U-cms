@@ -141,16 +141,21 @@ export const contentMenusStep: SeedStep = {
           name: 'home',
           title: SEED_WEBCONTENT_TITLE,
           content: lexical('Welcome to the demo site.'),
+          // PUBLISH so the page renders publicly (B3: only published content is
+          // served — an unpublished draft would 404).
+          _status: 'published',
         },
         overrideAccess: true,
       })
-      // Second save → a new version, so diff/restore is exercisable.
+      // Second save → a new PUBLISHED version, so diff/restore is exercisable and
+      // the active (rendered) version stays published.
       await payload.update({
         collection: 'webContents',
         id: created.id,
         data: {
           title: SEED_WEBCONTENT_V2_TITLE,
           content: lexical('Welcome to the demo site. This copy has been revised.'),
+          _status: 'published',
         },
         overrideAccess: true,
       })
