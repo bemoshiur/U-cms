@@ -10,6 +10,7 @@ import {
   OTHER_PATH_BUCKET,
   referrerHost,
 } from '../content/traffic'
+import { buildTrackDedupKey, getTrafficDedup } from './trafficDedup'
 
 /**
  * Public traffic capture seam (Task 4E; TODO 4.9, feeds Phase 5). Records ONE
@@ -123,9 +124,47 @@ export type PageViewInput = {
 }
 
 /**
- * Records one page view. Best-effort — never throws to the caller (a capture
- * failure must not break navigation); the beacon route ignores the result.
- * Returns the new row id, or `null` on any failure.
+ * Inserts one page view for an ALREADY-CANONICAL path (no re-classification). The
+ * single writer both `recordPageView` (raw path → canonicalize → here) and the
+ * `/track` `captureTrackedView` (canonicalize → dedup → here) funnel through, so
+ * the stored shape is defined in exactly one place.
+ */
+async function insertCanonicalView(
+  payload: Payload,
+  args: {
+    tenantId: string | number
+    canonicalPath: string
+    menuId: string | number | null
+    userAgent?: string | null
+    referrer?: string | null
+    clientIp?: string | null
+  },
+  now: Date,
+): Promise<string | number> {
+  const created = await payload.create({
+    collection: 'pageViews',
+    data: {
+      tenant: args.tenantId,
+      path: args.canonicalPath,
+      ...(args.menuId != null ? { menu: args.menuId } : {}),
+      deviceType: deviceTypeFromUserAgent(args.userAgent),
+      osFamily: osFamilyFromUserAgent(args.userAgent),
+      browserFamily: browserFamilyFromUserAgent(args.userAgent),
+      referrerHost: referrerHost(args.referrer),
+      sessionKey: computeSessionKey(args.clientIp ?? null, args.userAgent ?? null, now),
+      ts: now.toISOString(),
+    } as never,
+    overrideAccess: true,
+  })
+  return created.id
+}
+
+/**
+ * Records one page view (canonicalizing the raw path first). Best-effort — never
+ * throws to the caller; returns the new row id, or `null` on any failure. NO
+ * dedup here: this is the direct capture entry point for seeds/tests/other
+ * callers that intend every call to write a row. The dedup that protects the
+ * public `/track` beacon lives in {@link captureTrackedView}.
  */
 export async function recordPageView(
   payload: Payload,
@@ -135,24 +174,64 @@ export async function recordPageView(
   try {
     const normalized = normalizePath(input.path)
     const { path, menuId } = await resolveCanonicalPath(payload, input.tenantId, normalized)
-    const created = await payload.create({
-      collection: 'pageViews',
-      data: {
-        tenant: input.tenantId,
-        path,
-        ...(menuId != null ? { menu: menuId } : {}),
-        deviceType: deviceTypeFromUserAgent(input.userAgent),
-        osFamily: osFamilyFromUserAgent(input.userAgent),
-        browserFamily: browserFamilyFromUserAgent(input.userAgent),
-        referrerHost: referrerHost(input.referrer),
-        sessionKey: computeSessionKey(input.clientIp ?? null, input.userAgent ?? null, now),
-        ts: now.toISOString(),
-      } as never,
-      overrideAccess: true,
-    })
-    return created.id
+    return await insertCanonicalView(
+      payload,
+      {
+        tenantId: input.tenantId,
+        canonicalPath: path,
+        menuId,
+        userAgent: input.userAgent,
+        referrer: input.referrer,
+        clientIp: input.clientIp,
+      },
+      now,
+    )
   } catch (err) {
     payload.logger?.warn?.(`[traffic] page-view capture failed: ${(err as Error)?.message}`)
+    return null
+  }
+}
+
+/**
+ * The `/track` beacon capture (Task 5A Part 0 / D6). Canonicalizes the raw path,
+ * then applies per-(session, path) DEDUP keyed off the CANONICAL/stored bucket —
+ * NOT the raw path. This is the fix for the D6 bypass: because the classification
+ * regexes collapse trailing garbage (`/page/7/x1`, `/page/7/x2`, … all → the
+ * stored `/page/7`), keying dedup on the raw path let a forged-body flood mint a
+ * distinct dedup key per request while every row landed on the SAME real page —
+ * inflating its count. Keying on the canonical bucket makes those variants share
+ * one dedup key, so a client can record at most one view of a given page per
+ * window. Records at most one row; returns the id, `null` if deduped/failed.
+ * Best-effort — never throws (navigation must not break).
+ */
+export async function captureTrackedView(
+  payload: Payload,
+  input: PageViewInput,
+  now: Date = new Date(),
+): Promise<string | number | null> {
+  try {
+    const normalized = normalizePath(input.path)
+    const { path, menuId } = await resolveCanonicalPath(payload, input.tenantId, normalized)
+    // Dedup key off the CANONICAL bucket (the value that gets stored), so
+    // trailing-garbage variants of one real page collapse to a single key.
+    const dedupKey = buildTrackDedupKey(input.clientIp ?? null, input.userAgent ?? null, path, now)
+    if (!getTrafficDedup().shouldRecord(dedupKey)) {
+      return null
+    }
+    return await insertCanonicalView(
+      payload,
+      {
+        tenantId: input.tenantId,
+        canonicalPath: path,
+        menuId,
+        userAgent: input.userAgent,
+        referrer: input.referrer,
+        clientIp: input.clientIp,
+      },
+      now,
+    )
+  } catch (err) {
+    payload.logger?.warn?.(`[traffic] tracked-view capture failed: ${(err as Error)?.message}`)
     return null
   }
 }

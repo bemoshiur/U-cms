@@ -123,7 +123,12 @@ export async function handleTrafficStats(args: {
   if (result instanceof Response) {
     return result
   }
-  return Response.json({ ok: true, stats: result })
+  // Per-user, tenant-scoped stats — never cache in a shared/browser cache
+  // (matches the CSV export's Cache-Control).
+  return Response.json(
+    { ok: true, stats: result },
+    { headers: { 'Cache-Control': 'private, no-store' } },
+  )
 }
 
 /** Builds the CSV rows for one tab from the resolved stats payload. */

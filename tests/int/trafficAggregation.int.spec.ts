@@ -10,7 +10,8 @@ import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
 import { boardTypesStep, SEED_BOARD_TYPES } from '@/seed/steps/boardTypes'
 import { sitesStep } from '@/seed/steps/sites'
-import { recordPageView } from '@/site/traffic'
+import { captureTrackedView, recordPageView } from '@/site/traffic'
+import { resetTrafficDedup } from '@/site/trafficDedup'
 import {
   aggregateTrafficForDate,
   pruneAgedPageViews,
@@ -191,6 +192,49 @@ describe('Task 5A — traffic aggregation, retention, statistics + D6 hardening'
         overrideAccess: true,
       })
       expect(row.path).toBe('__other__')
+    })
+
+    it('D6 dedup keys off the CANONICAL bucket: forged /page/{n}/xN variants dedup as /page/{n} (fail-without-fix)', async () => {
+      // Exercises the /track route's capture core (captureTrackedView). The HIGH-1
+      // bypass: keying dedup on the RAW path let /page/{n}/x1, /page/{n}/x2, …
+      // (all canonicalizing to the SAME real /page/{n}) mint a fresh dedup key
+      // each time, inflating that real page's count. The fix keys dedup on the
+      // canonical bucket, so these variants collapse to one recorded view.
+      resetTrafficDedup()
+      const siteId = await makeSite()
+      const menu = await payload.create({
+        collection: 'menus',
+        data: { tenant: siteId, name: 'DedupPage', contentType: 'content' },
+        overrideAccess: true,
+      })
+      const n = (menu as { menuNumber: number }).menuNumber
+      const ip = '198.51.100.77'
+
+      // Two forged /track bodies in ONE session: different trailing garbage, same
+      // real page → both canonicalize to /page/{n}; the second MUST be deduped.
+      const id1 = await captureTrackedView(payload, {
+        tenantId: siteId,
+        path: `/page/${n}/x1`,
+        userAgent: MAC_UA,
+        clientIp: ip,
+      })
+      const id2 = await captureTrackedView(payload, {
+        tenantId: siteId,
+        path: `/page/${n}/x2`,
+        userAgent: MAC_UA,
+        clientIp: ip,
+      })
+      expect(id1).not.toBeNull() // first recorded
+      expect(id2).toBeNull() // second deduped on the canonical /page/{n}
+
+      const rows = await payload.find({
+        collection: 'pageViews',
+        where: { and: [{ tenant: { equals: siteId } }, { path: { equals: `/page/${n}` } }] },
+        pagination: false,
+        overrideAccess: true,
+      })
+      // Only ONE view of the real page (fail-without-fix: raw-path keying → 2).
+      expect(rows.totalDocs).toBe(1)
     })
   })
 
