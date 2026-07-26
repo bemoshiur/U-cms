@@ -91,6 +91,9 @@ export interface Config {
     webContents: WebContent;
     shortUrls: ShortUrl;
     helpEntries: HelpEntry;
+    surveys: Survey;
+    surveyQuestions: SurveyQuestion;
+    surveyResponses: SurveyResponse;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -133,6 +136,9 @@ export interface Config {
     webContents: WebContentsSelect<false> | WebContentsSelect<true>;
     shortUrls: ShortUrlsSelect<false> | ShortUrlsSelect<true>;
     helpEntries: HelpEntriesSelect<false> | HelpEntriesSelect<true>;
+    surveys: SurveysSelect<false> | SurveysSelect<true>;
+    surveyQuestions: SurveyQuestionsSelect<false> | SurveyQuestionsSelect<true>;
+    surveyResponses: SurveyResponsesSelect<false> | SurveyResponsesSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -1402,6 +1408,160 @@ export interface HelpEntry {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveys".
+ */
+export interface Survey {
+  id: number;
+  tenant?: (number | null) | Site;
+  title: string;
+  /**
+   * Intro/description shown above the survey (rendered via the safe serializer).
+   */
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Owning department (person-in-charge context, ref 2-9).
+   */
+  department?: (number | null) | Department;
+  /**
+   * Contact phone for enquiries (ref 2-9).
+   */
+  contactPhone?: string | null;
+  /**
+   * Survey topic/category (ref 2-9).
+   */
+  topic?: string | null;
+  /**
+   * Survey opens at this time. Leave empty for a draft (questions stay editable).
+   */
+  openFrom?: string | null;
+  /**
+   * Survey closes at this time. Empty means no upper bound.
+   */
+  openTo?: string | null;
+  /**
+   * Master on/off toggle. An inactive survey is always Closed.
+   */
+  isActive?: boolean | null;
+  /**
+   * Derived lifecycle: scheduled | open | closed (from the window + Active toggle).
+   */
+  status?: string | null;
+  /**
+   * Who may respond. Members-only surveys require a public-site login.
+   */
+  audience: 'anyone' | 'members';
+  /**
+   * When aggregate results are viewable on the public site (ref 2-12).
+   */
+  resultVisibility: 'afterClose' | 'duringAndAfter' | 'adminsOnly';
+  /**
+   * Responses are not tied to a member identity (respondent stored as null). One-response is still deduped by a hashed key.
+   */
+  anonymous?: boolean | null;
+  /**
+   * True once the first response has been recorded.
+   */
+  hasResponses?: boolean | null;
+  /**
+   * When the first response arrived. Once started, questions are immutable.
+   */
+  startedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyQuestions".
+ */
+export interface SurveyQuestion {
+  id: number;
+  tenant?: (number | null) | Site;
+  survey: number | Survey;
+  /**
+   * Display/ask order (lower first).
+   */
+  order?: number | null;
+  text: string;
+  type: 'single' | 'multi' | 'text' | 'textarea';
+  required?: boolean | null;
+  /**
+   * Choices for single/multi questions. An "Other" option renders a free-text box.
+   */
+  options?:
+    | {
+        label: string;
+        /**
+         * Stored value for this option (unique within the question).
+         */
+        value: string;
+        order?: number | null;
+        /**
+         * Renders an extra free-text input; its text is required when chosen.
+         */
+        isOther?: boolean | null;
+        /**
+         * Skip logic (single-choice only, ref 2-11): jump to the question with this order when chosen.
+         */
+        nextQuestionOrder?: number | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyResponses".
+ */
+export interface SurveyResponse {
+  id: number;
+  tenant?: (number | null) | Site;
+  survey: number | Survey;
+  /**
+   * The member who responded, or null (anonymous survey/submitter).
+   */
+  respondent?: (number | null) | Member;
+  /**
+   * Server-stamped submission time.
+   */
+  submittedAt?: string | null;
+  /**
+   * Identity-free dedup key (hashed member id or client IP) for one-response enforcement.
+   */
+  participantKey?: string | null;
+  answers?:
+    | {
+        question: number | SurveyQuestion;
+        /**
+         * Selected option value(s) for single/multi questions.
+         */
+        optionValues?: string[] | null;
+        /**
+         * Free text for text/textarea questions and "other" options.
+         */
+        textValue?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "passwordPolicies".
  */
 export interface PasswordPolicy {
@@ -1744,6 +1904,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'helpEntries';
         value: number | HelpEntry;
+      } | null)
+    | ({
+        relationTo: 'surveys';
+        value: number | Survey;
+      } | null)
+    | ({
+        relationTo: 'surveyQuestions';
+        value: number | SurveyQuestion;
+      } | null)
+    | ({
+        relationTo: 'surveyResponses';
+        value: number | SurveyResponse;
       } | null)
     | ({
         relationTo: 'roles';
@@ -2375,6 +2547,74 @@ export interface HelpEntriesSelect<T extends boolean = true> {
   bindType?: T;
   urlPattern?: T;
   menuNumber?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveys_select".
+ */
+export interface SurveysSelect<T extends boolean = true> {
+  tenant?: T;
+  title?: T;
+  description?: T;
+  department?: T;
+  contactPhone?: T;
+  topic?: T;
+  openFrom?: T;
+  openTo?: T;
+  isActive?: T;
+  status?: T;
+  audience?: T;
+  resultVisibility?: T;
+  anonymous?: T;
+  hasResponses?: T;
+  startedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyQuestions_select".
+ */
+export interface SurveyQuestionsSelect<T extends boolean = true> {
+  tenant?: T;
+  survey?: T;
+  order?: T;
+  text?: T;
+  type?: T;
+  required?: T;
+  options?:
+    | T
+    | {
+        label?: T;
+        value?: T;
+        order?: T;
+        isOther?: T;
+        nextQuestionOrder?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyResponses_select".
+ */
+export interface SurveyResponsesSelect<T extends boolean = true> {
+  tenant?: T;
+  survey?: T;
+  respondent?: T;
+  submittedAt?: T;
+  participantKey?: T;
+  answers?:
+    | T
+    | {
+        question?: T;
+        optionValues?: T;
+        textValue?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
 }

@@ -17,6 +17,7 @@ import { displayComponentsStep } from './steps/displayComponents'
 import { contentMenusStep } from './steps/contentMenus'
 import { publicSiteStep } from './steps/publicSite'
 import { membersStep } from './steps/members'
+import { surveysStep } from './steps/surveys'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -59,6 +60,8 @@ export type { SeedStep } from './types'
  *    guide-menu extras for the public frontend. Appended last.
  *  - `membersStep` (Task 4B) needs the demo site (`sitesStep`); seeds example
  *    public-site members (one active, one pending). Appended last.
+ *  - `surveysStep` (Task 4D) needs the demo site (`sitesStep`); seeds one open
+ *    example survey with questions + responses. Appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -78,6 +81,7 @@ export const seedSteps: SeedStep[] = [
   contentMenusStep,
   publicSiteStep,
   membersStep,
+  surveysStep,
 ]
 
 /**

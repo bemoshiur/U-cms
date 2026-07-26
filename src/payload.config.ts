@@ -30,6 +30,9 @@ import { Menus } from './collections/Menus'
 import { WebContents } from './collections/WebContents'
 import { ShortUrls } from './collections/ShortUrls'
 import { HelpEntries } from './collections/HelpEntries'
+import { Surveys } from './collections/surveys/Surveys'
+import { SurveyQuestions } from './collections/surveys/SurveyQuestions'
+import { SurveyResponses } from './collections/surveys/SurveyResponses'
 import { Roles } from './collections/Roles'
 import { AdminMenus } from './collections/AdminMenus'
 import { PasswordPolicies } from './collections/PasswordPolicies'
@@ -164,6 +167,12 @@ const plugins: Plugin[] = [
       menus: {},
       webContents: {},
       shortUrls: {},
+      // Survey system (Task 4D; refs 2-9..2-12) — all three tenant-scoped
+      // (per-site). Questions/responses derive their tenant from the parent
+      // survey; all gate on `content.surveys`.
+      surveys: {},
+      surveyQuestions: {},
+      surveyResponses: {},
       // Access-controlled file pool (Task 4-zero) — board/post + admin-notice
       // attachments. Tenant-scoped so a Site-B admin cannot read Site-A's
       // (incl. secret) files; `media` is left as the PUBLIC display-asset pool.
@@ -285,6 +294,10 @@ export default buildConfig({
     WebContents,
     ShortUrls,
     HelpEntries,
+    // Survey system (Task 4D): tenant-scoped surveys + questions + responses.
+    Surveys,
+    SurveyQuestions,
+    SurveyResponses,
     Roles,
     AdminMenus,
     PasswordPolicies,

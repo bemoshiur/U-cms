@@ -210,6 +210,16 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 15,
     collectionSlug: 'helpEntries',
   },
+  // Survey system (Task 4D; refs 2-9..2-12). ONE menu gates surveys +
+  // surveyQuestions + surveyResponses (all tenant-scoped, per-site);
+  // `collectionSlug` points at the primary `surveys` collection for nav.
+  {
+    menuKey: 'content.surveys',
+    name: 'Survey Management',
+    parentMenuKey: 'content',
+    order: 16,
+    collectionSlug: 'surveys',
+  },
   // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
   // logging backbone: access history, login history, and the two permission
   // journals. `privacy.permissionLogs` gates BOTH permission-journal

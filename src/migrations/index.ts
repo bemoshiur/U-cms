@@ -13,6 +13,7 @@ import * as migration_20260725_060319_task_3c_display from './20260725_060319_ta
 import * as migration_20260725_065611_task_3d_menus_content from './20260725_065611_task_3d_menus_content';
 import * as migration_20260725_105046_task_4z_attachments from './20260725_105046_task_4z_attachments';
 import * as migration_20260725_131049_task_4b_members from './20260725_131049_task_4b_members';
+import * as migration_20260726_051201_task_4d_surveys from './20260726_051201_task_4d_surveys';
 
 export const migrations = [
   {
@@ -88,6 +89,11 @@ export const migrations = [
   {
     up: migration_20260725_131049_task_4b_members.up,
     down: migration_20260725_131049_task_4b_members.down,
-    name: '20260725_131049_task_4b_members'
+    name: '20260725_131049_task_4b_members',
+  },
+  {
+    up: migration_20260726_051201_task_4d_surveys.up,
+    down: migration_20260726_051201_task_4d_surveys.down,
+    name: '20260726_051201_task_4d_surveys'
   },
 ];
