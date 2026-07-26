@@ -110,6 +110,41 @@ describe('scrubSensitive / sanitizeErrorMessage — redaction', () => {
     expect(digest).toContain('[REDACTED]')
   })
 
+  // ── Re-review: ReDoS bound + 3 remaining bypasses (fail-without-fix) ───────
+  it('ReDoS — a 64k+ adversarial no-separator input completes in bounded time + is truncated', () => {
+    // Worst case for the term-anchored KEY regex: the term ("secret") occurs at
+    // every position but a separator NEVER follows — maximal failed backtracking.
+    const evil = 'secret_'.repeat(11000) // 77,000 chars
+    const t0 = performance.now()
+    const out = sanitizeErrorMessage(evil)
+    const elapsed = performance.now() - t0
+    expect(elapsed).toBeLessThan(100)
+    expect(out.length).toBeLessThanOrEqual(MAX_MESSAGE_LEN + 1)
+    // Also exercise a JSON-ish adversarial input (quotes + colons, no closing value).
+    const evil2 = '{"password":'.repeat(6000)
+    const t1 = performance.now()
+    sanitizeErrorMessage(evil2)
+    expect(performance.now() - t1).toBeLessThan(100)
+  })
+
+  it('bypass 1 — a DB-URI password containing @ is FULLY redacted (up to the last @)', () => {
+    const out = sanitizeErrorMessage('connect postgres://user:p@ss@host:5432/db failed')
+    expect(out).not.toContain('p@ss')
+    expect(out).not.toContain('ss@host') // the leaked tail from the old first-@ match
+    expect(out).toContain('@host') // host authority preserved
+  })
+
+  it('bypass 2 — JSON-shaped "password":"value" is redacted', () => {
+    expect(sanitizeErrorMessage('body {"password":"hunter2"} rejected')).not.toContain('hunter2')
+    expect(sanitizeErrorMessage('{"apiKey":"live_ABC999"}')).not.toContain('live_ABC999')
+    expect(sanitizeErrorMessage('{"secret": "topsecretval"}')).not.toContain('topsecretval')
+  })
+
+  it('bypass 3 — a URL-encoded separator (%3D / %3A) does not bypass redaction', () => {
+    expect(sanitizeErrorMessage('/cb?resetToken%3Ddeadbeefcafe')).not.toContain('deadbeefcafe')
+    expect(sanitizeErrorMessage('access_token%3Aleakedval99')).not.toContain('leakedval99')
+  })
+
   it('leaves an ordinary message untouched (no false redaction)', () => {
     const msg = 'Cannot read properties of undefined (reading id)'
     expect(sanitizeErrorMessage(msg)).toBe(msg)

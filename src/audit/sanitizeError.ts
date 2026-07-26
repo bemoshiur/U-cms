@@ -26,6 +26,17 @@ export const MAX_MESSAGE_LEN = 2000
 export const MAX_STACK_LEN = 4000
 /** Keep only the top frames of a stack — enough to locate the fault, no deep internals. */
 export const MAX_STACK_FRAMES = 30
+/**
+ * PRE-CAP: the raw message/stack is truncated to this before scrubbing (ReDoS
+ * hardening). `scrubSensitive` runs inside the global `afterError` capture on
+ * EVERY request error, so an attacker who inflates a thrown error's `.message`
+ * (an echoed request body, an oversized query/URL, a huge JSON-parse snippet)
+ * could otherwise feed a 64k+ string into the regexes and pin the single-threaded
+ * event loop. The stored value is a truncated digest anyway, so capping the INPUT
+ * first is free — and combined with the bounded quantifiers below it keeps scrub
+ * time linear + bounded. Must be >= MAX_STACK_LEN so the digest cap still bites.
+ */
+export const MAX_SCRUB_INPUT = 8192
 
 /** The token every redaction collapses a sensitive value to. */
 const REDACTED = '[REDACTED]'
@@ -43,31 +54,53 @@ const SENSITIVE_TERM =
   'password|passwd|pwd|passphrase|secret|token|api[_-]?key|apikey|access[_-]?key|accesskey|secret[_-]?key|secretkey|authorization|session|cookie|credential|refresh|private[_-]?key|privatekey|database[_-]?uri|database[_-]?url|connection[_-]?string|dsn|smtp[_-]?pass'
 
 /**
- * Matches a `KEY[:=]value` whose KEY *contains* a {@link SENSITIVE_TERM}, with
- * the surrounding key identifier chars captured so the key name is preserved and
- * only the value is redacted. Anchoring on the sensitive term (not on "any
- * identifier") is deliberate: it means a NON-sensitive prefix like `Error: ` or
- * `detail: ` can't swallow an inner `token=…` — the engine slides past the
- * non-sensitive key straight to the sensitive one.
+ * A sensitive KEY identifier: an optional bounded prefix + a {@link SENSITIVE_TERM}
+ * + an optional bounded suffix. The `{0,16}` bounds are LOAD-BEARING for ReDoS
+ * safety — unbounded `[...]*` on BOTH sides of the alternation is the catastrophic
+ * backtracking pattern; bounding each side to a small constant keeps the
+ * failed-match cost O(16²) per position, i.e. linear in input length. The prefix
+ * can be empty, so the term still matches even when it starts the key (a
+ * non-sensitive `Error: ` / `detail: ` prefix can't swallow an inner `token=…`);
+ * a key with a >16-char prefix (`SURVEY_PARTICIPANT_SECRET`) still redacts its
+ * VALUE — only the echoed key LABEL may be partial, which is cosmetic.
+ */
+const SENSITIVE_KEY = `[A-Za-z0-9_.-]{0,16}(?:${SENSITIVE_TERM})[A-Za-z0-9_.-]{0,16}`
+
+/**
+ * `KEY[:=]value` (bare form). The separator also accepts URL-ENCODED `=`/`:`
+ * (`%3D`/`%3A`) so a `resetToken%3Ddeadbeef` in an encoded query string is still
+ * caught. The value is a BOUNDED negated class (`{1,512}`) — a single bounded
+ * quantifier (never nested), so no ReDoS; an over-long value's tail is caught by
+ * the opaque-blob pass as a backstop.
  */
 const SENSITIVE_KV = new RegExp(
-  `([A-Za-z0-9_.-]*(?:${SENSITIVE_TERM})[A-Za-z0-9_.-]*)(\\s*[:=]\\s*)("?)([^\\s"'&,;)}\\]]+)`,
+  `(${SENSITIVE_KEY})(\\s*(?:[:=]|%3[aAdD])\\s*)("?)([^\\s"'&,;)}\\]]{1,512})`,
   'gi',
 )
 
+/** JSON-shaped `"key":"value"` where the key is sensitive (`{"password":"…"}`). */
+const SENSITIVE_JSON = new RegExp(`"(${SENSITIVE_KEY})"\\s*:\\s*"[^"]{0,512}"`, 'gi')
+
+/** URL / connection-string userinfo: redact the WHOLE userinfo up to the LAST `@`. */
+const URI_USERINFO = /\b([a-z][a-z0-9+.-]{0,20}):\/\/[^\s/]{1,256}@/gi
+
 /**
  * Scrubs a single string of the known-sensitive patterns, in a deliberate order
- * (most specific first). Shared by the message + every stack line.
+ * (most specific first). Shared by the message + every stack line. Every regex
+ * uses only single or bounded quantifiers (no nested unbounded `[...]*` around an
+ * alternation), and callers pre-cap the input length, so scrub time is linear +
+ * bounded (ReDoS-safe).
  *
  *  1. URL / connection-string USERINFO credentials → `<scheme>://[REDACTED]@host`
- *     (`postgres://user:pw@host`, `mysql://root:toor@host`, the DATABASE_URI shape).
+ *     (redacts the whole userinfo up to the LAST `@`, so a password containing
+ *     `@` — `postgres://user:p@ss@host` — is fully removed).
  *  2. `Bearer <token>` authorization values.
- *  3. sensitive `KEY=value` / `KEY: value` — KEY matched by {@link SENSITIVE_KEY}
- *     as a substring, so env secrets + compound token params are covered.
- *  4. JWT-shaped tokens (`eyJ…​.…​.…`).
- *  5. Email addresses (PII).
- *  6. Opaque token/secret blobs — hex runs (20+, incl. the reset-token shape) and
- *     long base64 (40+).
+ *  3. JSON-shaped `"key":"value"` for a sensitive key.
+ *  4. sensitive `KEY=value` / `KEY: value` / `KEY%3Dvalue` (env secrets, compound
+ *     token params, URL-encoded separators).
+ *  5. JWT-shaped tokens (`eyJ…​.…​.…`).
+ *  6. Email addresses (PII).
+ *  7. Opaque token/secret blobs — hex runs (20+) and long base64 (40+).
  *
  * Over-redaction is intentional and safe: this store is admin-readable +
  * exportable, so a false positive (a redacted non-secret) is always preferable
@@ -76,28 +109,34 @@ const SENSITIVE_KV = new RegExp(
 export function scrubSensitive(input: string): string {
   let out = input
 
-  // 1. URL / connection-string userinfo credentials (before anything else, so the
-  //    whole `user:pass@` is gone regardless of scheme). `[^\s/@]+@` is the
-  //    userinfo up to the `@` — covers postgres/mysql/redis/mongodb/https/… .
-  out = out.replace(/\b([a-z][a-z0-9+.-]*):\/\/[^\s/@]+@/gi, `$1://${REDACTED}@`)
+  // 1. URL / connection-string userinfo. `[^\s/]{1,256}@` (greedy, single bounded
+  //    quantifier) consumes up to the LAST `@` before the host authority, so an
+  //    embedded `@` in the password (`user:p@ss@host`) is fully redacted, not
+  //    half-leaked. Covers postgres/mysql/redis/mongodb/https/… .
+  out = out.replace(URI_USERINFO, `$1://${REDACTED}@`)
 
-  // 2. Authorization bearer tokens.
-  out = out.replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, `Bearer ${REDACTED}`)
+  // 2. Authorization bearer tokens (bounded).
+  out = out.replace(/\bBearer\s+[A-Za-z0-9._~+/-]{1,512}=*/gi, `Bearer ${REDACTED}`)
 
-  // 3. sensitive KEY=value / KEY: value — KEY contains a SENSITIVE_TERM, so
-  //    `PAYLOAD_SECRET`, `DATABASE_URI`, `resetToken`, `access_token`, `apiKey`,
-  //    `password`, … are all caught (incl. when preceded by a non-sensitive
-  //    `Error: ` / `detail: ` prefix), while ordinary `id=5` / `line:12` are left.
+  // 3. JSON `"key":"value"` for a sensitive key → redact the value in place.
+  out = out.replace(SENSITIVE_JSON, (_m, key: string) => `"${key}":"${REDACTED}"`)
+
+  // 4. sensitive KEY=value / KEY: value / KEY%3Dvalue — env secrets
+  //    (`PAYLOAD_SECRET`, `DATABASE_URI`), compound params (`resetToken`,
+  //    `access_token`, `apiKey`), incl. non-sensitive-prefixed (`Error: token=…`).
   out = out.replace(SENSITIVE_KV, (_m, key: string) => `${key}=${REDACTED}`)
 
-  // 4. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
+  // 5. JWT-shaped tokens (three base64url segments; the leading `eyJ` is a JSON
   //    header `{"` in base64url — a strong, low-false-positive signal).
-  out = out.replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, REDACTED)
+  out = out.replace(
+    /\beyJ[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,4096}\.[A-Za-z0-9_-]{1,4096}/g,
+    REDACTED,
+  )
 
-  // 5. Email addresses (PII — never stored in the error log).
+  // 6. Email addresses (PII — never stored in the error log).
   out = out.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, REDACTED)
 
-  // 6. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
+  // 7. Opaque token/secret blobs — hex runs (20+: the ~20-hex reset-token shape,
   //    session/CSRF tokens, hashes, keys) and long base64 (40+).
   out = out.replace(/\b[A-Fa-f0-9]{20,}\b/g, REDACTED)
   out = out.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, REDACTED)
@@ -114,7 +153,9 @@ export function sanitizeErrorMessage(message: unknown): string {
   if (typeof message !== 'string' || message.trim() === '') {
     return '(no message)'
   }
-  const scrubbed = scrubSensitive(message).replace(/\s+/g, ' ').trim()
+  // PRE-CAP the raw input BEFORE scrubbing (ReDoS hardening — see MAX_SCRUB_INPUT).
+  const capped = message.length > MAX_SCRUB_INPUT ? message.slice(0, MAX_SCRUB_INPUT) : message
+  const scrubbed = scrubSensitive(capped).replace(/\s+/g, ' ').trim()
   return scrubbed.length > MAX_MESSAGE_LEN ? `${scrubbed.slice(0, MAX_MESSAGE_LEN)}…` : scrubbed
 }
 
@@ -130,7 +171,10 @@ export function sanitizeStack(stack: unknown): string | undefined {
   if (typeof stack !== 'string' || stack.trim() === '') {
     return undefined
   }
-  const lines = stack.split('\n').slice(0, MAX_STACK_FRAMES).map(scrubSensitive)
+  // PRE-CAP the raw stack BEFORE splitting/scrubbing (ReDoS hardening) — the whole
+  // stack (not just per-line) is bounded, so total scrub work is bounded.
+  const capped = stack.length > MAX_SCRUB_INPUT ? stack.slice(0, MAX_SCRUB_INPUT) : stack
+  const lines = capped.split('\n').slice(0, MAX_STACK_FRAMES).map(scrubSensitive)
   const digest = lines.join('\n').trim()
   if (digest === '') {
     return undefined
