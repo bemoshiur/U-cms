@@ -15,6 +15,7 @@ import {
   capturePersonalInfoEdit,
   capturePersonalInfoView,
   markPersonalInfoWrite,
+  maskMemberPiiForList,
 } from '../members/personalInfoAudit'
 import { memberExportEndpoints } from '../endpoints/memberExport'
 
@@ -209,7 +210,11 @@ export const Members: CollectionConfig = {
     // `markPersonalInfoWrite` runs first so the create/update read-tail is not
     // mis-logged as a `view` (see the hook doc comment).
     beforeChange: [markPersonalInfoWrite],
-    afterRead: [capturePersonalInfoView],
+    // `capturePersonalInfoView` LOGS on the single-doc (`!findMany`) audited read;
+    // `maskMemberPiiForList` MASKS on every multi-doc (`findMany`) list/populate
+    // read — together they partition every member read so full PII is NEVER
+    // disclosed without a log (Task 6A C1/H1).
+    afterRead: [capturePersonalInfoView, maskMemberPiiForList],
     afterChange: [capturePersonalInfoEdit],
   },
 }

@@ -175,7 +175,10 @@ export const PersonalInfoAccessLogs: CollectionConfig = {
       name: 'ipAddress',
       type: 'text',
       admin: {
-        description: 'Raw client IP (IPv4/IPv6), captured as-is from the request (열람IP).',
+        description:
+          'Raw client IP (IPv4/IPv6), captured as-is from the request (열람IP). Masked in the list.',
+        // Display-only IP masking in the list view (real value stored).
+        components: { Cell: '/components/audit/MaskedCell#MaskedCell' },
       },
     }),
   ],

@@ -2044,7 +2044,7 @@ export interface PersonalInfoAccessLog {
    */
   viewerId?: string | null;
   /**
-   * Raw client IP (IPv4/IPv6), captured as-is from the request (열람IP).
+   * Raw client IP (IPv4/IPv6), captured as-is from the request (열람IP). Masked in the list.
    */
   ipAddress?: string | null;
   updatedAt: string;

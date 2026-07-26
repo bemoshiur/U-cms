@@ -36,14 +36,20 @@ function fakeReq(args: {
   headers?: Record<string, string>
   pathname?: string
   user?: unknown
-  data?: Record<string, unknown>
+  /** POST JSON body — exposed via `req.json()`, mirroring Payload's endpoint dispatcher. */
+  body?: Record<string, unknown>
+  searchParams?: URLSearchParams
 }): PayloadRequest {
   return {
     payload,
     headers: new Headers(args.headers ?? {}),
     pathname: args.pathname,
     user: args.user,
-    data: args.data,
+    searchParams: args.searchParams,
+    // Payload's custom-endpoint dispatcher hands the handler a web Request whose
+    // body is read via `req.json()` (NOT `req.data`). Model that here so the test
+    // exercises the real body-reading path.
+    json: args.body !== undefined ? async () => args.body : undefined,
     context: {},
   } as unknown as PayloadRequest
 }
@@ -183,13 +189,13 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
 
   // ── Part 2 (non-bypassable capture via server hooks) ───────────────────────
   describe('member-detail read/edit is captured by the server hooks (non-bypassable)', () => {
-    it('a single-doc by-id read (the raw API read path) logs a `view`', async () => {
+    it('a single-doc by-id read (the raw API read path) logs a `view` AND returns FULL PII', async () => {
       const admin = await makeAdmin(['members.manage'], [siteA])
       const member = await makeMember(siteA)
       expect(await viewLogsFor(member.id, 'view')).toBe(0)
 
       // The exact local operation a REST `GET /api/members/:id` runs.
-      await payload.findByID({
+      const detail = await payload.findByID({
         collection: 'members',
         id: member.id as number,
         user: admin,
@@ -197,12 +203,16 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
       })
 
       expect(await viewLogsFor(member.id, 'view')).toBe(1)
+      // The audited detail path DISCLOSES full PII (the whole point — masking
+      // elsewhere must not break the one legitimate, logged read).
+      expect(detail.email).toBe(member.email)
+      expect(detail.loginId).toBe(member.loginId)
     })
 
-    it('a LIST render does NOT log a view (findMany guard)', async () => {
+    it('H1 — a LIST render does NOT log a view AND MASKS the PII columns', async () => {
       const admin = await makeAdmin(['members.manage'], [siteA])
       const member = await makeMember(siteA)
-      await payload.find({
+      const list = await payload.find({
         collection: 'members',
         where: { tenant: { equals: siteA } },
         user: admin,
@@ -210,6 +220,15 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
         pagination: false,
       })
       expect(await viewLogsFor(member.id, 'view')).toBe(0)
+
+      const row = list.docs.find((d) => d.id === member.id)!
+      expect(row).toBeDefined()
+      // Masked — no raw PII in the list.
+      expect(row.email).not.toBe(member.email)
+      expect(row.loginId).not.toBe(member.loginId)
+      expect(String(row.email)).toContain('*')
+      expect(String(row.loginId)).toContain('*')
+      expect(String(row.name)).toContain('*')
     })
 
     it('a MEMBER reading their own record does NOT log (self-service, not admin PII access)', async () => {
@@ -237,6 +256,44 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
       expect(await viewLogsFor(member.id, 'edit')).toBe(1)
       // The create + the update read-tails must not have logged a spurious view.
       expect(await viewLogsFor(member.id, 'view')).toBe(0)
+    })
+  })
+
+  // ── C1 — no unlogged PII disclosure via relationship populate (depth>=1) ────
+  describe('C1 invariant — a depth>=1 populate of a member does NOT disclose full PII', () => {
+    it('masks the populated member (findMany via dataloader) — no raw email/loginId/mobile leaks', async () => {
+      // A satisfactionRatings row references a member (relationTo: members),
+      // exactly like surveyResponses.respondent — the same populate path.
+      const member = await makeMember(siteA, 'subj')
+      const rating = await payload.create({
+        collection: 'satisfactionRatings',
+        data: {
+          tenant: siteA,
+          pageKey: `/p/${unique('k')}`,
+          score: 5,
+          member: member.id,
+        } as never,
+        overrideAccess: true,
+      })
+
+      // An admin reads the rating at depth:1 (the respondent/member column is a
+      // default populate). overrideAccess:false ⇒ the member afterRead masks it.
+      const admin = await makeAdmin(['statistics.satisfaction', 'members.manage'], [siteA])
+      const populated = await payload.findByID({
+        collection: 'satisfactionRatings',
+        id: rating.id as number,
+        depth: 1,
+        user: admin,
+        overrideAccess: false,
+      })
+
+      // The populate is a multi-doc (dataloader, findMany:true) read ⇒ NO view log…
+      expect(await viewLogsFor(member.id, 'view')).toBe(0)
+      // …AND the raw PII never appears anywhere in the depth-1 result.
+      const serialized = JSON.stringify(populated)
+      expect(serialized).not.toContain(member.email as string)
+      expect(serialized).not.toContain(member.loginId as string)
+      expect(serialized).not.toContain(member.mobile as string)
     })
   })
 
@@ -349,7 +406,7 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
 
       const resp = await handleMemberExport({
         payload,
-        req: fakeReq({ pathname: '/api/members/export', user: admin, data: {} }),
+        req: fakeReq({ pathname: '/api/members/export', user: admin, body: {} }),
       })
       expect(resp.status).toBe(400)
 
@@ -376,7 +433,7 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
         req: fakeReq({
           pathname: '/api/members/export',
           user: admin,
-          data: { purpose, purposeCategory: 'export', siteId: exportSite },
+          body: { purpose, purposeCategory: 'export', siteId: exportSite },
         }),
       })
       expect(resp.status).toBe(200)
@@ -419,7 +476,7 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
         req: fakeReq({
           pathname: '/api/members/export',
           user: officer,
-          data: { purpose: unique('officer-export'), siteId: exportSite },
+          body: { purpose: unique('officer-export'), siteId: exportSite },
         }),
       })
       expect(resp.status).toBe(200)
@@ -441,7 +498,7 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
         req: fakeReq({
           pathname: '/api/members/export',
           user: admin,
-          data: { purpose: unique('scoped') },
+          body: { purpose: unique('scoped') },
         }),
       })
       expect(resp.status).toBe(200)
@@ -460,7 +517,7 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
         req: fakeReq({
           pathname: '/api/members/export',
           user: noGrant,
-          data: { purpose: unique('x') },
+          body: { purpose: unique('x') },
         }),
       })
       expect(resp.status).toBe(403)

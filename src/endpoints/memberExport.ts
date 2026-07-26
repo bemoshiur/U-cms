@@ -5,6 +5,7 @@ import { MEMBERS_MENU_KEY } from '../access/memberAccess'
 import { PERSONAL_INFO_LOGS_MENU_KEY } from './personalInfoLogsExport'
 import { recordPersonalInfoAccess } from '../audit/recordPersonalInfoAccess'
 import type { PersonalInfoPurposeCategory } from '../audit/recordPersonalInfoAccess'
+import { SKIP_MEMBER_PII_MASK } from '../members/personalInfoAudit'
 import { maskEmail, maskId, maskName } from '../lib/mask'
 
 /**
@@ -78,15 +79,22 @@ export type MemberExportInput = {
   keyword?: unknown
 }
 
-/** Reads the export input from the request body (POST) with a query-string fallback. */
-function readInput(req: PayloadRequest): MemberExportInput {
-  const data = (req.data ?? {}) as Record<string, unknown>
+/**
+ * Reads the export input from the POST JSON body, with a query-string fallback.
+ * Payload's custom-endpoint dispatcher does NOT populate `req.data` for a POST
+ * (unlike collection operations), so the body MUST be read via `req.json()` —
+ * the same pattern the other endpoints use (publicAccountEndpoints/twoFactor).
+ */
+async function readInput(req: PayloadRequest): Promise<MemberExportInput> {
+  const body = (await req.json?.().catch(() => ({}))) as Record<string, unknown> | undefined
+  const data = body ?? {}
   const sp = req.searchParams
+  const pick = (key: string): unknown => data[key] ?? sp?.get(key) ?? undefined
   return {
-    purpose: data.purpose ?? sp?.get('purpose') ?? undefined,
-    purposeCategory: data.purposeCategory ?? sp?.get('purposeCategory') ?? undefined,
-    siteId: data.siteId ?? sp?.get('siteId') ?? undefined,
-    keyword: data.keyword ?? sp?.get('keyword') ?? undefined,
+    purpose: pick('purpose'),
+    purposeCategory: pick('purposeCategory'),
+    siteId: pick('siteId'),
+    keyword: pick('keyword'),
   }
 }
 
@@ -150,7 +158,7 @@ export async function handleMemberExport(args: {
   req: PayloadRequest
 }): Promise<Response> {
   const { payload, req } = args
-  const input = readInput(req)
+  const input = await readInput(req)
 
   // (1) SERVER-ENFORCED purpose gate — no purpose, no export.
   const purpose = typeof input.purpose === 'string' ? input.purpose.trim() : ''
@@ -214,6 +222,16 @@ export async function handleMemberExport(args: {
 
   // (4) Read the members UNDER THE CALLER's access (tenant-scoped + members.manage
   // enforced by the collection). A missing grant would throw → mapped to 403.
+  // Bypass the members list-masking afterRead (via the trusted context flag) so
+  // this trusted, ALREADY-LOGGED export reads FULL PII, then applies its own
+  // role-tiered masking below (`fullPii`) — masked for a members.manage admin,
+  // full only for a privacy officer. The flag is server-set; an HTTP caller
+  // cannot reach `req.context`, so disclosure can never be widened from outside.
+  const ctx = (req.context ?? ((req as { context?: unknown }).context = {})) as Record<
+    string,
+    unknown
+  >
+  ctx[SKIP_MEMBER_PII_MASK] = true
   let docs: MemberRow[]
   try {
     const found = await payload.find({

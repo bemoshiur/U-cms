@@ -6,6 +6,16 @@ import type {
 
 import { isMemberPrincipal } from '../access/memberAccess'
 import { recordPersonalInfoAccess, type SubjectMemberLike } from '../audit/recordPersonalInfoAccess'
+import { maskEmail, maskId, maskName } from '../lib/mask'
+
+/**
+ * Context flag (set only by trusted server code — e.g. the purpose-gated member
+ * export) that suppresses the list/populate PII masking below. An HTTP caller
+ * cannot set `req.context`, so this can never be used to widen disclosure from
+ * the outside; the export sets it, then applies its OWN tiered masking to the
+ * CSV (masked for a members.manage admin, full only for a privacy officer).
+ */
+export const SKIP_MEMBER_PII_MASK = 'skipMemberPiiMask' as const
 
 /**
  * Non-bypassable personal-info VIEW/EDIT capture for the `members` collection
@@ -121,5 +131,66 @@ export const capturePersonalInfoEdit: CollectionAfterChangeHook = async ({
     action: 'edit',
     purposeCategory: 'edit',
   })
+  return doc
+}
+
+/** The member PII fields masked in list/populate contexts, and how each is masked. */
+const MEMBER_PII_MASKERS: { field: string; mask: (v: string) => string }[] = [
+  { field: 'name', mask: maskName },
+  { field: 'loginId', mask: maskId },
+  { field: 'email', mask: maskEmail },
+  { field: 'mobile', mask: maskId },
+]
+
+/**
+ * PII-minimization for member reads that are NOT the confirm-gated, AUDITED
+ * detail view (Task 6A C1/H1 hardening). The legacy model masks member PII
+ * EVERYWHERE except the single audited detail read; full plaintext must never be
+ * disclosed on a path that produces no `personalInfoAccessLogs` row.
+ *
+ * The `capturePersonalInfoView` hook logs a `view` precisely on a SINGLE-document
+ * read (`!findMany`). This hook is its exact complement: it MASKS
+ * name/loginId/email/mobile on every MULTI-document read (`findMany: true`) —
+ * which is BOTH the admin LIST view AND relationship-population from another
+ * collection (the dataloader batches populated relations as `findMany: true`, so
+ * e.g. a `surveyResponses.respondent` / `satisfactionRatings.member` populate, or
+ * any `?depth=1` REST/GraphQL read, is masked, not disclosed). Result: the two
+ * hooks PARTITION every member read on the same `findMany` flag, so full PII is
+ * returned ONLY on the audited `!findMany` path — there is no code path that
+ * discloses full PII without a log.
+ *
+ * Exemptions (all still safe under the invariant):
+ *  - `overrideAccess: true` — a TRUSTED server/system read (login loginId→email
+ *    resolution, account recovery, sign-up dup-checks). These never surface a
+ *    member's PII to an admin as a disclosure; they are infrastructure.
+ *  - `SKIP_MEMBER_PII_MASK` context flag — the purpose-gated export (which is
+ *    itself logged and applies its own role-tiered masking).
+ *  - a MEMBER principal — a member reading their OWN record (self-service); a
+ *    member can never read another member (collection access), so this only ever
+ *    returns the member their own data.
+ */
+export const maskMemberPiiForList: CollectionAfterReadHook = ({
+  context,
+  doc,
+  findMany,
+  overrideAccess,
+  req,
+}) => {
+  if (!findMany || overrideAccess) {
+    return doc
+  }
+  if ((context as Record<string, unknown> | undefined)?.[SKIP_MEMBER_PII_MASK]) {
+    return doc
+  }
+  if (isMemberPrincipal((req as { user?: unknown } | undefined)?.user)) {
+    return doc
+  }
+  const d = doc as Record<string, unknown>
+  for (const { field, mask } of MEMBER_PII_MASKERS) {
+    const value = d[field]
+    if (typeof value === 'string' && value.length > 0) {
+      d[field] = mask(value)
+    }
+  }
   return doc
 }
