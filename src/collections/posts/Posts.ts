@@ -7,8 +7,14 @@ import type {
 } from 'payload'
 import { APIError } from 'payload'
 
-import { hasMenuAccessSync, isSuperUser, menuFieldAccess } from '../../access/hasMenuAccess'
-import { getAssignedTenantIds, tenantScopedMenuAccess } from '../../access/tenantAccess'
+import {
+  hasMenuAccess,
+  hasMenuAccessSync,
+  isSuperUser,
+  menuFieldAccess,
+} from '../../access/hasMenuAccess'
+import { SECURITY_DOCS_MENU_KEY, securityDocScopedAccess } from '../../access/securityDocs'
+import { getAssignedTenantIds } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
 import { containsProfanity, extractLexicalText } from '../../content/wordFilter'
 import { downloadStatsEndpoints } from '../../endpoints/downloadStatsExport'
@@ -112,6 +118,13 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
   const kind = (board.boardType as { kind?: BoardTypeKind } | null)?.kind
   data.boardKind = kind ?? null
 
+  // §3 security-document class (Task 6D; ref 3-4). Denormalized from the board
+  // (like `boardKind`) so `posts` access can gate security-doc posts on
+  // `privacy.securityDocs` without a relationship join — see the collection
+  // `access` and src/access/securityDocs.ts.
+  const boardIsSecurityDoc = board.securityDoc === true
+  data.securityDoc = boardIsSecurityDoc
+
   // ── (2) tenant inheritance + create-time membership guard ────────────────
   if (boardTenantId !== undefined) {
     data.tenant = boardTenantId
@@ -120,6 +133,16 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
     const assigned = getAssignedTenantIds(req.user)
     if (!assigned.some((id) => String(id) === String(boardTenantId))) {
       throw new APIError("You are not assigned to this post's board site (tenant).", 403)
+    }
+  }
+
+  // Security-document posts are §3: a non-super writer must hold
+  // `privacy.securityDocs` to create/update a post under one of the four
+  // security-doc libraries (the read gate already hides them; this closes the
+  // write side so a content admin can't inject posts into a privacy library).
+  if (boardIsSecurityDoc && req.user && !isSuperUser(req.user)) {
+    if (!(await hasMenuAccess(req, SECURITY_DOCS_MENU_KEY))) {
+      throw new APIError('You do not have permission to post to a security-document board.', 403)
     }
   }
 
@@ -406,13 +429,19 @@ export const Posts: CollectionConfig = {
     group: 'Content',
     useAsTitle: 'title',
     defaultColumns: ['title', 'board', 'author', 'isNotice', 'isSecret', 'createdAt'],
-    hidden: ({ user }) => !hasMenuAccessSync(user, POSTS_MENU_KEY),
+    // Visible to content admins (ordinary posts) AND privacy-role admins (§3
+    // security-document posts); the `access` below filters WHICH each sees.
+    hidden: ({ user }) =>
+      !hasMenuAccessSync(user, POSTS_MENU_KEY) && !hasMenuAccessSync(user, SECURITY_DOCS_MENU_KEY),
   },
+  // §3 security-document split (Task 6D): ordinary posts gated on `content.posts`;
+  // posts under a `securityDoc` board gated on `privacy.securityDocs`. See
+  // src/access/securityDocs.ts.
   access: {
-    create: tenantScopedMenuAccess(POSTS_MENU_KEY),
-    read: tenantScopedMenuAccess(POSTS_MENU_KEY),
-    update: tenantScopedMenuAccess(POSTS_MENU_KEY),
-    delete: tenantScopedMenuAccess(POSTS_MENU_KEY),
+    create: securityDocScopedAccess(POSTS_MENU_KEY),
+    read: securityDocScopedAccess(POSTS_MENU_KEY),
+    update: securityDocScopedAccess(POSTS_MENU_KEY),
+    delete: securityDocScopedAccess(POSTS_MENU_KEY),
   },
   // Download statistics (Task 5B; TODO 5.3): GET /api/posts/download-stats[/export].
   // Gated on `statistics.downloads` + an explicit site-assignment check inside
@@ -433,6 +462,20 @@ export const Posts: CollectionConfig = {
       admin: {
         readOnly: true,
         description: "Denormalized board kind (auto-set from the board's type on save).",
+      },
+    },
+    // §3 security-document class, denormalized from the board (Task 6D; ref 3-4).
+    // Machine-set from `board.securityDoc` in `validatePostAgainstBoard`; drives
+    // the privacy access gate. Write-locked (never client-set) like `boardKind`.
+    {
+      name: 'securityDoc',
+      type: 'checkbox',
+      defaultValue: false,
+      access: { create: () => false, update: () => false },
+      admin: {
+        readOnly: true,
+        description:
+          "Denormalized security-document flag (auto-set from the post's board on save).",
       },
     },
     { name: 'title', type: 'text', required: true },

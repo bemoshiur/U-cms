@@ -6,8 +6,9 @@ import type {
 } from 'payload'
 import { APIError } from 'payload'
 
-import { hasMenuAccessSync, isSuperUser } from '../../access/hasMenuAccess'
-import { getAssignedTenantIds, tenantScopedMenuAccess } from '../../access/tenantAccess'
+import { hasMenuAccessSync, isSuperUser, menuFieldAccess } from '../../access/hasMenuAccess'
+import { SECURITY_DOCS_MENU_KEY, securityDocScopedAccess } from '../../access/securityDocs'
+import { getAssignedTenantIds } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
 import { boardExportEndpoint } from '../../endpoints/boardExport'
 import { toRelationId } from '../utils'
@@ -173,19 +174,28 @@ export const Boards: CollectionConfig = {
   admin: {
     group: 'Content',
     useAsTitle: 'name',
-    defaultColumns: ['bbsId', 'name', 'boardType', 'skin', 'attachmentsEnabled'],
-    hidden: ({ user }) => !hasMenuAccessSync(user, 'content.boards'),
+    defaultColumns: ['bbsId', 'name', 'boardType', 'securityDoc', 'attachmentsEnabled'],
+    // Visible in the nav to content admins (ordinary boards) AND privacy-role
+    // admins (the §3 security-document boards) — the collection's `access` below
+    // filters WHICH boards each actually sees. `content.boards` alone would hide
+    // the collection from a privacy-only admin who legitimately manages the
+    // security docs.
+    hidden: ({ user }) =>
+      !hasMenuAccessSync(user, 'content.boards') &&
+      !hasMenuAccessSync(user, SECURITY_DOCS_MENU_KEY),
   },
-  // Menu-gated AND tenant-scoped: super-admins access every site's boards;
-  // a non-super admin is constrained to the boards of the site(s) assigned to
-  // them (multi-tenant `users.tenants`). Public read for the Phase 4 site
-  // comes later. See src/access/tenantAccess.ts for why this is enforced here
-  // rather than via the plugin's global `userHasAccessToAllTenants` switch.
+  // Menu-gated AND tenant-scoped, with the §3 security-document split (Task 6D):
+  // ordinary boards are gated on `content.boards`; boards flagged
+  // `securityDoc: true` (the four mounted §3 libraries — ref 3-4) are gated on
+  // `privacy.securityDocs` instead, so a general content admin never sees them.
+  // Super-admins access every site's boards of both classes. Public read for the
+  // Phase 4 site comes later. See src/access/securityDocs.ts + tenantAccess.ts
+  // for why this is enforced here rather than via the plugin's global switch.
   access: {
-    create: tenantScopedMenuAccess('content.boards'),
-    read: tenantScopedMenuAccess('content.boards'),
-    update: tenantScopedMenuAccess('content.boards'),
-    delete: tenantScopedMenuAccess('content.boards'),
+    create: securityDocScopedAccess('content.boards'),
+    read: securityDocScopedAccess('content.boards'),
+    update: securityDocScopedAccess('content.boards'),
+    delete: securityDocScopedAccess('content.boards'),
   },
   fields: [
     // ── Basic settings (ref 1-28, 1-34) ──────────────────────────────────
@@ -212,6 +222,26 @@ export const Boards: CollectionConfig = {
       name: 'name',
       type: 'text',
       required: true,
+    },
+    // §3 security-document flag (Task 6D; ref 3-4). When true, this board is one
+    // of the four Privacy-Protection-System document libraries and is gated on
+    // `privacy.securityDocs` (NOT `content.boards`) — see the collection `access`
+    // and src/access/securityDocs.ts. Field-level write access requires the
+    // privacy grant, so a content admin can neither SET nor CLEAR the flag (it is
+    // stripped from their writes, defaulting a crafted create back to an ordinary
+    // board); seeds pass it through with overrideAccess.
+    {
+      name: 'securityDoc',
+      type: 'checkbox',
+      defaultValue: false,
+      access: {
+        create: menuFieldAccess(SECURITY_DOCS_MENU_KEY),
+        update: menuFieldAccess(SECURITY_DOCS_MENU_KEY),
+      },
+      admin: {
+        description:
+          'Privacy §3 security-document library (ref 3-4). Gated on Privacy · Security Documents instead of Board Management.',
+      },
     },
     {
       name: 'boardType',

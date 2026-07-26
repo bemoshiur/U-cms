@@ -21,6 +21,7 @@ import * as migration_20260726_090701_task_5b_survey_public_freetext from './202
 import * as migration_20260726_094846_task_5c_error_logs from './20260726_094846_task_5c_error_logs';
 import * as migration_20260726_185505_task_6a_personal_info_logs from './20260726_185505_task_6a_personal_info_logs';
 import * as migration_20260726_203134_task_6c_password_policy_created_by from './20260726_203134_task_6c_password_policy_created_by';
+import * as migration_20260727_120000_task_6d_security_docs from './20260727_120000_task_6d_security_docs';
 
 export const migrations = [
   {
@@ -137,5 +138,10 @@ export const migrations = [
     up: migration_20260726_203134_task_6c_password_policy_created_by.up,
     down: migration_20260726_203134_task_6c_password_policy_created_by.down,
     name: '20260726_203134_task_6c_password_policy_created_by'
+  },
+  {
+    up: migration_20260727_120000_task_6d_security_docs.up,
+    down: migration_20260727_120000_task_6d_security_docs.down,
+    name: '20260727_120000_task_6d_security_docs',
   },
 ];

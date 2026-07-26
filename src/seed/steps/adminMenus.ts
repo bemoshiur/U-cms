@@ -287,6 +287,20 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     parentMenuKey: 'privacy',
     order: 5,
   },
+  // Security-document libraries (Task 6D; ref 3-4). A single VIEW/grant node
+  // gating the FOUR §3 document boards (보안교육/보안사례/관리계획/대응지침), which are
+  // mounted board-engine records flagged `securityDoc: true` — "implement once,
+  // mount four times", no new code (plan §2.3). Gates those boards + their posts
+  // via `securityDocScopedAccess` (src/access/securityDocs.ts), so ONLY a
+  // privacy-role (or super) admin can reach the security docs — a general content
+  // admin cannot. No `collectionSlug`: the flagged rows live in the shared
+  // `boards`/`posts` collections, filtered by the access gate.
+  {
+    menuKey: 'privacy.securityDocs',
+    name: 'Security Documents',
+    parentMenuKey: 'privacy',
+    order: 6,
+  },
   // Public-site MEMBER management (Task 4B; refs 2-13). Gates the tenant-scoped
   // `members` auth collection — a SEPARATE audience from admin `users`.
   { menuKey: 'members', name: 'Member Management', order: 4 },

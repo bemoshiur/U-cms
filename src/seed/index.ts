@@ -23,6 +23,8 @@ import { statisticsStep } from './steps/statistics'
 import { errorLogsStep } from './steps/errorLogs'
 import { personalInfoAccessLogsStep } from './steps/personalInfoAccessLogs'
 import { privacyRolesStep } from './steps/privacyRoles'
+import { securityDocsStep } from './steps/securityDocs'
+import { privacyMenuGrantsStep } from './steps/privacyMenuGrants'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -99,6 +101,11 @@ export const seedSteps: SeedStep[] = [
   // Task 6C: privacy-org roles + example assignments (needs adminMenus, the
   // super-admin, and departments — so it runs after all of them).
   privacyRolesStep,
+  // Task 6D: the four §3 security-document boards + example posts (needs the
+  // demo site + board types), then extend the privacy roles' menu grants to the
+  // rest of the Privacy Protection System (needs the roles + all §3 adminMenus).
+  securityDocsStep,
+  privacyMenuGrantsStep,
 ]
 
 /**

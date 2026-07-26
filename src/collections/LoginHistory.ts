@@ -27,7 +27,7 @@ import { auditLogAccess, readOnly, rejectLogUpdate } from './logCollection'
 export const LoginHistory: CollectionConfig = {
   slug: 'loginHistory',
   admin: {
-    group: 'Audit',
+    group: 'Privacy Protection System',
     useAsTitle: 'loginId',
     defaultColumns: [
       'createdAt',

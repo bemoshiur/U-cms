@@ -61,7 +61,7 @@ export { PERSONAL_INFO_LOGS_MENU_KEY }
 export const PersonalInfoAccessLogs: CollectionConfig = {
   slug: 'personalInfoAccessLogs',
   admin: {
-    group: 'Privacy',
+    group: 'Privacy Protection System',
     useAsTitle: 'subjectLabel',
     defaultColumns: [
       'occurredAt',

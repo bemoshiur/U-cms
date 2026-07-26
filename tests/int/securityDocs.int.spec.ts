@@ -1,0 +1,473 @@
+import type { Payload } from 'payload'
+import { getPayload } from 'payload'
+import { beforeAll, describe, expect, it } from 'vitest'
+
+import config from '@/payload.config'
+import { SECURITY_DOCS_MENU_KEY } from '@/access/securityDocs'
+import { PASSWORD_POLICY_MENU_KEY } from '@/privacy/passwordPolicyData'
+import { PERSONAL_INFO_LOGS_MENU_KEY } from '@/endpoints/personalInfoLogsExport'
+import { PRIVACY_ORG_MENU_KEY, PRIVACY_ROLE_OFFICER, PRIVACY_ROLE_STAFF } from '@/privacy/orgChart'
+import { runSeed } from '@/seed'
+import { adminMenusStep } from '@/seed/steps/adminMenus'
+import { rolesStep } from '@/seed/steps/roles'
+import { superAdminStep } from '@/seed/steps/superAdmin'
+import { sitesStep } from '@/seed/steps/sites'
+import { departmentsStep } from '@/seed/steps/departments'
+import { boardTypesStep } from '@/seed/steps/boardTypes'
+import { privacyRolesStep } from '@/seed/steps/privacyRoles'
+import { securityDocsStep, SECURITY_DOC_BOARDS } from '@/seed/steps/securityDocs'
+import { privacyMenuGrantsStep } from '@/seed/steps/privacyMenuGrants'
+
+/**
+ * Task 6D — the four §3 security-document boards + the Privacy menu wiring.
+ * Boots real Payload against Postgres and exercises the seed, the privacy-role
+ * grant extension, and the KEY security property: the security docs are gated
+ * on `privacy.securityDocs`, so a general content admin can neither read nor
+ * write them, while a privacy officer (and super) can — server-side, not just
+ * nav-hidden. No cross-tenant leak.
+ */
+let payload: Payload
+const TEST_PASSWORD = 'a-long-enough-test-password-1'
+
+function marker(label: string): string {
+  return `${label}-${Date.now()}-${Math.floor(Math.random() * 100000)}`
+}
+function uniqueSiteId(label: string): string {
+  return `t${label}${Date.now()}${Math.floor(Math.random() * 10000)}`.toLowerCase()
+}
+function lettersOnly(): string {
+  let n = Date.now() * 1000 + Math.floor(Math.random() * 1000)
+  let out = ''
+  while (n > 0) {
+    out += String.fromCharCode(97 + (n % 26))
+    n = Math.floor(n / 26)
+  }
+  return out
+}
+
+async function menuId(menuKey: string): Promise<number> {
+  const found = await payload.find({
+    collection: 'adminMenus',
+    where: { menuKey: { equals: menuKey } },
+    limit: 1,
+    pagination: false,
+    overrideAccess: true,
+  })
+  return found.docs[0]?.id as number
+}
+async function boardTypeIdByCode(code: string): Promise<number> {
+  const found = await payload.find({
+    collection: 'boardTypes',
+    where: { code: { equals: code } },
+    limit: 1,
+    pagination: false,
+    overrideAccess: true,
+  })
+  return found.docs[0]?.id as number
+}
+async function grantIds(roleId: string): Promise<number[]> {
+  const found = await payload.find({
+    collection: 'roles',
+    where: { roleId: { equals: roleId } },
+    limit: 1,
+    pagination: false,
+    depth: 0,
+    overrideAccess: true,
+  })
+  return (found.docs[0]?.menuGrants ?? []).map((g) =>
+    typeof g === 'object' ? g.id : g,
+  ) as number[]
+}
+
+describe('Task 6D — security-document boards + §3 privacy menu wiring', () => {
+  let demoSiteId: number
+  let photoTypeId: number
+  let attachmentTypeId: number
+
+  beforeAll(async () => {
+    payload = await getPayload({ config: await config })
+    await runSeed(payload, [
+      adminMenusStep,
+      rolesStep,
+      superAdminStep,
+      sitesStep,
+      departmentsStep,
+      boardTypesStep,
+      securityDocsStep,
+      privacyRolesStep,
+      privacyMenuGrantsStep,
+    ])
+
+    const demo = await payload.find({
+      collection: 'sites',
+      where: { siteId: { equals: 'demo' } },
+      limit: 1,
+      pagination: false,
+      overrideAccess: true,
+    })
+    demoSiteId = demo.docs[0]!.id
+    photoTypeId = await boardTypeIdByCode('PG0002')
+    attachmentTypeId = await boardTypeIdByCode('PG0006')
+  })
+
+  // ── Part 1: the four boards exist, are flagged, and are non-empty ─────────
+  describe('the four mounted security-document boards (ref 3-4)', () => {
+    it('seeds exactly the four boards, each securityDoc + attachment-enabled, with example posts', async () => {
+      // Idempotent: re-running finds everything and skips (no duplicates).
+      await securityDocsStep.run(payload)
+
+      for (const lib of SECURITY_DOC_BOARDS) {
+        const found = await payload.find({
+          collection: 'boards',
+          where: { and: [{ tenant: { equals: demoSiteId } }, { name: { equals: lib.name } }] },
+          limit: 2,
+          pagination: false,
+          overrideAccess: true,
+        })
+        expect(found.docs, `board ${lib.name} unique`).toHaveLength(1)
+        const board = found.docs[0]!
+        expect(board.securityDoc).toBe(true)
+        expect(board.attachmentsEnabled).toBe(true)
+
+        const posts = await payload.find({
+          collection: 'posts',
+          where: { board: { equals: board.id } },
+          pagination: false,
+          limit: 0,
+          overrideAccess: true,
+        })
+        expect(posts.docs.length).toBeGreaterThanOrEqual(2)
+        // The denorm flag rode down onto every post via the board hook.
+        expect(posts.docs.every((p) => p.securityDoc === true)).toBe(true)
+      }
+    })
+  })
+
+  // ── Part 2: privacy-role grant extension (idempotent) ─────────────────────
+  describe('privacy-role §3 menu grants', () => {
+    it('OFFICER holds the FULL §3 surface; STAFF holds the read subset (not personal-info logs)', async () => {
+      const [
+        accessLogs,
+        loginHistory,
+        permissionLogs,
+        personalInfoLogs,
+        securityDocs,
+        orgChart,
+        passwordPolicies,
+      ] = await Promise.all([
+        menuId('privacy.accessLogs'),
+        menuId('privacy.loginHistory'),
+        menuId('privacy.permissionLogs'),
+        menuId(PERSONAL_INFO_LOGS_MENU_KEY),
+        menuId(SECURITY_DOCS_MENU_KEY),
+        menuId(PRIVACY_ORG_MENU_KEY),
+        menuId(PASSWORD_POLICY_MENU_KEY),
+      ])
+
+      const officer = await grantIds(PRIVACY_ROLE_OFFICER)
+      for (const id of [
+        accessLogs,
+        loginHistory,
+        permissionLogs,
+        personalInfoLogs,
+        securityDocs,
+        orgChart,
+        passwordPolicies,
+      ]) {
+        expect(officer).toContain(id)
+      }
+
+      const staff = await grantIds(PRIVACY_ROLE_STAFF)
+      expect(staff).toContain(securityDocs)
+      expect(staff).toContain(orgChart)
+      expect(staff).toContain(accessLogs)
+      // Staff must NOT reach the most-sensitive personal-info access history
+      // nor password-policy management.
+      expect(staff).not.toContain(personalInfoLogs)
+      expect(staff).not.toContain(passwordPolicies)
+    })
+
+    it('is additive + idempotent — re-running adds nothing and never duplicates', async () => {
+      const before = await grantIds(PRIVACY_ROLE_OFFICER)
+      await privacyMenuGrantsStep.run(payload)
+      const after = await grantIds(PRIVACY_ROLE_OFFICER)
+      expect(after.sort()).toEqual(before.sort())
+      // No duplicate ids.
+      expect(new Set(after).size).toBe(after.length)
+    })
+  })
+
+  // ── Part 3: the security gate (server-side, not nav-cosmetic) ─────────────
+  describe('security-document access gate', () => {
+    let ordinaryBoardId: number
+    let ordinaryPostId: number
+    let secBoardId: number
+    let secPostId: number
+    let otherSiteSecBoardId: number
+    let contentAdmin: Awaited<ReturnType<typeof payload.create>>
+    let privacyOfficer: Awaited<ReturnType<typeof payload.create>>
+    let superUser: Awaited<ReturnType<typeof payload.create>>
+
+    beforeAll(async () => {
+      // Fixtures on the demo tenant: one ordinary board+post, one security-doc
+      // board+post.
+      const ordinaryBoard = await payload.create({
+        collection: 'boards',
+        data: { tenant: demoSiteId, name: marker('OrdinaryBoard'), boardType: photoTypeId },
+        overrideAccess: true,
+      })
+      ordinaryBoardId = ordinaryBoard.id
+      const ordinaryPost = await payload.create({
+        collection: 'posts',
+        data: { board: ordinaryBoardId, title: marker('OrdinaryPost'), author: 'A' },
+        overrideAccess: true,
+      })
+      ordinaryPostId = ordinaryPost.id
+      expect(ordinaryPost.securityDoc).toBeFalsy()
+
+      const secBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('SecBoard'),
+          boardType: attachmentTypeId,
+          securityDoc: true,
+        },
+        overrideAccess: true,
+      })
+      secBoardId = secBoard.id
+      expect(secBoard.securityDoc).toBe(true)
+      const secPost = await payload.create({
+        collection: 'posts',
+        data: { board: secBoardId, title: marker('SecPost'), author: 'A' },
+        overrideAccess: true,
+      })
+      secPostId = secPost.id
+      expect(secPost.securityDoc).toBe(true)
+
+      // A SECOND site with its own security-doc board (cross-tenant fixture).
+      const otherSite = await payload.create({
+        collection: 'sites',
+        data: { siteId: uniqueSiteId('o'), name: 'Other Tenant', url: 'https://o.example.com' },
+        overrideAccess: true,
+      })
+      const otherSecBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: otherSite.id,
+          name: marker('OtherSecBoard'),
+          boardType: attachmentTypeId,
+          securityDoc: true,
+        },
+        overrideAccess: true,
+      })
+      otherSiteSecBoardId = otherSecBoard.id
+
+      // A content admin: content.boards + content.posts, assigned to demo, NO
+      // privacy grant.
+      const contentRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_CONTENT_${lettersOnly().toUpperCase()}`,
+          name: 'Content-only test role',
+          description: 'Grants content.boards + content.posts (non-super, no privacy).',
+          menuGrants: [await menuId('content.boards'), await menuId('content.posts')],
+        },
+        overrideAccess: true,
+      })
+      contentAdmin = await payload.create({
+        collection: 'users',
+        data: {
+          email: `content-${marker('u')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [contentRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+
+      // A privacy officer: privacy.securityDocs only, assigned to demo.
+      const privacyRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_PRIVACY_${lettersOnly().toUpperCase()}`,
+          name: 'Privacy security-docs test role',
+          description: 'Grants privacy.securityDocs only (non-super, no content).',
+          menuGrants: [await menuId(SECURITY_DOCS_MENU_KEY)],
+        },
+        overrideAccess: true,
+      })
+      privacyOfficer = await payload.create({
+        collection: 'users',
+        data: {
+          email: `privacy-${marker('u')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [privacyRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+
+      const superRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_SUPER_${lettersOnly().toUpperCase()}`,
+          name: 'Super test role (security-docs)',
+          description: 'isSuper.',
+          isSuper: true,
+        },
+        overrideAccess: true,
+      })
+      superUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `super-${marker('u')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [superRole.id],
+          status: 'active',
+        },
+        overrideAccess: true,
+      })
+    })
+
+    it('a content admin reads ordinary boards but NOT security-doc boards', async () => {
+      const boards = await payload.find({
+        collection: 'boards',
+        user: contentAdmin,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      const ids = boards.docs.map((d) => d.id)
+      expect(ids).toContain(ordinaryBoardId)
+      expect(ids).not.toContain(secBoardId)
+
+      await expect(
+        payload.findByID({
+          collection: 'boards',
+          id: secBoardId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('a content admin reads ordinary posts but NOT security-doc posts', async () => {
+      const posts = await payload.find({
+        collection: 'posts',
+        user: contentAdmin,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      const ids = posts.docs.map((d) => d.id)
+      expect(ids).toContain(ordinaryPostId)
+      expect(ids).not.toContain(secPostId)
+
+      await expect(
+        payload.findByID({
+          collection: 'posts',
+          id: secPostId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('a content admin CANNOT post to a security-doc board (write side closed)', async () => {
+      await expect(
+        payload.create({
+          collection: 'posts',
+          data: { board: secBoardId, title: marker('Sneaky'), author: 'X' },
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('a content admin CANNOT flip a board into the security-doc class (field-access strips it)', async () => {
+      const created = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('TriesSecurity'),
+          boardType: photoTypeId,
+          securityDoc: true,
+        } as never,
+        user: contentAdmin,
+        overrideAccess: false,
+      })
+      // The flag was stripped → it is an ORDINARY board they can still read.
+      expect(created.securityDoc).toBeFalsy()
+      await expect(
+        payload.findByID({
+          collection: 'boards',
+          id: created.id,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+    })
+
+    it('a privacy officer reads security-doc boards + posts (but not ordinary ones)', async () => {
+      const boards = await payload.find({
+        collection: 'boards',
+        user: privacyOfficer,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      const boardIds = boards.docs.map((d) => d.id)
+      expect(boardIds).toContain(secBoardId)
+      expect(boardIds).not.toContain(ordinaryBoardId)
+      expect(boards.docs.every((b) => b.securityDoc === true)).toBe(true)
+
+      await expect(
+        payload.findByID({
+          collection: 'boards',
+          id: secBoardId,
+          user: privacyOfficer,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+
+      const posts = await payload.find({
+        collection: 'posts',
+        user: privacyOfficer,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      const postIds = posts.docs.map((d) => d.id)
+      expect(postIds).toContain(secPostId)
+      expect(postIds).not.toContain(ordinaryPostId)
+    })
+
+    it('a privacy officer on the demo tenant CANNOT read another tenant’s security docs (no cross-tenant leak)', async () => {
+      await expect(
+        payload.findByID({
+          collection: 'boards',
+          id: otherSiteSecBoardId,
+          user: privacyOfficer,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('a super-admin reads BOTH ordinary and security-doc boards on every tenant', async () => {
+      const boards = await payload.find({
+        collection: 'boards',
+        user: superUser,
+        overrideAccess: false,
+        pagination: false,
+        limit: 0,
+      })
+      const ids = boards.docs.map((d) => d.id)
+      expect(ids).toContain(ordinaryBoardId)
+      expect(ids).toContain(secBoardId)
+      expect(ids).toContain(otherSiteSecBoardId)
+    })
+  })
+})

@@ -618,6 +618,10 @@ export interface Board {
   bbsId?: string | null;
   name: string;
   /**
+   * Privacy §3 security-document library (ref 3-4). Gated on Privacy · Security Documents instead of Board Management.
+   */
+  securityDoc?: boolean | null;
+  /**
    * The board's type (from Board Type Management). Locked to the integrated type when Integrated board is checked.
    */
   boardType: number | BoardType;
@@ -761,6 +765,10 @@ export interface Post {
    * Denormalized board kind (auto-set from the board's type on save).
    */
   boardKind?: string | null;
+  /**
+   * Denormalized security-document flag (auto-set from the post's board on save).
+   */
+  securityDoc?: boolean | null;
   title: string;
   /**
    * Display name of the author (legacy stored a free-text name).
@@ -2568,6 +2576,7 @@ export interface BoardsSelect<T extends boolean = true> {
   tenant?: T;
   bbsId?: T;
   name?: T;
+  securityDoc?: T;
   boardType?: T;
   isIntegrated?: T;
   skin?: T;
@@ -2633,6 +2642,7 @@ export interface PostsSelect<T extends boolean = true> {
   tenant?: T;
   board?: T;
   boardKind?: T;
+  securityDoc?: T;
   title?: T;
   author?: T;
   authorUser?: T;
