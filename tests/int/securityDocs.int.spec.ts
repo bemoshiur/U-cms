@@ -11,6 +11,7 @@ import { resolveBoardByBbsId, resolvePostForBoard } from '@/site/data'
 import { loadAllBoardPosts, loadBoardDetail } from '@/site/board'
 import { resolveVisibleBoard, resolveVisiblePost } from '@/site/access'
 import { loadDownloadRows } from '@/site/downloadStatsData'
+import { canDownloadPost, handleFileDownload } from '@/endpoints/fileDownload'
 import type { Board } from '@/payload-types'
 import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
@@ -697,6 +698,201 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
       const postIds = rows.map((r) => String(r.postId))
       expect(postIds).toContain(String(ordPost.id))
       expect(postIds).not.toContain(String(secPost.id))
+    })
+  })
+
+  // ── C1 (file endpoint): /api/files/download must not leak security-doc bytes ─
+  describe('security-doc attachment download gate (C1 file endpoint)', () => {
+    const PNG =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+
+    async function makeAttachment(): Promise<number> {
+      const created = await payload.create({
+        collection: 'attachments',
+        data: { alt: 'dl fixture', tenant: demoSiteId } as never,
+        file: {
+          data: Buffer.from(PNG, 'base64'),
+          name: `sd-dl-${Date.now()}-${Math.floor(Math.random() * 100000)}.png`,
+          mimetype: 'image/png',
+          size: Buffer.from(PNG, 'base64').length,
+        },
+        overrideAccess: true,
+      })
+      return created.id as number
+    }
+
+    let secPost: Awaited<ReturnType<typeof payload.create>>
+    let secFileSn: number
+    let ordPost: Awaited<ReturnType<typeof payload.create>>
+    let member: Awaited<ReturnType<typeof payload.create>>
+    let contentAdmin: Awaited<ReturnType<typeof payload.create>>
+    let privacyOfficer: Awaited<ReturnType<typeof payload.create>>
+    let superUser: Awaited<ReturnType<typeof payload.create>>
+
+    beforeAll(async () => {
+      const secBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('DlSecBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+          securityDoc: true,
+        },
+        overrideAccess: true,
+      })
+      secPost = await payload.create({
+        collection: 'posts',
+        data: {
+          board: secBoard.id,
+          title: marker('DlSecPost'),
+          attachments: [{ media: await makeAttachment() }],
+        } as never,
+        overrideAccess: true,
+      })
+      secFileSn = (secPost as unknown as { attachments: { fileSn: number }[] }).attachments[0]!
+        .fileSn
+
+      const ordBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('DlOrdBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+        },
+        overrideAccess: true,
+      })
+      ordPost = await payload.create({
+        collection: 'posts',
+        data: {
+          board: ordBoard.id,
+          title: marker('DlOrdPost'),
+          attachments: [{ media: await makeAttachment() }],
+        } as never,
+        overrideAccess: true,
+      })
+
+      member = await payload.create({
+        collection: 'members',
+        data: {
+          loginId: `sd-dl-member-${Date.now()}`.toLowerCase(),
+          email: `sd-dl-m-${marker('e')}@example.com`.toLowerCase(),
+          name: 'Download Member',
+          password: 'Member-Pass-99',
+          status: 'active',
+          tenant: demoSiteId,
+        } as never,
+        overrideAccess: true,
+      })
+
+      const contentRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_DLCONTENT_${lettersOnly().toUpperCase()}`,
+          name: 'Download content role',
+          description: 'content.posts + content.boards',
+          menuGrants: [await menuId('content.posts'), await menuId('content.boards')],
+        },
+        overrideAccess: true,
+      })
+      contentAdmin = await payload.create({
+        collection: 'users',
+        data: {
+          email: `sd-dl-content-${marker('e')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [contentRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+
+      const privacyRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_DLPRIVACY_${lettersOnly().toUpperCase()}`,
+          name: 'Download privacy role',
+          description: 'privacy.securityDocs',
+          menuGrants: [await menuId(SECURITY_DOCS_MENU_KEY)],
+        },
+        overrideAccess: true,
+      })
+      privacyOfficer = await payload.create({
+        collection: 'users',
+        data: {
+          email: `sd-dl-privacy-${marker('e')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [privacyRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+
+      const superRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_DLSUPER_${lettersOnly().toUpperCase()}`,
+          name: 'Download super role',
+          description: 'isSuper',
+          isSuper: true,
+        },
+        overrideAccess: true,
+      })
+      superUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `sd-dl-super-${marker('e')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [superRole.id],
+          status: 'active',
+        },
+        overrideAccess: true,
+      })
+    })
+
+    it('DENIES a security-doc attachment to a same-tenant member and a content-only admin', async () => {
+      expect(await canDownloadPost({ payload, user: member, post: secPost as never })).toBe(false)
+      expect(await canDownloadPost({ payload, user: contentAdmin, post: secPost as never })).toBe(
+        false,
+      )
+      // End-to-end: the endpoint collapses a denied request to a 404 (existence oracle).
+      const memberRes = await handleFileDownload({
+        payload,
+        user: member,
+        postId: String(secPost.id),
+        fileSn: secFileSn,
+      })
+      expect(memberRes.status).toBe(404)
+      const contentRes = await handleFileDownload({
+        payload,
+        user: contentAdmin,
+        postId: String(secPost.id),
+        fileSn: secFileSn,
+      })
+      expect(contentRes.status).toBe(404)
+    })
+
+    it('ALLOWS a security-doc attachment to a privacy officer and to super', async () => {
+      expect(await canDownloadPost({ payload, user: privacyOfficer, post: secPost as never })).toBe(
+        true,
+      )
+      expect(await canDownloadPost({ payload, user: superUser, post: secPost as never })).toBe(true)
+      const officerRes = await handleFileDownload({
+        payload,
+        user: privacyOfficer,
+        postId: String(secPost.id),
+        fileSn: secFileSn,
+      })
+      expect(officerRes.status).toBe(200)
+    })
+
+    it('does NOT regress ordinary attachments — member + content admin can still download', async () => {
+      expect(await canDownloadPost({ payload, user: member, post: ordPost as never })).toBe(true)
+      expect(await canDownloadPost({ payload, user: contentAdmin, post: ordPost as never })).toBe(
+        true,
+      )
     })
   })
 })

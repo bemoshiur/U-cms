@@ -71,7 +71,16 @@ async function boardExists(
 ): Promise<boolean> {
   const found = await payload.find({
     collection: 'boards',
-    where: { and: [{ tenant: { equals: tenantId } }, { bbsId: { equals: bbsId } }] },
+    // Exclude §3 security-doc boards (Task 6D): they are never public, so their
+    // enumerable bbsId must never classify a traffic URL as a public board hit
+    // (consistent with the C1 public-read posture — this fn only canonicalizes).
+    where: {
+      and: [
+        { tenant: { equals: tenantId } },
+        { bbsId: { equals: bbsId } },
+        { securityDoc: { not_equals: true } },
+      ],
+    },
     depth: 0,
     limit: 1,
     pagination: false,

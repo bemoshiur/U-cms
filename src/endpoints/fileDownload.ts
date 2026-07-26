@@ -4,6 +4,7 @@ import path from 'path'
 import type { Endpoint, Payload, PayloadRequest } from 'payload'
 
 import { hasMenuAccess, isSuperUser } from '../access/hasMenuAccess'
+import { SECURITY_DOCS_MENU_KEY } from '../access/securityDocs'
 import { getAssignedTenantIds } from '../access/tenantAccess'
 import { toRelationId } from '../collections/utils'
 import { POSTS_MENU_KEY } from '../collections/posts/defaults'
@@ -76,6 +77,7 @@ type PostLike = {
   authorUser?: unknown
   attachments?: unknown
   isSecret?: unknown
+  securityDoc?: unknown
 }
 
 /**
@@ -136,6 +138,33 @@ export async function canDownloadPost(args: {
   // Anonymous is denied for EVERYTHING (Task 4-zero criterion 5).
   if (!user) {
     return false
+  }
+
+  // §3 SECURITY-DOCUMENT posts (Task 6D C1 — file endpoint). The attachment bytes
+  // are as confidential as the post: this endpoint is IP-exempt and fetches the
+  // post with `overrideAccess`, so it must reproduce `securityDocScopedAccess`
+  // here or a self-registered MEMBER (anyone can /signup) on the same tenant, or
+  // a content-only admin WITHOUT `privacy.securityDocs`, could pull a security-doc
+  // file by enumerable postId+fileSn. Policy: ONLY an admin (`users`) holding
+  // `privacy.securityDocs` — or `isSuper` — may download, and only within the
+  // post's tenant. Members and non-privacy admins are DENIED (→ the shared 404).
+  // No author shortcut here: the §3 grant is the sole key.
+  if (post.securityDoc === true) {
+    if (!isTenantScopedAdmin(user)) {
+      return false // members + any non-admin principal → denied
+    }
+    if (isSuperUser(user)) {
+      return true
+    }
+    const tenantId = toRelationId(post.tenant)
+    if (tenantId === undefined) {
+      return false
+    }
+    const assigned = getAssignedTenantIds(user).some((id) => String(id) === String(tenantId))
+    if (!assigned) {
+      return false
+    }
+    return hasMenuAccess({ payload, user } as unknown as PayloadRequest, SECURITY_DOCS_MENU_KEY)
   }
 
   if (isTenantScopedAdmin(user)) {
