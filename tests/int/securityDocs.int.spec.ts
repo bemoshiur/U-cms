@@ -1284,4 +1284,249 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
       expect(media.securityDoc).toBeFalsy()
     })
   })
+
+  // ── round-5: richText-EMBEDDED attachments (the final reference site) ──────
+  describe('richText-embedded security-doc attachments (round-5)', () => {
+    const PNG =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+
+    async function makeAttachment(): Promise<number> {
+      const created = await payload.create({
+        collection: 'attachments',
+        data: { alt: 'embed fixture', tenant: demoSiteId } as never,
+        file: {
+          data: Buffer.from(PNG, 'base64'),
+          name: `sd-embed-${Date.now()}-${Math.floor(Math.random() * 100000)}.png`,
+          mimetype: 'image/png',
+          size: Buffer.from(PNG, 'base64').length,
+        },
+        overrideAccess: true,
+      })
+      return created.id as number
+    }
+
+    /** A lexical body embedding an `attachments` upload node (the leak site). */
+    function lexicalEmbedding(mediaId: number, text: string) {
+      return {
+        root: {
+          type: 'root',
+          format: '' as const,
+          indent: 0,
+          version: 1,
+          direction: 'ltr' as const,
+          children: [
+            { type: 'upload', version: 3, relationTo: 'attachments', value: mediaId, fields: null },
+            {
+              type: 'paragraph',
+              version: 1,
+              direction: 'ltr' as const,
+              format: '' as const,
+              indent: 0,
+              children: [
+                { type: 'text', detail: 0, format: 0, mode: 'normal', style: '', text, version: 1 },
+              ],
+            },
+          ],
+        },
+      }
+    }
+
+    let secBoardId: number
+    let ordBoardId: number
+    let embeddedMediaId: number
+    let contentAdmin: Awaited<ReturnType<typeof payload.create>>
+    let privacyOfficer: Awaited<ReturnType<typeof payload.create>>
+
+    beforeAll(async () => {
+      const secBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('EmbedSecBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+          securityDoc: true,
+        },
+        overrideAccess: true,
+      })
+      secBoardId = secBoard.id
+      const ordBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('EmbedOrdBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+        },
+        overrideAccess: true,
+      })
+      ordBoardId = ordBoard.id
+
+      // A §3 post that embeds the attachment INLINE in content (NOT the array).
+      embeddedMediaId = await makeAttachment()
+      await payload.create({
+        collection: 'posts',
+        data: {
+          board: secBoardId,
+          title: marker('EmbedSecPost'),
+          content: lexicalEmbedding(embeddedMediaId, 'security doc body with embedded file'),
+        } as never,
+        overrideAccess: true,
+      })
+
+      const contentRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_EMB_${lettersOnly().toUpperCase()}`,
+          name: 'Embed content role',
+          description: 'content.boards + content.posts',
+          menuGrants: [await menuId('content.boards'), await menuId('content.posts')],
+        },
+        overrideAccess: true,
+      })
+      contentAdmin = await payload.create({
+        collection: 'users',
+        data: {
+          email: `sd-emb-content-${marker('e')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [contentRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+
+      const privacyRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_EMBP_${lettersOnly().toUpperCase()}`,
+          name: 'Embed privacy role',
+          description: 'privacy.securityDocs',
+          menuGrants: [await menuId(SECURITY_DOCS_MENU_KEY)],
+        },
+        overrideAccess: true,
+      })
+      privacyOfficer = await payload.create({
+        collection: 'users',
+        data: {
+          email: `sd-emb-privacy-${marker('e')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [privacyRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+    })
+
+    it('(i) a richText-embedded attachment in a §3 post is flagged securityDoc:true and denied to a content admin on the raw route', async () => {
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: embeddedMediaId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBe(true)
+
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: embeddedMediaId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+      // The privacy officer can read it.
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: embeddedMediaId,
+          user: privacyOfficer,
+          overrideAccess: false,
+        }),
+      ).resolves.toBeDefined()
+    })
+
+    it('(ii) an ordinary post embedding a §3 attachment via content richText is REJECTED at the source', async () => {
+      await expect(
+        payload.create({
+          collection: 'posts',
+          data: {
+            board: ordBoardId,
+            title: marker('EmbedAttackContent'),
+            content: lexicalEmbedding(embeddedMediaId, 're-expose attempt via content'),
+          } as never,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+      // Even a privileged overrideAccess ordinary write is rejected (fail-closed).
+      await expect(
+        payload.create({
+          collection: 'posts',
+          data: {
+            board: ordBoardId,
+            title: marker('EmbedAttackContentSys'),
+            content: lexicalEmbedding(embeddedMediaId, 're-expose attempt via content (system)'),
+          } as never,
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+      // The flag is unchanged.
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: embeddedMediaId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBe(true)
+    })
+
+    it('(ii-answer) an ordinary post embedding a §3 attachment via the ANSWER richText is REJECTED too', async () => {
+      await expect(
+        payload.create({
+          collection: 'posts',
+          data: {
+            board: ordBoardId,
+            title: marker('EmbedAttackAnswer'),
+            answer: lexicalEmbedding(embeddedMediaId, 're-expose attempt via answer'),
+          } as never,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('the reverse direction is allowed: a §3 post may embed the §3 attachment (answer site) and an ordinary post may embed a FRESH ordinary attachment', async () => {
+      // §3 Q&A post embedding the secure attachment in its answer → allowed.
+      const secQna = await payload.create({
+        collection: 'posts',
+        data: {
+          board: secBoardId,
+          title: marker('EmbedSecAnswer'),
+          answer: lexicalEmbedding(embeddedMediaId, 'answer embedding the §3 file'),
+        } as never,
+        overrideAccess: true,
+      })
+      expect(secQna.id).toBeDefined()
+
+      // Ordinary post embedding a FRESH ordinary attachment → allowed, stays ordinary.
+      const freshId = await makeAttachment()
+      const ord = await payload.create({
+        collection: 'posts',
+        data: {
+          board: ordBoardId,
+          title: marker('EmbedOrdOk'),
+          content: lexicalEmbedding(freshId, 'ordinary body with a fresh embed'),
+        } as never,
+        user: contentAdmin,
+        overrideAccess: false,
+      })
+      expect(ord.id).toBeDefined()
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: freshId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBeFalsy()
+    })
+  })
 })

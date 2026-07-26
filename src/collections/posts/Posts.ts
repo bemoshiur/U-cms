@@ -17,6 +17,7 @@ import {
 import { SECURITY_DOCS_MENU_KEY, securityDocScopedAccess } from '../../access/securityDocs'
 import { getAssignedTenantIds } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
+import { postAttachmentRefIds } from '../../content/attachmentRefs'
 import { containsProfanity, extractLexicalText } from '../../content/wordFilter'
 import { downloadStatsEndpoints } from '../../endpoints/downloadStatsExport'
 import type { BoardTypeKind } from '../boards/defaults'
@@ -147,21 +148,22 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
     }
   }
 
-  // §3 attachment cross-reference guard (Task 6D round-4). A NON-security-doc post
-  // may not reference an attachment currently flagged `securityDoc` — that would
-  // pull a §3 file into an ordinary post and (via the denorm sync) attempt to
-  // re-expose it. Security-doc attachments belong ONLY to security-doc posts.
+  // §3 attachment cross-reference guard (Task 6D round-4; round-5 extends to ALL
+  // reference sites). A NON-security-doc post may not reference an attachment
+  // currently flagged `securityDoc` through ANY site — the `attachments[]` array
+  // OR an upload node embedded in the `content`/`answer` richText — since that
+  // would pull a §3 file into an ordinary post and (via the denorm sync) attempt
+  // to re-expose it. Security-doc attachments belong ONLY to security-doc posts.
   // Rejected at the SOURCE so the shared-reference state never forms; the
   // recompute-any denorm sync is the backstop. Skipped for the privileged
   // board→posts flip (that path runs with `skipPostSideEffects`, short-circuited
   // above) and for security-doc posts themselves.
   if (!boardIsSecurityDoc) {
-    const attsForRefGuard = eff('attachments')
-    const refIds = Array.isArray(attsForRefGuard)
-      ? attsForRefGuard
-          .map((a) => toRelationId((a as { media?: unknown })?.media))
-          .filter((id): id is number | string => id !== undefined)
-      : []
+    const refIds = postAttachmentRefIds({
+      attachments: eff('attachments'),
+      content: eff('content'),
+      answer: eff('answer'),
+    })
     if (refIds.length > 0) {
       const secureRefs = await req.payload.find({
         collection: 'attachments',
@@ -434,39 +436,44 @@ const stampAnswerAttribution: CollectionBeforeChangeHook = ({ data, req }) => {
  * on the attachment's own `read`, which keys off `attachments.securityDoc`; that
  * flag must track the owning post(s) or a §3 file leaks via that alternate door.
  *
- * RECOMPUTE-ANY (round-4, closes the non-monotonic re-expose): an attachment's
- * flag is recomputed as "is this attachment referenced by ANY security-doc post?"
+ * RECOMPUTE-ANY (round-4; round-5 covers ALL reference sites): an attachment's
+ * flag is recomputed as "is this attachment referenced by ANY security-doc post,
+ * through the array field OR an upload node embedded in content/answer richText?"
  * — NOT blindly set to the writing post's class. Otherwise an ORDINARY post
  * referencing a security-doc attachment id would STRIP the flag (true→false) and
  * re-expose the bytes. Because the value is derived from the full set of
- * referencing posts, an unrelated ordinary write can never lower it while a
+ * referencing security-doc posts (via `postAttachmentRefIds`, which covers all
+ * three sites), an unrelated ordinary write can never lower it while a
  * security-doc post still references it; it is cleared ONLY when no security-doc
  * post references it any more (e.g. the privileged board→ordinary flip). The
  * source-guard in `validatePostAgainstBoard` additionally REJECTS an ordinary
- * post referencing a security-doc attachment, so the shared-reference state never
- * even forms; this recompute is the correctness backstop.
+ * post referencing a security-doc attachment (any site), so the shared-reference
+ * state never even forms; this recompute is the correctness backstop.
+ *
+ * The security-doc reverse set is computed by scanning security-doc posts (a
+ * small set — the §3 libraries) and extracting each one's COMPLETE reference set
+ * in JS, because a richText-embedded upload id lives in the Lexical JSON, not the
+ * `posts_attachments` join table (so it cannot be matched by a SQL `where`).
  *
  * Runs regardless of `skipPostSideEffects`, so it ALSO fires under the board→posts
  * flag-flip propagation (`propagateSecurityDocToPosts` in Boards.ts) — that is
  * what re-syncs attachment flags on a board flip. DELETE is intentionally NOT
  * handled (fail-closed: an orphaned attachment keeps its restricted flag).
  * `overrideAccess` bypasses the attachment field's write-lock; runs inside the
- * post write's `req`/transaction (so the reverse lookup sees this write).
+ * post write's `req`/transaction (so the reverse scan sees this write).
  */
 const syncAttachmentSecurityDoc: CollectionAfterChangeHook = async ({ doc, req }) => {
-  const attachments = Array.isArray(doc.attachments) ? doc.attachments : []
-  const mediaIds = attachments
-    .map((a: unknown) => toRelationId((a as { media?: unknown })?.media))
-    .filter((id: string | number | undefined): id is number | string => id !== undefined)
+  const mediaIds = postAttachmentRefIds(doc)
   if (mediaIds.length === 0) {
     return doc
   }
 
-  // Reverse lookup: which of these attachments are referenced by ANY security-doc
-  // post (this write included, since it shares the transaction)?
+  // Authoritative reverse set: every attachment id referenced by ANY security-doc
+  // post across ALL three sites (this write included, since it shares the txn).
+  // Scanned in JS so richText-embedded ids (not in the join table) are covered.
   const securePosts = await req.payload.find({
     collection: 'posts',
-    where: { and: [{ securityDoc: { equals: true } }, { 'attachments.media': { in: mediaIds } }] },
+    where: { securityDoc: { equals: true } },
     depth: 0,
     limit: 0,
     pagination: false,
@@ -475,12 +482,8 @@ const syncAttachmentSecurityDoc: CollectionAfterChangeHook = async ({ doc, req }
   })
   const secureMediaIds = new Set<string>()
   for (const p of securePosts.docs) {
-    const atts = Array.isArray(p.attachments) ? p.attachments : []
-    for (const a of atts) {
-      const m = toRelationId((a as { media?: unknown })?.media)
-      if (m !== undefined) {
-        secureMediaIds.add(String(m))
-      }
+    for (const id of postAttachmentRefIds(p)) {
+      secureMediaIds.add(String(id))
     }
   }
 
