@@ -6,6 +6,7 @@ import {
   postColumnForFieldKey,
   searchableFieldKeys,
   textSearchableFieldKeys,
+  toPositiveIntId,
 } from '@/content/boardSearch'
 import type { BoardLike } from '@/content/boardSearch'
 
@@ -119,5 +120,44 @@ describe('buildPostSearchWhere', () => {
     expect(and).toContainEqual({ category1: { equals: 9 } })
     expect(and).toContainEqual({ createdAt: { greater_than_equal: '2026-01-01' } })
     expect(and).toContainEqual({ createdAt: { less_than_equal: '2026-12-31' } })
+  })
+})
+
+describe('M1 — category filters are coerced to positive integer ids (no NaN 500)', () => {
+  it('toPositiveIntId accepts positive ints (and numeric strings), rejects the rest', () => {
+    expect(toPositiveIntId(9)).toBe(9)
+    expect(toPositiveIntId('9')).toBe(9)
+    expect(toPositiveIntId(' 12 ')).toBe(12)
+    expect(toPositiveIntId('abc')).toBeUndefined()
+    expect(toPositiveIntId('9abc')).toBeUndefined()
+    expect(toPositiveIntId('-5')).toBeUndefined()
+    expect(toPositiveIntId('9.5')).toBeUndefined()
+    expect(toPositiveIntId(-1)).toBeUndefined()
+    expect(toPositiveIntId(0)).toBeUndefined()
+    expect(toPositiveIntId('')).toBeUndefined()
+    expect(toPositiveIntId(null)).toBeUndefined()
+  })
+
+  it('a crafted non-numeric category yields NO category clause (no NaN reaches the query)', () => {
+    // The exact public-500 trigger: ?category1=abc.
+    const where = buildPostSearchWhere(board, 1, { category1: 'abc' as never })
+    expect(where).toEqual({ board: { equals: 1 } })
+
+    // Negative / float are likewise dropped.
+    expect(buildPostSearchWhere(board, 1, { category2: '-3' as never })).toEqual({
+      board: { equals: 1 },
+    })
+    expect(buildPostSearchWhere(board, 1, { category3: '2.5' as never })).toEqual({
+      board: { equals: 1 },
+    })
+  })
+
+  it('a valid numeric category (string or number) still filters', () => {
+    expect(buildPostSearchWhere(board, 1, { category1: '7' })).toMatchObject({
+      and: [{ board: { equals: 1 } }, { category1: { equals: 7 } }],
+    })
+    expect(buildPostSearchWhere(board, 1, { category2: 4 })).toMatchObject({
+      and: [{ board: { equals: 1 } }, { category2: { equals: 4 } }],
+    })
   })
 })

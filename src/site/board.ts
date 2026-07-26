@@ -12,6 +12,7 @@ import type { Payload, Where } from 'payload'
 
 import { buildPostSearchWhere, type PostSearchParams } from '../content/boardSearch'
 import { isActiveNotice, paginate, type Pagination } from '../content/boardList'
+import { getAssignedTenantIds } from '../access/tenantAccess'
 import { toRelationId } from '../collections/utils'
 import type { Board, Post } from '../payload-types'
 
@@ -32,10 +33,20 @@ export function dataManagerEnabled(site: { dataManagerEnabled?: boolean | null }
  * record) into a display block (name/department/contact), or `null` when unset
  * or unresolvable. The CALLER gates on {@link dataManagerEnabled} first — this
  * only resolves the relationship for display.
+ *
+ * TENANT RE-SCOPE (L1): a `users` record must be ASSIGNED to the active site
+ * (multi-tenant `users.tenants`) — a user of another site is NOT displayed
+ * (fail-safe null), so an admin can't surface a foreign site's admin contact via
+ * `personInCharge`. `personInCharge` is written under the menu's own
+ * tenant-scoped access, but this public read uses `overrideAccess`, so we
+ * re-verify here rather than trust the stored pointer. `departments` is a GLOBAL
+ * collection (shared across sites — no per-site `tenant`), so there is no site
+ * boundary to mismatch there and no cross-site contact to leak.
  */
 export async function resolveDataManager(
   payload: Payload,
   value: unknown,
+  tenantId: number | string,
 ): Promise<DataManagerInfo | null> {
   if (!value || typeof value !== 'object') {
     return null
@@ -47,6 +58,7 @@ export async function resolveDataManager(
   }
   try {
     if (rel.relationTo === 'departments') {
+      // Global collection (no per-site tenant) — shared reference data.
       const dept = await payload.findByID({
         collection: 'departments',
         id,
@@ -65,6 +77,11 @@ export async function resolveDataManager(
         disableErrors: true,
       })
       if (!user) {
+        return null
+      }
+      // The user must be assigned to the active site (multi-tenant `users.tenants`).
+      const assigned = getAssignedTenantIds(user).some((t) => String(t) === String(tenantId))
+      if (!assigned) {
         return null
       }
       const dept = user.department

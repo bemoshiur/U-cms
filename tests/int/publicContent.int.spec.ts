@@ -226,16 +226,46 @@ describe('Task 4C public content + board frontends', () => {
 
       const dept = await payload.create({
         collection: 'departments',
-        data: { tenant: siteId, name: marker('Records Dept') } as never,
+        data: { name: marker('Records Dept') } as never,
         overrideAccess: true,
       })
-      const info = await resolveDataManager(payload, {
-        relationTo: 'departments',
-        value: dept.id,
-      })
+      const info = await resolveDataManager(
+        payload,
+        { relationTo: 'departments', value: dept.id },
+        siteId,
+      )
       expect(info?.name).toContain('Records Dept')
       // Unset → null.
-      expect(await resolveDataManager(payload, null)).toBeNull()
+      expect(await resolveDataManager(payload, null, siteId)).toBeNull()
+
+      // L1 tenant re-scope: a USER assigned to the active site resolves; a user
+      // assigned only to ANOTHER site is NOT displayed (no cross-site contact leak).
+      const sameSiteUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `dm-same-${Date.now()}@example.com`,
+          password: 'a-long-enough-test-password-1',
+          status: 'active',
+          tenants: [{ tenant: siteId }],
+        } as never,
+        overrideAccess: true,
+      })
+      const crossSiteUser = await payload.create({
+        collection: 'users',
+        data: {
+          email: `dm-cross-${Date.now()}@example.com`,
+          password: 'a-long-enough-test-password-1',
+          status: 'active',
+          tenants: [{ tenant: otherSiteId }],
+        } as never,
+        overrideAccess: true,
+      })
+      expect(
+        await resolveDataManager(payload, { relationTo: 'users', value: sameSiteUser.id }, siteId),
+      ).not.toBeNull()
+      expect(
+        await resolveDataManager(payload, { relationTo: 'users', value: crossSiteUser.id }, siteId),
+      ).toBeNull()
     })
   })
 
@@ -359,6 +389,27 @@ describe('Task 4C public content + board frontends', () => {
         1,
       )
       expect(Array.isArray(scoped.posts)).toBe(true)
+    })
+
+    it('M1 — a crafted non-numeric category param does not 500 the list', async () => {
+      const board = await payload.create({
+        collection: 'boards',
+        data: { tenant: siteId, name: marker('CatBoard'), boardType: integratedTypeId },
+        overrideAccess: true,
+      })
+      await payload.create({
+        collection: 'posts',
+        data: { board: board.id, title: 'cat post' },
+        overrideAccess: true,
+      })
+      // Pre-fix this reached Postgres as { category1: { equals: NaN } } → 500.
+      const res = await loadBoardListPage(
+        payload,
+        board,
+        { category1: 'abc', category2: '-1', category3: '2.5' } as never,
+        1,
+      )
+      expect(res.posts.map((p) => p.title)).toContain('cat post')
     })
   })
 

@@ -50,7 +50,7 @@ export default async function ContentPage({ params }: { params: Promise<{ menuNu
 
   // Person-in-charge (담당자, ref 2-3) — ONLY when the site toggle is on.
   const person = dataManagerEnabled(site)
-    ? await resolveDataManager(payload, resolved.menu.personInCharge)
+    ? await resolveDataManager(payload, resolved.menu.personInCharge, site.id)
     : null
 
   return (

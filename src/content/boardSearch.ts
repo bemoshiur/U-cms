@@ -84,6 +84,27 @@ const TEXT_QUERYABLE_POST_COLUMNS = new Set([
   'extraContent4',
 ])
 
+/**
+ * Coerces a category filter value to a POSITIVE INTEGER id, or `undefined` when
+ * it is not one (blank / non-numeric / negative / non-integer). Guards the
+ * single-integer `posts.category1-3` relationship columns from a crafted public
+ * query param that would otherwise reach Postgres as `NaN` and 500.
+ */
+export function toPositiveIntId(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value > 0 ? value : undefined
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed === '') {
+      return undefined
+    }
+    const n = Number(trimmed)
+    return Number.isInteger(n) && n > 0 ? n : undefined
+  }
+  return undefined
+}
+
 /** True iff a board field key maps to a real, `like`-queryable text column on `posts`. */
 export function isTextQueryableFieldKey(fieldKey: string): boolean {
   if (NON_TEXT_FIELD_KEYS.has(fieldKey)) {
@@ -171,11 +192,17 @@ export function buildPostSearchWhere(
     // text column (D6) — contributes no clause (ignored).
   }
 
+  // Category IDs are single INTEGER relationships (posts.category1-3 → codes). A
+  // crafted public `?category1=abc` (or a negative/float) must NOT reach the
+  // query — Payload's sanitizeQueryValue has no NaN guard for this branch, so
+  // `{ category1: { equals: NaN } }` throws a Postgres integer error → a public
+  // 500 (same class as D6, via the category path). Coerce each to a positive
+  // integer id and DROP the filter when it is not one.
   const categories: (keyof PostSearchParams)[] = ['category1', 'category2', 'category3']
   for (const key of categories) {
-    const value = params[key]
-    if (value !== null && value !== undefined && value !== '') {
-      and.push({ [key]: { equals: value } })
+    const id = toPositiveIntId(params[key])
+    if (id !== undefined) {
+      and.push({ [key]: { equals: id } })
     }
   }
 
