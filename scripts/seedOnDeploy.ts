@@ -12,7 +12,13 @@
  * Env:
  *   SEED_ON_DEPLOY      when truthy, run the seed; otherwise skip (no-op).
  *   SEED_ADMIN_EMAIL    super-admin email (defaults to a dev value — set it!).
- *   SEED_ADMIN_PASSWORD super-admin password (defaults to a dev value — set it!).
+ *   SEED_ADMIN_PASSWORD super-admin password. REQUIRED in production: the
+ *                       super-admin seed step hard-refuses to create the admin
+ *                       with the built-in dev-only default password when
+ *                       NODE_ENV=production (see
+ *                       `assertSeedAdminPasswordSafeForProduction` in
+ *                       src/seed/steps/superAdmin.ts), so a prod seed with this
+ *                       unset fails fast rather than exposing a known password.
  */
 import 'dotenv/config'
 
