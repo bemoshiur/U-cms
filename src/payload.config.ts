@@ -273,6 +273,21 @@ export default buildConfig({
           path: '/traffic-statistics',
           exact: true,
         },
+        // Task 5B (TODO 5.3): download statistics (TOP-20 + detail), gated on
+        // statistics.downloads + tenant-scoped. See DownloadStatisticsView.tsx.
+        downloadStatistics: {
+          Component: '/components/statistics/DownloadStatisticsView#DownloadStatisticsView',
+          path: '/download-statistics',
+          exact: true,
+        },
+        // Task 5B (TODO 5.4): satisfaction statistics (distribution + per-menu +
+        // dept/menu cascade), gated on statistics.satisfaction + tenant-scoped.
+        // See SatisfactionStatisticsView.tsx.
+        satisfactionStatistics: {
+          Component: '/components/statistics/SatisfactionStatisticsView#SatisfactionStatisticsView',
+          path: '/satisfaction-statistics',
+          exact: true,
+        },
         // Task 2B: replace the built-in login view with a branded two-step
         // (password → Google-OTP) form that also shows the conditional
         // Account-Request / Find-ID / Find-PW links (ref 1-1). The actual 2FA

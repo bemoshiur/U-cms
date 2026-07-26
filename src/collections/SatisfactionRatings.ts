@@ -4,9 +4,13 @@ import { hasMenuAccessSync } from '../access/hasMenuAccess'
 import { tenantMembershipGuard, tenantScopedMenuAccess } from '../access/tenantAccess'
 import { auditCollection } from '../audit/auditCollection'
 import { MAX_SCORE, MIN_SCORE } from '../content/satisfaction'
+import {
+  SATISFACTION_MENU_KEY,
+  satisfactionStatsExportEndpoints,
+} from '../endpoints/satisfactionStatsExport'
 
-/** Permanent menu-grant key gating this collection (see AdminMenus.ts). */
-export const SATISFACTION_MENU_KEY = 'statistics.satisfaction'
+/** Permanent menu-grant key gating this collection (defined in the export endpoint). */
+export { SATISFACTION_MENU_KEY }
 
 const satisfactionAudit = auditCollection(SATISFACTION_MENU_KEY)
 
@@ -49,6 +53,9 @@ export const SatisfactionRatings: CollectionConfig = {
     update: tenantScopedMenuAccess(SATISFACTION_MENU_KEY),
     delete: tenantScopedMenuAccess(SATISFACTION_MENU_KEY),
   },
+  // Satisfaction statistics (Task 5B; TODO 5.4): GET /api/satisfactionRatings/stats[/export].
+  // Gated on `statistics.satisfaction` + tenant-scoped. See satisfactionStatsExport.ts.
+  endpoints: satisfactionStatsExportEndpoints,
   fields: [
     {
       name: 'menu',

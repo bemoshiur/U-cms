@@ -284,6 +284,18 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 2,
     collectionSlug: 'pageViews',
   },
+  // Download statistics (Task 5B; TODO 5.3, ref 2-18). A VIEW grant (no
+  // collection of its own — the cumulative counts live on posts.attachments);
+  // gates /admin/download-statistics + /api/posts/download-stats. `statistics.
+  // satisfaction` above doubles as the Task 5B satisfaction-statistics grant
+  // (one key gates both the raw ratings AND the dashboard, exactly as
+  // `statistics.traffic` gates both the traffic log and the traffic view).
+  {
+    menuKey: 'statistics.downloads',
+    name: 'Download Statistics',
+    parentMenuKey: 'statistics',
+    order: 3,
+  },
 ]
 
 /**

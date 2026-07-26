@@ -48,6 +48,29 @@ export const statisticsStep: SeedStep = {
     }
     const pageKey = `/page/${menu.menuNumber}`
 
+    // Link the Introduction menu to a department (담당부서) so the satisfaction
+    // statistics DEPARTMENT → MENU cascade (Task 5B / ref 2-19) has a real
+    // department to filter by. Idempotent: set only when personInCharge is unset.
+    if (menu.personInCharge == null) {
+      const dept = await payload.find({
+        collection: 'departments',
+        where: { name: { equals: 'Development' } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const deptId = dept.docs[0]?.id
+      if (deptId !== undefined) {
+        await payload.update({
+          collection: 'menus',
+          id: menu.id,
+          data: { personInCharge: { relationTo: 'departments', value: deptId } } as never,
+          overrideAccess: true,
+        })
+        payload.logger.info('[seed:statistics] linked Introduction menu → Development department.')
+      }
+    }
+
     // ── satisfaction ratings (idempotent by page) ─────────────────────────
     const existingRatings = await payload.find({
       collection: 'satisfactionRatings',
@@ -166,6 +189,36 @@ export const statisticsStep: SeedStep = {
       payload.logger.info(
         `[seed:statistics] created ${samples.length} page views + ${days.size} daily rollup(s).`,
       )
+    }
+
+    // ── download counts (idempotent by counter) ───────────────────────────
+    // Seed a non-zero download count on the demo Gallery post's attachment so
+    // the download-statistics view (Task 5B / ref 2-18) renders with data. Only
+    // bumps when the counter is still 0, so accumulated real downloads are never
+    // reset. `skipPostSideEffects` avoids re-running board validation / fileSn
+    // renumbering on this counter-only write.
+    const galleryPost = await payload.find({
+      collection: 'posts',
+      where: {
+        and: [{ tenant: { equals: demo.id } }, { title: { equals: 'Sample gallery item' } }],
+      },
+      depth: 0,
+      limit: 1,
+      pagination: false,
+      overrideAccess: true,
+    })
+    const post = galleryPost.docs[0]
+    const attachments = post && Array.isArray(post.attachments) ? post.attachments : []
+    if (post && attachments.length > 0 && (attachments[0]?.downloadCount ?? 0) === 0) {
+      const updated = attachments.map((a, i) => (i === 0 ? { ...a, downloadCount: 12 } : a))
+      await payload.update({
+        collection: 'posts',
+        id: post.id,
+        data: { attachments: updated } as never,
+        overrideAccess: true,
+        context: { skipPostSideEffects: true },
+      })
+      payload.logger.info('[seed:statistics] seeded a download count on the Gallery attachment.')
     }
   },
 }

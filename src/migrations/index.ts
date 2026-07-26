@@ -17,6 +17,7 @@ import * as migration_20260726_051201_task_4d_surveys from './20260726_051201_ta
 import * as migration_20260726_054751_task_4d_survey_dedup_unique from './20260726_054751_task_4d_survey_dedup_unique';
 import * as migration_20260726_062809_task_4e_terms_satisfaction_traffic from './20260726_062809_task_4e_terms_satisfaction_traffic';
 import * as migration_20260726_080648_task_5a_traffic_daily from './20260726_080648_task_5a_traffic_daily';
+import * as migration_20260726_090701_task_5b_survey_public_freetext from './20260726_090701_task_5b_survey_public_freetext';
 
 export const migrations = [
   {
@@ -112,6 +113,11 @@ export const migrations = [
   {
     up: migration_20260726_080648_task_5a_traffic_daily.up,
     down: migration_20260726_080648_task_5a_traffic_daily.down,
-    name: '20260726_080648_task_5a_traffic_daily'
+    name: '20260726_080648_task_5a_traffic_daily',
+  },
+  {
+    up: migration_20260726_090701_task_5b_survey_public_freetext.up,
+    down: migration_20260726_090701_task_5b_survey_public_freetext.down,
+    name: '20260726_090701_task_5b_survey_public_freetext'
   },
 ];

@@ -1,3 +1,4 @@
+import { sql } from '@payloadcms/db-postgres'
 import fsPromises from 'fs/promises'
 import path from 'path'
 import type { Endpoint, Payload, PayloadRequest } from 'payload'
@@ -333,34 +334,46 @@ async function serveAttachmentFromS3(args: {
 }
 
 /**
- * Increments the attachment's per-file `downloadCount`. Runs ONLY after the
- * bytes were served successfully, for both drivers. `skipPostSideEffects` makes
- * the posts beforeValidate hook a no-op; `skipAudit` avoids a log row per
- * download (downloads are read-like). A counter-write failure must never deny a
- * legitimate download, so it is swallowed (logged).
+ * Atomically increments ONE attachment's per-file `downloadCount` (Task 5B D5
+ * fix). Runs ONLY after a TRULY-served 200 full-body response (see the call
+ * site — 304/206/302 never reach here).
+ *
+ * ## Why a scoped atomic SQL update, not the old whole-array rewrite
+ *
+ * The previous implementation read the WHOLE `posts.attachments` array, bumped
+ * one row's counter in memory, then wrote the ENTIRE array back via
+ * `payload.update`. That read-modify-write was doubly unsafe:
+ *   1. **Edit-clobber** — an admin saving the post (or editing a sibling
+ *      attachment's description/representative flag) between our READ and our
+ *      WRITE was silently overwritten: the download re-persisted its STALE copy
+ *      of the whole array, reverting the admin's change (last-writer-wins over
+ *      the whole array).
+ *   2. **Lost updates** — two concurrent downloads both read count=N and both
+ *      wrote N+1, so the counter advanced by one instead of two.
+ *
+ * The fix is a SCOPED, single-column UPDATE against exactly the one array row
+ * (`_parent_id` = the post, `file_sn` = the requested file). Payload stores an
+ * `array` field as its own table (`posts_attachments`), so this touches ONLY
+ * that row's `download_count` column — never the whole array, never a sibling
+ * row, never any other column — so a concurrent admin edit can no longer be
+ * clobbered by a download. `SET download_count = download_count + 1` is atomic
+ * at the row level, so concurrent increments never lose an update. The write is
+ * intentionally outside the request transaction (a best-effort side effect):
+ * a counter failure must never deny a legitimate download, so it is swallowed
+ * (logged).
  */
 async function incrementDownloadCount(args: {
   payload: Payload
-  req?: PayloadRequest
   postId: string | number
-  attachments: NonNullable<Post['attachments']>
-  index: number
+  fileSn: number
 }): Promise<void> {
-  const { payload, req, postId, attachments, index } = args
-  const updatedAttachments = attachments.map((a, i) =>
-    i === index
-      ? { ...a, downloadCount: (typeof a.downloadCount === 'number' ? a.downloadCount : 0) + 1 }
-      : { ...a },
-  ) as NonNullable<Post['attachments']>
+  const { payload, postId, fileSn } = args
   try {
-    await payload.update({
-      collection: 'posts',
-      id: postId,
-      data: { attachments: updatedAttachments },
-      overrideAccess: true,
-      req,
-      context: { skipPostSideEffects: true, skipAudit: true },
-    })
+    await payload.db.drizzle.execute(sql`
+      UPDATE "posts_attachments"
+      SET "download_count" = COALESCE("download_count", 0) + 1
+      WHERE "_parent_id" = ${Number(postId)} AND "file_sn" = ${fileSn}
+    `)
   } catch (err) {
     payload.logger?.error?.({ err }, '[fileDownload] downloadCount increment failed')
   }
@@ -471,7 +484,14 @@ export async function handleFileDownload(args: {
     return byteResponse
   }
 
-  await incrementDownloadCount({ payload, req, postId, attachments, index })
+  // D5 status gate: count ONLY a truly-served full download (200). A 304 Not
+  // Modified (conditional request), a 206 Partial Content (range request), or a
+  // 302 signed-URL redirect (S3) delivered NO fresh full body to the user and
+  // must NOT bump the counter — otherwise a browser re-validating its cache, a
+  // resumable/range fetch, or a redirect would inflate the count.
+  if (byteResponse.status === 200) {
+    await incrementDownloadCount({ payload, postId: post.id, fileSn })
+  }
 
   return byteResponse
 }

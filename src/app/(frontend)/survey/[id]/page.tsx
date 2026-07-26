@@ -66,7 +66,11 @@ export default async function SurveyRunPage({
 
   const showResults = resultsVisible(survey, 'public')
   const results = showResults
-    ? aggregateSurvey(questions, await loadSurveyResponses(payload, survey.id))
+    ? // D3 (Task 5B): PUBLIC audience — verbatim free-text is hidden unless the
+      // question opted in via `includeInPublicResults` (default OFF).
+      aggregateSurvey(questions, await loadSurveyResponses(payload, survey.id), {
+        audience: 'public',
+      })
     : null
 
   const submitted = first(raw, 'submitted') === '1'

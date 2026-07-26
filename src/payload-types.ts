@@ -1552,6 +1552,10 @@ export interface SurveyQuestion {
   type: 'single' | 'multi' | 'text' | 'textarea';
   required?: boolean | null;
   /**
+   * Show this question’s verbatim free-text/"Other" answers in PUBLIC results. Off by default (privacy); the admin export always includes them.
+   */
+  includeInPublicResults?: boolean | null;
+  /**
    * Choices for single/multi questions. An "Other" option renders a free-text box.
    */
   options?:
@@ -2814,6 +2818,7 @@ export interface SurveyQuestionsSelect<T extends boolean = true> {
   text?: T;
   type?: T;
   required?: T;
+  includeInPublicResults?: T;
   options?:
     | T
     | {

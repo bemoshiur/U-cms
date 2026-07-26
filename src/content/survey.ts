@@ -56,6 +56,8 @@ export type SurveyQuestionLike = {
   type?: SurveyQuestionType | string | null
   required?: boolean | null
   options?: SurveyOptionLike[] | null
+  /** D3 (Task 5B): opt this question's verbatim free-text into PUBLIC results. */
+  includeInPublicResults?: boolean | null
 }
 
 export type SubmittedAnswer = {
@@ -349,6 +351,10 @@ export type QuestionAggregate = {
   options: OptionAggregate[]
   otherTexts: string[]
   textAnswers: string[]
+  /** D3: whether this question opts its verbatim free-text into public results. */
+  includeInPublicResults: boolean
+  /** D3: true when verbatim answers EXISTED but were withheld for this audience. */
+  verbatimSuppressed: boolean
 }
 
 export type SurveyAggregate = {
@@ -372,11 +378,26 @@ export type ResponseLike = {
  * it returns per-option counts + percentages (of respondents who answered that
  * question) and any "other" free texts; for text/textarea it returns the list
  * of text answers. PURE + unit-tested.
+ *
+ * ## D3 (Task 5B) — verbatim free-text privacy by audience
+ *
+ * `audience` decides whether a question's VERBATIM answers (a text/textarea
+ * question's `textAnswers`, and the "Other" `otherTexts` on a single/multi
+ * question) are exposed:
+ *   - `'admin'` (DEFAULT): everything, always — the access-gated admin CSV
+ *     export and admin surfaces keep every verbatim answer.
+ *   - `'public'`: verbatim answers are WITHHELD unless the question's
+ *     `includeInPublicResults` is explicitly true (opt-in, default OFF). When
+ *     withheld, `verbatimSuppressed` is set so the results UI can note it.
+ * Option counts/percentages and `answeredCount` are aggregate (not verbatim) and
+ * are ALWAYS returned for both audiences.
  */
 export function aggregateSurvey(
   questions: SurveyQuestionLike[],
   responses: ResponseLike[],
+  opts: { audience?: 'admin' | 'public' } = {},
 ): SurveyAggregate {
+  const audience = opts.audience ?? 'admin'
   const sorted = sortedByOrder(questions)
 
   const perQuestion: QuestionAggregate[] = sorted.map((q) => {
@@ -396,6 +417,8 @@ export function aggregateSurvey(
       options,
       otherTexts: [] as string[],
       textAnswers: [] as string[],
+      includeInPublicResults: q.includeInPublicResults === true,
+      verbatimSuppressed: false,
     }
   })
 
@@ -442,6 +465,22 @@ export function aggregateSurvey(
     if (agg.answeredCount > 0) {
       for (const opt of agg.options) {
         opt.percentage = Math.round((opt.count / agg.answeredCount) * 1000) / 10
+      }
+    }
+  }
+
+  // D3: withhold verbatim free-text from the PUBLIC audience unless the question
+  // opted in. `verbatimSuppressed` records that answers existed but were hidden
+  // (so the public UI can show a note). Aggregate counts/% are untouched.
+  if (audience === 'public') {
+    for (const agg of perQuestion) {
+      if (
+        !agg.includeInPublicResults &&
+        (agg.otherTexts.length > 0 || agg.textAnswers.length > 0)
+      ) {
+        agg.verbatimSuppressed = true
+        agg.otherTexts = []
+        agg.textAnswers = []
       }
     }
   }
