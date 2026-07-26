@@ -1477,7 +1477,7 @@ export interface Survey {
    */
   hasResponses?: boolean | null;
   /**
-   * When the first response arrived. Once started, questions are immutable.
+   * Sticky start latch — set once the survey opens or gets its first response, never cleared. Freezes the questions.
    */
   startedAt?: string | null;
   updatedAt: string;
@@ -1540,7 +1540,7 @@ export interface SurveyResponse {
    */
   submittedAt?: string | null;
   /**
-   * Identity-free dedup key (hashed member id or client IP) for one-response enforcement.
+   * Server-only HMAC dedup key (never read back). Identity-free — enforces one-response without storing who.
    */
   participantKey?: string | null;
   answers?:

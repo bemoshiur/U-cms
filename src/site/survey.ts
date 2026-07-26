@@ -36,6 +36,33 @@ import type { CurrentMember } from './member'
 /** Thrown for a client-correctable submit problem; carries an HTTP status. */
 export class SurveyError extends APIError {}
 
+/**
+ * The server secret keying the participant-key HMAC (review C3). A dedicated
+ * `SURVEY_PARTICIPANT_SECRET` if set, else `PAYLOAD_SECRET` (always present).
+ * Never exposed; the key is only ever compared server-side.
+ */
+function participantSecret(): string {
+  return process.env.SURVEY_PARTICIPANT_SECRET || process.env.PAYLOAD_SECRET || ''
+}
+
+/** True iff an error is a Postgres unique-constraint violation (23505), however wrapped. */
+function isUniqueViolation(err: unknown): boolean {
+  const seen = new Set<unknown>()
+  let cur: unknown = err
+  while (cur && typeof cur === 'object' && !seen.has(cur)) {
+    seen.add(cur)
+    const e = cur as { code?: unknown; message?: unknown; cause?: unknown }
+    if (e.code === '23505') {
+      return true
+    }
+    if (typeof e.message === 'string' && /duplicate key value|unique constraint/i.test(e.message)) {
+      return true
+    }
+    cur = e.cause
+  }
+  return false
+}
+
 /** Generic profanity rejection (never echoes the matched word). */
 const PROFANITY_MESSAGE =
   'Your answer contains words that are not allowed. Please revise and resubmit.'
@@ -196,10 +223,14 @@ export async function submitSurveyResponse(
   const anonymous = survey.anonymous === true
   const respondent =
     anonymous || !memberOnSurveySite ? null : (member as NonNullable<CurrentMember>).id
-  const participantKey = computeParticipantKey(survey.id, {
-    memberId: memberOnSurveySite ? (member as NonNullable<CurrentMember>).id : null,
-    clientIp: clientIp ?? null,
-  })
+  const participantKey = computeParticipantKey(
+    survey.id,
+    {
+      memberId: memberOnSurveySite ? (member as NonNullable<CurrentMember>).id : null,
+      clientIp: clientIp ?? null,
+    },
+    participantSecret(),
+  )
 
   // ── one-response-per-participant ────────────────────────────────────────────
   if (respondent != null) {
@@ -237,21 +268,39 @@ export async function submitSurveyResponse(
   }
 
   // ── persist (server-forced fields) ──────────────────────────────────────────
-  const created = await payload.create({
-    collection: 'surveyResponses',
-    data: {
-      survey: survey.id,
-      respondent,
-      submittedAt: new Date().toISOString(),
-      participantKey,
-      ...(surveyTenantId !== undefined ? { tenant: surveyTenantId } : {}),
-      answers: validated.answers.map((a) => ({
-        question: a.questionId,
-        optionValues: a.optionValues,
-        ...(a.textValue ? { textValue: a.textValue } : {}),
-      })),
-    } as never,
-    overrideAccess: true,
-  })
-  return { id: created.id }
+  try {
+    const created = await payload.create({
+      collection: 'surveyResponses',
+      data: {
+        survey: survey.id,
+        respondent,
+        submittedAt: new Date().toISOString(),
+        participantKey,
+        ...(surveyTenantId !== undefined ? { tenant: surveyTenantId } : {}),
+        answers: validated.answers.map((a) => ({
+          question: a.questionId,
+          optionValues: a.optionValues,
+          ...(a.textValue ? { textValue: a.textValue } : {}),
+        })),
+      } as never,
+      overrideAccess: true,
+    })
+    return { id: created.id }
+  } catch (err) {
+    // Unique-constraint backstop for the dedup TOCTOU (review H4): a concurrent
+    // submit that won the (survey, respondent)/(survey, participantKey) race
+    // makes this create violate the unique index — surface the friendly
+    // already-responded instead of a raw 500. Re-confirm a duplicate now exists
+    // (belt and braces) before mapping so a genuine failure still propagates.
+    const nowDuplicate =
+      respondent != null
+        ? await memberHasResponded(payload, survey.id, respondent)
+        : participantKey != null
+          ? await participantKeyExists(payload, survey.id, participantKey)
+          : false
+    if (nowDuplicate || isUniqueViolation(err)) {
+      throw new SurveyError('You have already responded to this survey.', 409)
+    }
+    throw err
+  }
 }

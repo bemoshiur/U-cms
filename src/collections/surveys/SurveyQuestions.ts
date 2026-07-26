@@ -47,23 +47,55 @@ async function loadSurveyStarted(
  * once the parent survey has STARTED. Because hooks run under `overrideAccess`
  * too, this freeze applies to the admin panel, the Local API, AND system writes
  * alike — the seed builds questions BEFORE opening its survey, never after.
+ *
+ * SECURITY (review C1): on UPDATE the freeze is evaluated against the ORIGINAL
+ * parent survey (`originalDoc.survey`), never a client-supplied `data.survey`,
+ * and reparenting a question to a DIFFERENT survey is rejected outright. Without
+ * this, a same-tenant admin could PATCH a started survey's question with
+ * `{survey: <draftId>}` — the started check would see the draft (not started)
+ * and allow the edit, detaching the question from the started survey (its
+ * answers silently orphaned) and letting it then be deleted. A question belongs
+ * to exactly one survey for life; the `survey` field is ALSO field-locked on
+ * update (defense in depth).
  */
 const deriveTenantAndEnforceImmutability: CollectionBeforeValidateHook = async ({
   data,
+  operation,
   originalDoc,
   req,
 }) => {
   if (!data) {
     return data
   }
-  const surveyId = toRelationId('survey' in data ? data.survey : originalDoc?.survey)
+
+  // On update, the authoritative parent is the ORIGINAL survey — never trust an
+  // incoming `data.survey`. Reject any attempt to reparent to a different survey.
+  let surveyId: string | number | undefined
+  if (operation === 'update') {
+    const originalSurveyId = toRelationId(originalDoc?.survey)
+    if ('survey' in data) {
+      const targetSurveyId = toRelationId(data.survey)
+      if (
+        targetSurveyId !== undefined &&
+        originalSurveyId !== undefined &&
+        String(targetSurveyId) !== String(originalSurveyId)
+      ) {
+        throw new APIError('A survey question cannot be moved to a different survey.', 400)
+      }
+    }
+    surveyId = originalSurveyId
+  } else {
+    surveyId = toRelationId(data.survey)
+  }
+
   const info = await loadSurveyStarted(req, surveyId)
   if (!info) {
     // `survey` is required — let the field's own required validation reject it.
     return data
   }
 
-  // Immutability freeze (create a new question OR edit an existing one).
+  // Immutability freeze (create a new question OR edit an existing one), always
+  // against the ORIGINAL parent on update.
   if (info.started) {
     throw new APIError(IMMUTABLE_MESSAGE, 400)
   }
@@ -122,7 +154,16 @@ export const SurveyQuestions: CollectionConfig = {
     delete: tenantScopedMenuAccess(SURVEYS_MENU_KEY),
   },
   fields: [
-    { name: 'survey', type: 'relationship', relationTo: 'surveys', required: true },
+    {
+      name: 'survey',
+      type: 'relationship',
+      relationTo: 'surveys',
+      required: true,
+      // A question belongs to one survey for life — never reparentable (review
+      // C1). Locked on update; the beforeValidate hook also rejects a changed
+      // survey outright (defense in depth). Set once on create.
+      access: { update: () => false },
+    },
     {
       name: 'order',
       type: 'number',

@@ -1,4 +1,4 @@
-import { createHash } from 'crypto'
+import { createHmac } from 'crypto'
 
 import { toRelationId } from '../collections/utils'
 
@@ -34,6 +34,8 @@ export type SurveyLike = {
   openFrom?: string | Date | null
   openTo?: string | Date | null
   hasResponses?: boolean | null
+  /** STICKY start latch — set once the window opens or the first response lands, never un-set. */
+  startedAt?: string | Date | null
   anonymous?: boolean | null
   audience?: SurveyAudience | string | null
   resultVisibility?: SurveyResultVisibility | string | null
@@ -107,19 +109,40 @@ export function isSurveyOpen(survey: SurveyLike, now: Date = new Date()): boolea
 
 /**
  * True once a survey is STARTED — the trigger that freezes its questions/options
- * (ref 2-12). A survey is started once its first response has arrived
- * (`hasResponses`) OR its window has opened (`now >= openFrom`). A draft with no
- * `openFrom` and no responses is NOT started, so an admin can still build its
- * questions; scheduling it with a past/now `openFrom`, or the schedule simply
- * arriving, flips it started. `isActive` deliberately does NOT gate this: an
- * admin must never be able to un-freeze a started survey's questions by toggling
- * it inactive.
+ * (ref 2-12). Started once ANY of:
+ *  - the STICKY `startedAt` latch is set (persisted the first time the window
+ *    opened or a response arrived, and NEVER un-set — see `Surveys.ts`
+ *    `latchStartedAt`). This is what makes the freeze irreversible: an admin
+ *    cannot un-freeze by pushing `openFrom` back into the future (security
+ *    review C2), because the latch was already stamped on the previous save.
+ *  - `hasResponses` (a response exists), or
+ *  - the live window check (`now >= openFrom`) — covers the gap between the
+ *    window opening by the clock and the next survey save/response that latches.
+ * `isActive` deliberately does NOT gate this: an admin must never be able to
+ * un-freeze by toggling the survey inactive.
  */
 export function isSurveyStarted(survey: SurveyLike, now: Date = new Date()): boolean {
+  if (survey.startedAt) {
+    return true
+  }
   if (survey.hasResponses === true) {
     return true
   }
   const from = toDate(survey.openFrom)
+  return Boolean(from && now.getTime() >= from.getTime())
+}
+
+/**
+ * Whether a survey's window is (already) OPEN as of `now` — used by the sticky
+ * latch to decide, at save time, if the CURRENTLY-persisted window has opened.
+ * Distinct from `isSurveyStarted`: this looks only at `openFrom` (ignores the
+ * latch/responses), so the latch reads the pre-change state and stamps once.
+ */
+export function windowHasOpened(
+  openFrom: string | Date | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const from = toDate(openFrom)
   return Boolean(from && now.getTime() >= from.getTime())
 }
 
@@ -428,16 +451,25 @@ export function aggregateSurvey(
 
 /**
  * Deterministic, identity-free participant key for one-response-per-participant
- * enforcement (ref 2-12). Derived from a member id when the respondent is
- * logged in (so even an ANONYMOUS survey can dedupe one-per-member WITHOUT
- * storing who answered), else from a trustworthy client IP. Returns `null` when
- * neither is available — the caller then treats dedup as best-effort (no key,
- * no enforcement), the documented conservative choice. The survey id is mixed in
- * so a key never collides across surveys.
+ * enforcement (ref 2-12). Derived from a member id when the respondent is logged
+ * in (so even an ANONYMOUS survey can dedupe one-per-member WITHOUT storing who
+ * answered), else from a trustworthy client IP. Returns `null` when neither is
+ * available — the caller then treats dedup as best-effort (no key, no
+ * enforcement), the documented conservative choice.
+ *
+ * SECURITY (review C3): the key is an **HMAC keyed with a SERVER SECRET**, not a
+ * bare hash, so it CANNOT be recomputed off-server. A bare `sha256(surveyId:
+ * memberId)` would let an admin — the very party anonymity protects against —
+ * recompute the digest for any candidate member id and de-anonymize a response.
+ * With the HMAC, deriving the key requires the secret (never exposed), and the
+ * `participantKey` column is additionally field-level `read:false`, so it never
+ * leaves the server. The survey id is mixed into the message so a key never
+ * collides across surveys, and two different secrets yield different keys.
  */
 export function computeParticipantKey(
   surveyId: string | number,
   principal: { memberId?: string | number | null; clientIp?: string | null },
+  serverSecret: string,
 ): string | null {
   let base: string
   if (principal.memberId !== undefined && principal.memberId !== null) {
@@ -447,5 +479,5 @@ export function computeParticipantKey(
   } else {
     return null
   }
-  return createHash('sha256').update(`${surveyId}:${base}`).digest('hex')
+  return createHmac('sha256', serverSecret).update(`${surveyId}:${base}`).digest('hex')
 }

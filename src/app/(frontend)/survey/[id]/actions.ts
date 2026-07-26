@@ -4,7 +4,7 @@ import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 import { resolveClientIp } from '@/security/adminIpEnforcement'
-import { checkPublicRateLimit } from '@/security/rateLimit'
+import { checkPublicRateLimit, PUBLIC_ENDPOINT_NAMES } from '@/security/rateLimit'
 import type { SubmittedAnswer } from '@/content/survey'
 import { getCurrentMember } from '@/site/member'
 import { getPayloadClient } from '@/site/rsc'
@@ -72,7 +72,7 @@ export async function submitSurveyAction(formData: FormData): Promise<void> {
   }
 
   const requestHeaders = await headers()
-  const rl = checkPublicRateLimit({ headers: requestHeaders }, 'survey-respond')
+  const rl = checkPublicRateLimit({ headers: requestHeaders }, PUBLIC_ENDPOINT_NAMES.surveyRespond)
   if (!rl.allowed) {
     redirect(`${path}?error=` + encodeURIComponent('Too many requests. Please wait a while.'))
   }

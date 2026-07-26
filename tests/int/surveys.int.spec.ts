@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import config from '@/payload.config'
 import { toRelationId } from '@/collections/utils'
-import type { SubmittedAnswer } from '@/content/survey'
+import { surveyStatus, type SubmittedAnswer } from '@/content/survey'
 import { handleSurveyResponsesExport, handleSurveySummaryExport } from '@/endpoints/surveyExport'
 import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
@@ -488,6 +488,215 @@ describe('surveys: questions, responses, results, exports (Task 4D)', () => {
     })
   })
 
+  // ── security-review regressions (C1/C2/C3/H4) ──────────────────────────────
+  describe('security-review fixes', () => {
+    async function makeMember(tenantId: number): Promise<CurrentMember> {
+      const m = await payload.create({
+        collection: 'members',
+        data: {
+          loginId: `sr${lettersOnly()}`,
+          email: `${marker('sr')}@example.com`,
+          name: 'SR Member',
+          password: TEST_PASSWORD,
+          status: 'active',
+          tenant: tenantId,
+        } as never,
+        overrideAccess: true,
+      })
+      return { id: m.id, name: 'SR Member', loginId: 'x', tenant: tenantId }
+    }
+
+    it('C1: a started survey question cannot be reparented to another survey (nor bypass the freeze)', async () => {
+      const startedSurvey = await makeDraftSurvey(demoSiteId)
+      const qId = await addQuestion(startedSurvey, { order: 1, text: 'Locked Q', type: 'text' })
+      const draftSurvey = await makeDraftSurvey(demoSiteId) // NOT started
+      await openSurvey(startedSurvey) // startedSurvey now started/frozen
+
+      // Reparent to the (not-started) draft — the bypass the review flagged.
+      await expect(
+        payload.update({
+          collection: 'surveyQuestions',
+          id: qId,
+          data: { survey: draftSurvey, text: 'moved' },
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+
+      // The question is still attached to the started survey, and still frozen.
+      const reloaded = await payload.findByID({
+        collection: 'surveyQuestions',
+        id: qId,
+        overrideAccess: true,
+      })
+      expect(String(toRelationId(reloaded.survey))).toBe(String(startedSurvey))
+      await expect(
+        payload.delete({ collection: 'surveyQuestions', id: qId, overrideAccess: true }),
+      ).rejects.toThrow()
+    })
+
+    it('C1: reparenting is rejected even for a NOT-started survey (survey is fixed for life)', async () => {
+      const surveyA = await makeDraftSurvey(demoSiteId)
+      const qId = await addQuestion(surveyA, { order: 1, text: 'Q', type: 'text' })
+      const surveyB = await makeDraftSurvey(demoSiteId)
+      await expect(
+        payload.update({
+          collection: 'surveyQuestions',
+          id: qId,
+          data: { survey: surveyB },
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('C2: the started latch is STICKY — moving openFrom to the future cannot un-freeze questions', async () => {
+      const surveyId = await makeDraftSurvey(demoSiteId, { openTo: future(24 * HOUR) })
+      const qId = await addQuestion(surveyId, { order: 1, text: 'Q', type: 'text' })
+
+      // Open it (draft → open). Frozen by the live window check.
+      await payload.update({
+        collection: 'surveys',
+        id: surveyId,
+        data: { openFrom: past(HOUR) },
+        overrideAccess: true,
+      })
+      await expect(
+        payload.update({
+          collection: 'surveyQuestions',
+          id: qId,
+          data: { text: 'while-open' },
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+
+      // Attack: push openFrom into the FUTURE to try to un-freeze.
+      await payload.update({
+        collection: 'surveys',
+        id: surveyId,
+        data: { openFrom: future(HOUR) },
+        overrideAccess: true,
+      })
+      const survey = await payload.findByID({
+        collection: 'surveys',
+        id: surveyId,
+        overrideAccess: true,
+      })
+      // The window now reads scheduled, but the sticky latch is set...
+      expect(surveyStatus(survey)).toBe('scheduled')
+      expect(survey.startedAt).toBeTruthy()
+      // ...so the question is STILL frozen.
+      await expect(
+        payload.update({
+          collection: 'surveyQuestions',
+          id: qId,
+          data: { text: 'after-rollback' },
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('C3: participantKey is never returned by a normal (non-override) read', async () => {
+      const member = await makeMember(demoSiteId)
+      const surveyId = await makeDraftSurvey(demoSiteId, { audience: 'members', anonymous: true })
+      await makeStandardQuestions(surveyId)
+      await openSurvey(surveyId)
+      const res = await submitSurveyResponse(
+        payload,
+        {
+          surveyId,
+          submittedByOrder: sub([
+            [1, { optionValues: ['web'] }],
+            [2, { optionValues: ['a'] }],
+          ]),
+        },
+        { member, clientIp: null },
+      )
+
+      // A content.surveys admin on this tenant.
+      const surveysMenu = await payload.find({
+        collection: 'adminMenus',
+        where: { menuKey: { equals: 'content.surveys' } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const role = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_SR_${lettersOnly().toUpperCase()}`,
+          name: 'SR surveys role',
+          description: 'content.surveys',
+          menuGrants: [surveysMenu.docs[0]!.id],
+        },
+        overrideAccess: true,
+      })
+      const admin = await payload.create({
+        collection: 'users',
+        data: {
+          email: `sradmin-${marker('a')}@example.com`,
+          password: TEST_PASSWORD,
+          roles: [role.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+
+      // Non-override read (as the admin) must NOT expose participantKey.
+      const asAdmin = await payload.findByID({
+        collection: 'surveyResponses',
+        id: res.id,
+        overrideAccess: false,
+        user: admin,
+      })
+      expect(asAdmin.participantKey).toBeUndefined()
+      // overrideAccess (server internals) still sees it (dedup relies on it).
+      const asServer = await payload.findByID({
+        collection: 'surveyResponses',
+        id: res.id,
+        overrideAccess: true,
+      })
+      expect(asServer.participantKey).toBeTruthy()
+    })
+
+    it('H4: concurrent double-submit persists exactly one response (unique-index backstop)', async () => {
+      const member = await makeMember(demoSiteId)
+      const surveyId = await makeDraftSurvey(demoSiteId, { audience: 'members', anonymous: false })
+      await makeStandardQuestions(surveyId)
+      await openSurvey(surveyId)
+
+      const submit = () =>
+        submitSurveyResponse(
+          payload,
+          {
+            surveyId,
+            submittedByOrder: sub([
+              [1, { optionValues: ['web'] }],
+              [2, { optionValues: ['a'] }],
+            ]),
+          },
+          { member, clientIp: null },
+        )
+      const results = await Promise.allSettled([submit(), submit()])
+      const fulfilled = results.filter((r) => r.status === 'fulfilled')
+      const rejected = results.filter((r) => r.status === 'rejected')
+      expect(fulfilled).toHaveLength(1)
+      expect(rejected).toHaveLength(1)
+      // The loser is a friendly SurveyError, not a raw 500.
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(SurveyError)
+
+      const stored = await payload.find({
+        collection: 'surveyResponses',
+        where: {
+          and: [{ survey: { equals: surveyId } }, { respondent: { equals: member!.id } }],
+        },
+        limit: 0,
+        pagination: false,
+        overrideAccess: true,
+      })
+      expect(stored.docs).toHaveLength(1)
+    })
+  })
+
   // ── tenant scoping + exports ───────────────────────────────────────────────
   describe('tenant scoping + CSV exports', () => {
     let siteAId: number
@@ -655,8 +864,18 @@ describe('surveys: questions, responses, results, exports (Task 4D)', () => {
 
   // ── seed ───────────────────────────────────────────────────────────────────
   describe('seed', () => {
-    it('seeds one open survey with 3 questions + 2 responses idempotently', async () => {
-      await runSeed(payload, [surveysStep])
+    async function countResponses(surveyId: number): Promise<number> {
+      const res = await payload.find({
+        collection: 'surveyResponses',
+        where: { survey: { equals: surveyId } },
+        limit: 0,
+        pagination: false,
+        overrideAccess: true,
+      })
+      return res.docs.length
+    }
+
+    it('seeds one open survey with 3 questions + 2 responses, idempotently', async () => {
       await runSeed(payload, [surveysStep])
 
       const found = await payload.find({
@@ -668,6 +887,7 @@ describe('surveys: questions, responses, results, exports (Task 4D)', () => {
         pagination: false,
         overrideAccess: true,
       })
+      // Exactly ONE survey, regardless of how many times the seed has run.
       expect(found.docs).toHaveLength(1)
       const surveyId = found.docs[0]!.id
 
@@ -680,14 +900,14 @@ describe('surveys: questions, responses, results, exports (Task 4D)', () => {
       })
       expect(questions.docs).toHaveLength(3)
 
-      const responses = await payload.find({
-        collection: 'surveyResponses',
-        where: { survey: { equals: surveyId } },
-        limit: 0,
-        pagination: false,
-        overrideAccess: true,
-      })
-      expect(responses.docs).toHaveLength(2)
+      // The seed's own 2 responses are present (the shared demo survey may carry
+      // extra e2e/manual submissions — so assert AT LEAST 2, and that a second
+      // seed run adds NONE: the true idempotency guarantee).
+      const before = await countResponses(surveyId)
+      expect(before).toBeGreaterThanOrEqual(2)
+      await runSeed(payload, [surveysStep])
+      const after = await countResponses(surveyId)
+      expect(after).toBe(before)
     })
   })
 })

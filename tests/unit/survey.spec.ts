@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -227,25 +228,35 @@ describe('aggregateSurvey', () => {
   })
 })
 
-describe('computeParticipantKey', () => {
+describe('computeParticipantKey (HMAC, review C3)', () => {
+  const SECRET = 'server-secret-A'
   it('is deterministic and identity-free from a member id', () => {
-    const a = computeParticipantKey(5, { memberId: 42 })
-    const b = computeParticipantKey(5, { memberId: 42 })
+    const a = computeParticipantKey(5, { memberId: 42 }, SECRET)
+    const b = computeParticipantKey(5, { memberId: 42 }, SECRET)
     expect(a).toBe(b)
     expect(a).not.toContain('42')
   })
   it('differs across surveys for the same member', () => {
-    expect(computeParticipantKey(5, { memberId: 42 })).not.toBe(
-      computeParticipantKey(6, { memberId: 42 }),
+    expect(computeParticipantKey(5, { memberId: 42 }, SECRET)).not.toBe(
+      computeParticipantKey(6, { memberId: 42 }, SECRET),
     )
   })
   it('falls back to the client IP, and is null when neither is available', () => {
-    expect(computeParticipantKey(5, { clientIp: '1.2.3.4' })).toBeTruthy()
-    expect(computeParticipantKey(5, {})).toBeNull()
+    expect(computeParticipantKey(5, { clientIp: '1.2.3.4' }, SECRET)).toBeTruthy()
+    expect(computeParticipantKey(5, {}, SECRET)).toBeNull()
   })
   it('prefers the member id over the IP (one-per-member even when anonymous)', () => {
-    const withIp = computeParticipantKey(5, { memberId: 42, clientIp: '1.2.3.4' })
-    const withoutIp = computeParticipantKey(5, { memberId: 42 })
+    const withIp = computeParticipantKey(5, { memberId: 42, clientIp: '1.2.3.4' }, SECRET)
+    const withoutIp = computeParticipantKey(5, { memberId: 42 }, SECRET)
     expect(withIp).toBe(withoutIp)
+  })
+  it('is NOT recomputable without the secret — two secrets yield different keys', () => {
+    const withA = computeParticipantKey(5, { memberId: 42 }, 'server-secret-A')
+    const withB = computeParticipantKey(5, { memberId: 42 }, 'server-secret-B')
+    expect(withA).not.toBe(withB)
+    // A bare sha256(surveyId:m:id) — what an admin could otherwise recompute to
+    // de-anonymize — must NOT match the HMAC.
+    const bareHash = createHash('sha256').update('5:m:42').digest('hex')
+    expect(withA).not.toBe(bareHash)
   })
 })

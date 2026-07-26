@@ -1,14 +1,50 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionBeforeChangeHook, CollectionConfig } from 'payload'
 
 import { hasMenuAccessSync } from '../../access/hasMenuAccess'
 import { tenantMembershipGuard, tenantScopedMenuAccess } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
-import { surveyStatus } from '../../content/survey'
+import { surveyStatus, windowHasOpened } from '../../content/survey'
 import { surveyExportEndpoints } from '../../endpoints/surveyExport'
 import { SURVEYS_MENU_KEY } from './defaults'
 
 /** Access-history audit hooks (Task 2A) for this collection's mutations. */
 const surveysAudit = auditCollection(SURVEYS_MENU_KEY)
+
+/**
+ * STICKY start latch (review C2). Stamps `startedAt` the first time a survey is
+ * saved while its window has ALREADY opened, or once it has responses, and never
+ * un-sets it. Crucially it reads the CURRENTLY-PERSISTED `openFrom`
+ * (`originalDoc.openFrom`) on update, not the incoming value — so an admin who
+ * PATCHes `openFrom` into the future to try to un-freeze the questions instead
+ * TRIPS the latch on that very save (the pre-change window was open), and
+ * `isSurveyStarted` (which reads this latch) stays true forever after. A genuine
+ * draft/scheduled survey (window not yet open, no responses) is never latched,
+ * so its questions remain editable. Runs in `beforeChange` (after field-access),
+ * so the write-locked `startedAt` is set via the hook data path.
+ */
+const latchStartedAt: CollectionBeforeChangeHook = ({ data, operation, originalDoc }) => {
+  if (!data) {
+    return data
+  }
+  // Once latched, keep it forever (never allow an un-set, even via overrideAccess).
+  const existing = originalDoc?.startedAt
+  if (existing) {
+    data.startedAt = existing
+    return data
+  }
+  // A caller may have explicitly stamped it (e.g. the responses hook) — respect it.
+  if (data.startedAt) {
+    return data
+  }
+  const now = new Date()
+  // On create, check the incoming window; on update, the PRE-CHANGE window.
+  const openFromForCheck = operation === 'create' ? data.openFrom : originalDoc?.openFrom
+  const hasResponses = originalDoc?.hasResponses === true || data.hasResponses === true
+  if (hasResponses || windowHasOpened(openFromForCheck, now)) {
+    data.startedAt = now.toISOString()
+  }
+  return data
+}
 
 /**
  * Legacy 설문조사 관리 (Survey Management — refs 2-9..2-12). TENANT-SCOPED
@@ -143,10 +179,14 @@ export const Surveys: CollectionConfig = {
     {
       name: 'startedAt',
       type: 'date',
+      // STICKY LATCH (review C2): stamped by `latchStartedAt` the first time the
+      // window opens OR a response arrives, and NEVER un-set. `isSurveyStarted`
+      // reads it, so the question freeze cannot be reversed by editing openFrom.
       access: { create: () => false, update: () => false },
       admin: {
         readOnly: true,
-        description: 'When the first response arrived. Once started, questions are immutable.',
+        description:
+          'Sticky start latch — set once the survey opens or gets its first response, never cleared. Freezes the questions.',
       },
     },
   ],
@@ -155,6 +195,7 @@ export const Surveys: CollectionConfig = {
   endpoints: surveyExportEndpoints,
   hooks: {
     beforeValidate: [tenantMembershipGuard('tenant')],
+    beforeChange: [latchStartedAt],
     afterChange: [surveysAudit.afterChange],
     afterDelete: [surveysAudit.afterDelete],
   },

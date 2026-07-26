@@ -15,6 +15,17 @@ const responsesAudit = auditCollection(SURVEYS_MENU_KEY)
 /** Field-access lock: server-forced fields a client/admin-panel write can never set. */
 const serverForced = { create: () => false, update: () => false } as const
 
+/**
+ * Like {@link serverForced}, but ALSO `read:false` (review C3). The
+ * `participantKey` is an HMAC dedup token; making it unreadable means it never
+ * leaves the server via ANY API read or export, so no one (not even an admin —
+ * the party anonymity protects against) can obtain it to correlate responses.
+ * The submit path computes + compares it server-side (a `where` filter still
+ * works — read access gates OUTPUT, not query predicates); `overrideAccess`
+ * reads (tests) still see it.
+ */
+const secretServerField = { create: () => false, update: () => false, read: () => false } as const
+
 /** Derives a response's `tenant` from its survey so it always matches (defense in depth). */
 const deriveResponseTenant: CollectionBeforeValidateHook = async ({ data, originalDoc, req }) => {
   if (!data) {
@@ -40,11 +51,12 @@ const deriveResponseTenant: CollectionBeforeValidateHook = async ({ data, origin
 }
 
 /**
- * On the FIRST response to a survey, flips the survey's `hasResponses` + stamps
- * `startedAt` (via `overrideAccess`, since those fields are write-locked). This
- * is the second trigger (besides the open window) that freezes the survey's
- * questions (ref 2-12). Idempotent (only writes the survey when `hasResponses`
- * isn't already set); it updates `surveys`, not `surveyResponses`, so it cannot
+ * On the FIRST response to a survey, flips the survey's `hasResponses` (via
+ * `overrideAccess`, since it's write-locked). This is the second trigger
+ * (besides the open window) that freezes the survey's questions (ref 2-12); the
+ * survey's own `latchStartedAt` beforeChange sees `hasResponses` and stamps the
+ * sticky `startedAt` latch. Idempotent (only writes when `hasResponses` isn't
+ * already set); it updates `surveys`, not `surveyResponses`, so it cannot
  * re-enter itself.
  */
 const markSurveyStarted: CollectionAfterChangeHook = async ({ doc, operation, req }) => {
@@ -67,7 +79,7 @@ const markSurveyStarted: CollectionAfterChangeHook = async ({ doc, operation, re
     await req.payload.update({
       collection: 'surveys',
       id: surveyId,
-      data: { hasResponses: true, startedAt: doc.submittedAt ?? new Date().toISOString() },
+      data: { hasResponses: true },
       overrideAccess: true,
       req,
     })
@@ -98,7 +110,14 @@ export const SurveyResponses: CollectionConfig = {
     update: tenantScopedMenuAccess(SURVEYS_MENU_KEY),
     delete: tenantScopedMenuAccess(SURVEYS_MENU_KEY),
   },
-  indexes: [{ fields: ['survey', 'participantKey'] }],
+  // UNIQUE dedup backstops for the one-response-per-participant TOCTOU (review
+  // H4): a find-then-create race is closed by the DB. Postgres treats NULLs as
+  // distinct, so best-effort rows with a null key (untrusted anon) and anonymous
+  // rows with a null respondent do NOT collide — only real keys/members dedupe.
+  indexes: [
+    { fields: ['survey', 'participantKey'], unique: true },
+    { fields: ['survey', 'respondent'], unique: true },
+  ],
   fields: [
     {
       name: 'survey',
@@ -126,11 +145,11 @@ export const SurveyResponses: CollectionConfig = {
     {
       name: 'participantKey',
       type: 'text',
-      access: serverForced,
+      access: secretServerField,
       admin: {
         readOnly: true,
         description:
-          'Identity-free dedup key (hashed member id or client IP) for one-response enforcement.',
+          'Server-only HMAC dedup key (never read back). Identity-free — enforces one-response without storing who.',
       },
     },
     {
