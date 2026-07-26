@@ -1038,4 +1038,250 @@ describe('Task 6D — security-document boards + §3 privacy menu wiring', () =>
       ).rejects.toThrow()
     })
   })
+
+  // ── round-4: non-monotonic re-expose closed (ordinary post can't strip/ref) ─
+  describe('security-doc attachment re-expose guard (round-4)', () => {
+    const PNG =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
+
+    async function makeAttachment(): Promise<number> {
+      const created = await payload.create({
+        collection: 'attachments',
+        data: { alt: 're-expose fixture', tenant: demoSiteId } as never,
+        file: {
+          data: Buffer.from(PNG, 'base64'),
+          name: `sd-rx-${Date.now()}-${Math.floor(Math.random() * 100000)}.png`,
+          mimetype: 'image/png',
+          size: Buffer.from(PNG, 'base64').length,
+        },
+        overrideAccess: true,
+      })
+      return created.id as number
+    }
+
+    let secMediaId: number
+    let secPostId: number
+    let ordBoardId: number
+    let contentAdmin: Awaited<ReturnType<typeof payload.create>>
+
+    beforeAll(async () => {
+      const secBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('RxSecBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+          securityDoc: true,
+        },
+        overrideAccess: true,
+      })
+      secMediaId = await makeAttachment()
+      const secPost = await payload.create({
+        collection: 'posts',
+        data: {
+          board: secBoard.id,
+          title: marker('RxSecPost'),
+          attachments: [{ media: secMediaId }],
+        } as never,
+        overrideAccess: true,
+      })
+      secPostId = secPost.id
+
+      const ordBoard = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('RxOrdBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+        },
+        overrideAccess: true,
+      })
+      ordBoardId = ordBoard.id
+
+      const contentRole = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_TEST_RX_${lettersOnly().toUpperCase()}`,
+          name: 'Re-expose content role',
+          description: 'content.boards + content.posts',
+          menuGrants: [await menuId('content.boards'), await menuId('content.posts')],
+        },
+        overrideAccess: true,
+      })
+      contentAdmin = await payload.create({
+        collection: 'users',
+        data: {
+          email: `sd-rx-content-${marker('e')}@example.com`.toLowerCase(),
+          password: TEST_PASSWORD,
+          roles: [contentRole.id],
+          tenants: [{ tenant: demoSiteId }],
+          status: 'active',
+        } as never,
+        overrideAccess: true,
+      })
+    })
+
+    it('the security-doc post marked its attachment securityDoc:true (recompute)', async () => {
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: secMediaId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBe(true)
+    })
+
+    it('a content admin CANNOT create an ordinary post referencing a security-doc attachment (rejected at source)', async () => {
+      await expect(
+        payload.create({
+          collection: 'posts',
+          data: {
+            board: ordBoardId,
+            title: marker('RxAttack'),
+            attachments: [{ media: secMediaId }],
+          } as never,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+
+      // The attachment's flag is UNCHANGED (not stripped) and the raw route
+      // still denies the content admin.
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: secMediaId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBe(true)
+      await expect(
+        payload.findByID({
+          collection: 'attachments',
+          id: secMediaId,
+          user: contentAdmin,
+          overrideAccess: false,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('the source guard blocks even an overrideAccess ordinary write (fail-closed) — no shared reference can form', async () => {
+      await expect(
+        payload.create({
+          collection: 'posts',
+          data: {
+            board: ordBoardId,
+            title: marker('RxSystemOrd'),
+            attachments: [{ media: secMediaId }],
+          } as never,
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: secMediaId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBe(true)
+    })
+
+    it('recompute-any HEALS a stripped flag: a security-doc post re-save restores securityDoc:true', async () => {
+      // Simulate a hypothetical strip (defense-in-depth backstop): force the
+      // attachment ordinary, then re-save the security-doc post that references
+      // it — the recompute-any sync (referenced-by-ANY-security-doc-post) restores
+      // the flag, so it can never be permanently lowered while a §3 post holds it.
+      await payload.update({
+        collection: 'attachments',
+        id: secMediaId,
+        data: { securityDoc: false } as never,
+        overrideAccess: true,
+      })
+      expect(
+        (
+          await payload.findByID({
+            collection: 'attachments',
+            id: secMediaId,
+            overrideAccess: true,
+          })
+        ).securityDoc,
+      ).toBe(false)
+
+      await payload.update({
+        collection: 'posts',
+        id: secPostId,
+        data: { author: marker('resave') },
+        overrideAccess: true,
+      })
+
+      const healed = await payload.findByID({
+        collection: 'attachments',
+        id: secMediaId,
+        overrideAccess: true,
+      })
+      expect(healed.securityDoc).toBe(true)
+    })
+
+    it('flipping the OWNING security-doc board to ordinary clears the flag (privileged) when no security-doc post references it', async () => {
+      const board = await payload.create({
+        collection: 'boards',
+        data: {
+          tenant: demoSiteId,
+          name: marker('RxFlipBoard'),
+          boardType: attachmentTypeId,
+          attachmentsEnabled: true,
+          securityDoc: true,
+        },
+        overrideAccess: true,
+      })
+      const mediaId = await makeAttachment()
+      await payload.create({
+        collection: 'posts',
+        data: {
+          board: board.id,
+          title: marker('RxFlipPost'),
+          attachments: [{ media: mediaId }],
+        } as never,
+        overrideAccess: true,
+      })
+      expect(
+        (await payload.findByID({ collection: 'attachments', id: mediaId, overrideAccess: true }))
+          .securityDoc,
+      ).toBe(true)
+
+      // Privileged flip security-doc → ordinary; no other security-doc post
+      // references the attachment → it is cleared.
+      await payload.update({
+        collection: 'boards',
+        id: board.id,
+        data: { securityDoc: false },
+        overrideAccess: true,
+      })
+      const after = await payload.findByID({
+        collection: 'attachments',
+        id: mediaId,
+        overrideAccess: true,
+      })
+      expect(after.securityDoc).toBe(false)
+    })
+
+    it('ordinary attachments are unaffected — a content admin can reference a fresh attachment on an ordinary post', async () => {
+      const freshId = await makeAttachment()
+      const post = await payload.create({
+        collection: 'posts',
+        data: {
+          board: ordBoardId,
+          title: marker('RxOrdOk'),
+          attachments: [{ media: freshId }],
+        } as never,
+        user: contentAdmin,
+        overrideAccess: false,
+      })
+      expect(post.id).toBeDefined()
+      const media = await payload.findByID({
+        collection: 'attachments',
+        id: freshId,
+        overrideAccess: true,
+      })
+      expect(media.securityDoc).toBeFalsy()
+    })
+  })
 })

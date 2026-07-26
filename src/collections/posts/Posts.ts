@@ -147,6 +147,40 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
     }
   }
 
+  // §3 attachment cross-reference guard (Task 6D round-4). A NON-security-doc post
+  // may not reference an attachment currently flagged `securityDoc` — that would
+  // pull a §3 file into an ordinary post and (via the denorm sync) attempt to
+  // re-expose it. Security-doc attachments belong ONLY to security-doc posts.
+  // Rejected at the SOURCE so the shared-reference state never forms; the
+  // recompute-any denorm sync is the backstop. Skipped for the privileged
+  // board→posts flip (that path runs with `skipPostSideEffects`, short-circuited
+  // above) and for security-doc posts themselves.
+  if (!boardIsSecurityDoc) {
+    const attsForRefGuard = eff('attachments')
+    const refIds = Array.isArray(attsForRefGuard)
+      ? attsForRefGuard
+          .map((a) => toRelationId((a as { media?: unknown })?.media))
+          .filter((id): id is number | string => id !== undefined)
+      : []
+    if (refIds.length > 0) {
+      const secureRefs = await req.payload.find({
+        collection: 'attachments',
+        where: { and: [{ id: { in: refIds } }, { securityDoc: { equals: true } }] },
+        depth: 0,
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+        req,
+      })
+      if (secureRefs.docs.length > 0) {
+        throw new APIError(
+          'This attachment belongs to a security-document library and cannot be added to an ordinary post.',
+          403,
+        )
+      }
+    }
+  }
+
   // ── (3) required field-grid rows ─────────────────────────────────────────
   const boardFields = Array.isArray(board.fields) ? board.fields : []
   for (const f of boardFields) {
@@ -395,18 +429,29 @@ const stampAnswerAttribution: CollectionBeforeChangeHook = ({ data, req }) => {
 }
 
 /**
- * Denormalizes the post's `securityDoc` class onto the `attachments` it
- * references (Task 6D — round-3 fix). The raw `/api/attachments[/file]` routes
- * gate on the attachment's own `read` access, which keys off
- * `attachments.securityDoc`; that flag has to be kept in sync with the owning
- * post or a §3 security-doc file would be reachable by a content-only admin via
- * that alternate door. On every post write, this bulk-updates the referenced
- * attachments to match the post's class — ONLY the rows that actually differ, so
- * ordinary writes touch nothing. Runs regardless of `skipPostSideEffects`, so it
- * ALSO fires when the board→posts flag-flip propagation (`propagateSecurityDocToPosts`
- * in Boards.ts) bulk-updates posts — that is what re-syncs attachment flags on a
- * board flip. `overrideAccess` bypasses the attachment field's write-lock; runs
- * inside the post write's `req`/transaction.
+ * Denormalizes the §3 class onto the `attachments` a post references (Task 6D —
+ * round-3 fix; round-4 hardening). The raw `/api/attachments[/file]` routes gate
+ * on the attachment's own `read`, which keys off `attachments.securityDoc`; that
+ * flag must track the owning post(s) or a §3 file leaks via that alternate door.
+ *
+ * RECOMPUTE-ANY (round-4, closes the non-monotonic re-expose): an attachment's
+ * flag is recomputed as "is this attachment referenced by ANY security-doc post?"
+ * — NOT blindly set to the writing post's class. Otherwise an ORDINARY post
+ * referencing a security-doc attachment id would STRIP the flag (true→false) and
+ * re-expose the bytes. Because the value is derived from the full set of
+ * referencing posts, an unrelated ordinary write can never lower it while a
+ * security-doc post still references it; it is cleared ONLY when no security-doc
+ * post references it any more (e.g. the privileged board→ordinary flip). The
+ * source-guard in `validatePostAgainstBoard` additionally REJECTS an ordinary
+ * post referencing a security-doc attachment, so the shared-reference state never
+ * even forms; this recompute is the correctness backstop.
+ *
+ * Runs regardless of `skipPostSideEffects`, so it ALSO fires under the board→posts
+ * flag-flip propagation (`propagateSecurityDocToPosts` in Boards.ts) — that is
+ * what re-syncs attachment flags on a board flip. DELETE is intentionally NOT
+ * handled (fail-closed: an orphaned attachment keeps its restricted flag).
+ * `overrideAccess` bypasses the attachment field's write-lock; runs inside the
+ * post write's `req`/transaction (so the reverse lookup sees this write).
  */
 const syncAttachmentSecurityDoc: CollectionAfterChangeHook = async ({ doc, req }) => {
   const attachments = Array.isArray(doc.attachments) ? doc.attachments : []
@@ -416,19 +461,54 @@ const syncAttachmentSecurityDoc: CollectionAfterChangeHook = async ({ doc, req }
   if (mediaIds.length === 0) {
     return doc
   }
-  const target = doc.securityDoc === true
-  // Only touch attachments whose flag differs (true→false or false/NULL→true).
-  const staleWhere = target
-    ? { securityDoc: { not_equals: true } }
-    : { securityDoc: { equals: true } }
-  await req.payload.update({
-    collection: 'attachments',
-    where: { and: [{ id: { in: mediaIds } }, staleWhere] },
-    data: { securityDoc: target } as never,
+
+  // Reverse lookup: which of these attachments are referenced by ANY security-doc
+  // post (this write included, since it shares the transaction)?
+  const securePosts = await req.payload.find({
+    collection: 'posts',
+    where: { and: [{ securityDoc: { equals: true } }, { 'attachments.media': { in: mediaIds } }] },
+    depth: 0,
+    limit: 0,
+    pagination: false,
     overrideAccess: true,
     req,
-    context: { skipAudit: true },
   })
+  const secureMediaIds = new Set<string>()
+  for (const p of securePosts.docs) {
+    const atts = Array.isArray(p.attachments) ? p.attachments : []
+    for (const a of atts) {
+      const m = toRelationId((a as { media?: unknown })?.media)
+      if (m !== undefined) {
+        secureMediaIds.add(String(m))
+      }
+    }
+  }
+
+  const shouldBeTrue = mediaIds.filter((id: string | number) => secureMediaIds.has(String(id)))
+  const shouldBeFalse = mediaIds.filter((id: string | number) => !secureMediaIds.has(String(id)))
+
+  // Raise to true where still false/NULL, and clear to false ONLY where currently
+  // true AND no security-doc post references it any more (privileged clear).
+  if (shouldBeTrue.length > 0) {
+    await req.payload.update({
+      collection: 'attachments',
+      where: { and: [{ id: { in: shouldBeTrue } }, { securityDoc: { not_equals: true } }] },
+      data: { securityDoc: true } as never,
+      overrideAccess: true,
+      req,
+      context: { skipAudit: true },
+    })
+  }
+  if (shouldBeFalse.length > 0) {
+    await req.payload.update({
+      collection: 'attachments',
+      where: { and: [{ id: { in: shouldBeFalse } }, { securityDoc: { equals: true } }] },
+      data: { securityDoc: false } as never,
+      overrideAccess: true,
+      req,
+      context: { skipAudit: true },
+    })
+  }
   return doc
 }
 
