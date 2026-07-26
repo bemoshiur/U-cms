@@ -109,13 +109,21 @@ export default async function SignupPage({
         <div className="field field--check">
           <input id="agreeService" name="agreeService" type="checkbox" value="on" required />
           <label className="field__label" htmlFor="agreeService">
-            I agree to the Terms of Service (required)
+            I agree to the{' '}
+            <Link href="/terms/termsOfUse" target="_blank" rel="noopener">
+              Terms of Use
+            </Link>{' '}
+            (required)
           </label>
         </div>
         <div className="field field--check">
           <input id="agreePrivacy" name="agreePrivacy" type="checkbox" value="on" required />
           <label className="field__label" htmlFor="agreePrivacy">
-            I agree to the Privacy Policy (required)
+            I agree to the{' '}
+            <Link href="/terms/personalInfoProcessing" target="_blank" rel="noopener">
+              Privacy Policy
+            </Link>{' '}
+            (required)
           </label>
         </div>
         <div className="field field--check">

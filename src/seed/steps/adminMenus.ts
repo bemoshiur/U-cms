@@ -220,6 +220,15 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 16,
     collectionSlug: 'surveys',
   },
+  // Versioned privacy/terms documents (Task 4E; refs 2-14..2-16). Tenant-scoped
+  // (per-site), gated here; the five fixed categories live in src/content/terms.ts.
+  {
+    menuKey: 'content.terms',
+    name: 'Privacy Policy Terms Management',
+    parentMenuKey: 'content',
+    order: 17,
+    collectionSlug: 'termsDocuments',
+  },
   // Privacy Protection System (Task 2A / development-plan §2.5). The audit &
   // logging backbone: access history, login history, and the two permission
   // journals. `privacy.permissionLogs` gates BOTH permission-journal
@@ -256,6 +265,24 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     parentMenuKey: 'members',
     order: 1,
     collectionSlug: 'members',
+  },
+  // Site Statistics (Task 4E raw-data collections; refs 2-17..2-20). The
+  // satisfaction ratings + public traffic log are tenant-scoped raw data that
+  // feed the Phase-5 statistics dashboards (aggregation is Phase 5).
+  { menuKey: 'statistics', name: 'Site Statistics', order: 5 },
+  {
+    menuKey: 'statistics.satisfaction',
+    name: 'Satisfaction Ratings',
+    parentMenuKey: 'statistics',
+    order: 1,
+    collectionSlug: 'satisfactionRatings',
+  },
+  {
+    menuKey: 'statistics.traffic',
+    name: 'Traffic Log',
+    parentMenuKey: 'statistics',
+    order: 2,
+    collectionSlug: 'pageViews',
   },
 ]
 

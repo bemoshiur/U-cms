@@ -5,10 +5,20 @@ import { resolveVisibleContentPage } from '@/site/access'
 import { dataManagerEnabled, resolveDataManager } from '@/site/board'
 import { getCurrentMember } from '@/site/member'
 import { buildBreadcrumb, visibleMenuIds } from '@/site/nav'
+import { loadSatisfactionSummary, memberHasRated } from '@/site/satisfaction'
 import { getActiveSite, getActiveSiteMenus, getPayloadClient } from '@/site/rsc'
 import { Breadcrumb } from '../../_components/Breadcrumb'
 import { RichTextContent } from '../../_components/RichTextContent'
 import { PersonInCharge } from '../../_components/PersonInCharge'
+import { SatisfactionWidget } from '../../_components/SatisfactionWidget'
+
+type RawSearch = Record<string, string | string[] | undefined>
+
+function firstParam(raw: RawSearch, key: string): string | undefined {
+  const v = raw[key]
+  const s = Array.isArray(v) ? v[0] : v
+  return typeof s === 'string' && s.length > 0 ? s : undefined
+}
 
 /**
  * Web-content page route (`/page/[menuNumber]`, Task 4C — refs 2-2, 2-3).
@@ -19,8 +29,15 @@ import { PersonInCharge } from '../../_components/PersonInCharge'
  * title, the SAFE rich-text body, and the person-in-charge block only when the
  * site's `dataManagerEnabled` toggle is on.
  */
-export default async function ContentPage({ params }: { params: Promise<{ menuNumber: string }> }) {
+export default async function ContentPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ menuNumber: string }>
+  searchParams: Promise<RawSearch>
+}) {
   const { menuNumber } = await params
+  const raw = await searchParams
   const [site, menus, member] = await Promise.all([
     getActiveSite(),
     getActiveSiteMenus(),
@@ -53,12 +70,31 @@ export default async function ContentPage({ params }: { params: Promise<{ menuNu
     ? await resolveDataManager(payload, resolved.menu.personInCharge, site.id)
     : null
 
+  // Satisfaction widget (refs 2-18/2-19) — ONLY when the site toggle is on.
+  const pageKey = `/page/${resolved.menu.menuNumber}`
+  const satisfactionOn = site.satisfactionEnabled === true
+  const summary = satisfactionOn ? await loadSatisfactionSummary(payload, site.id, pageKey) : null
+  const alreadyRated =
+    satisfactionOn && member != null
+      ? await memberHasRated(payload, site.id, pageKey, member.id)
+      : false
+
   return (
     <div className="page page--content">
       <Breadcrumb trail={trail} />
       <h1 className="page__title">{resolved.content.title || resolved.menu.name}</h1>
       <RichTextContent className="rich-text" data={resolved.content.content} />
       {person && <PersonInCharge person={person} />}
+      {satisfactionOn && summary ? (
+        <SatisfactionWidget
+          pageKey={pageKey}
+          menuId={resolved.menu.id}
+          summary={summary}
+          alreadyRated={alreadyRated}
+          submitted={firstParam(raw, 'rated') === '1'}
+          error={firstParam(raw, 'rateError')}
+        />
+      ) : null}
     </div>
   )
 }

@@ -89,11 +89,14 @@ export interface Config {
     guideMenus: GuideMenu;
     menus: Menu;
     webContents: WebContent;
+    termsDocuments: TermsDocument;
     shortUrls: ShortUrl;
     helpEntries: HelpEntry;
     surveys: Survey;
     surveyQuestions: SurveyQuestion;
     surveyResponses: SurveyResponse;
+    satisfactionRatings: SatisfactionRating;
+    pageViews: PageView;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -134,11 +137,14 @@ export interface Config {
     guideMenus: GuideMenusSelect<false> | GuideMenusSelect<true>;
     menus: MenusSelect<false> | MenusSelect<true>;
     webContents: WebContentsSelect<false> | WebContentsSelect<true>;
+    termsDocuments: TermsDocumentsSelect<false> | TermsDocumentsSelect<true>;
     shortUrls: ShortUrlsSelect<false> | ShortUrlsSelect<true>;
     helpEntries: HelpEntriesSelect<false> | HelpEntriesSelect<true>;
     surveys: SurveysSelect<false> | SurveysSelect<true>;
     surveyQuestions: SurveyQuestionsSelect<false> | SurveyQuestionsSelect<true>;
     surveyResponses: SurveyResponsesSelect<false> | SurveyResponsesSelect<true>;
+    satisfactionRatings: SatisfactionRatingsSelect<false> | SatisfactionRatingsSelect<true>;
+    pageViews: PageViewsSelect<false> | PageViewsSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -1330,6 +1336,51 @@ export interface WebContent {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "termsDocuments".
+ */
+export interface TermsDocument {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * One of the five fixed legacy terms categories (ref 2-14). Unique per site.
+   */
+  category: 'termsOfUse' | 'personalInfoProcessing' | 'thirdPartyProvision' | 'uniqueIdCollection' | 'other';
+  /**
+   * Optional site menu this terms document is surfaced under (ref 2-15). Must belong to the same site.
+   */
+  menu?: (number | null) | Menu;
+  /**
+   * Display title of the terms document.
+   */
+  title: string;
+  /**
+   * The terms body. Versioned — every save creates a new version; the published version is the active one shown publicly.
+   */
+  content: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  /**
+   * The date this version takes effect (shown in the public change history, ref 2-16).
+   */
+  effectiveDate?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "shortUrls".
  */
 export interface ShortUrl {
@@ -1557,6 +1608,74 @@ export interface SurveyResponse {
         id?: string | null;
       }[]
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "satisfactionRatings".
+ */
+export interface SatisfactionRating {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * The rated page menu (per-menu satisfaction dimension, ref 2-19), or null.
+   */
+  menu?: (number | null) | Menu;
+  /**
+   * The rated public page path (server-forced).
+   */
+  pageKey: string;
+  /**
+   * 5-point satisfaction score (1-5, server-validated).
+   */
+  score: number;
+  /**
+   * The member who rated, or null (anonymous).
+   */
+  member?: (number | null) | Member;
+  /**
+   * Server-stamped submission time.
+   */
+  submittedAt?: string | null;
+  /**
+   * Server-only salted dedup hash (never read back) — stores NO raw IP.
+   */
+  ipHash?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pageViews".
+ */
+export interface PageView {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Captured public path (query string stripped).
+   */
+  path: string;
+  /**
+   * The owning menu (resolved for /page/{menuNumber} paths), or null.
+   */
+  menu?: (number | null) | Menu;
+  /**
+   * Coarse device class from the UA (no OS/browser stored).
+   */
+  deviceType?: ('mobile' | 'desktop') | null;
+  /**
+   * Referrer HOST only (never the full referring URL).
+   */
+  referrerHost?: string | null;
+  /**
+   * Server-only rotating salted hash — stores NO PII.
+   */
+  sessionKey?: string | null;
+  /**
+   * Server-stamped view time.
+   */
+  ts: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -1898,6 +2017,10 @@ export interface PayloadLockedDocument {
         value: number | WebContent;
       } | null)
     | ({
+        relationTo: 'termsDocuments';
+        value: number | TermsDocument;
+      } | null)
+    | ({
         relationTo: 'shortUrls';
         value: number | ShortUrl;
       } | null)
@@ -1916,6 +2039,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'surveyResponses';
         value: number | SurveyResponse;
+      } | null)
+    | ({
+        relationTo: 'satisfactionRatings';
+        value: number | SatisfactionRating;
+      } | null)
+    | ({
+        relationTo: 'pageViews';
+        value: number | PageView;
       } | null)
     | ({
         relationTo: 'roles';
@@ -2523,6 +2654,21 @@ export interface WebContentsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "termsDocuments_select".
+ */
+export interface TermsDocumentsSelect<T extends boolean = true> {
+  tenant?: T;
+  category?: T;
+  menu?: T;
+  title?: T;
+  content?: T;
+  effectiveDate?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "shortUrls_select".
  */
 export interface ShortUrlsSelect<T extends boolean = true> {
@@ -2615,6 +2761,36 @@ export interface SurveyResponsesSelect<T extends boolean = true> {
         textValue?: T;
         id?: T;
       };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "satisfactionRatings_select".
+ */
+export interface SatisfactionRatingsSelect<T extends boolean = true> {
+  tenant?: T;
+  menu?: T;
+  pageKey?: T;
+  score?: T;
+  member?: T;
+  submittedAt?: T;
+  ipHash?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pageViews_select".
+ */
+export interface PageViewsSelect<T extends boolean = true> {
+  tenant?: T;
+  path?: T;
+  menu?: T;
+  deviceType?: T;
+  referrerHost?: T;
+  sessionKey?: T;
+  ts?: T;
   updatedAt?: T;
   createdAt?: T;
 }

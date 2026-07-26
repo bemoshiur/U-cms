@@ -28,6 +28,9 @@ import { AdminNotices } from './collections/display/AdminNotices'
 import { GuideMenus } from './collections/display/GuideMenus'
 import { Menus } from './collections/Menus'
 import { WebContents } from './collections/WebContents'
+import { TermsDocuments } from './collections/TermsDocuments'
+import { SatisfactionRatings } from './collections/SatisfactionRatings'
+import { PageViews } from './collections/PageViews'
 import { ShortUrls } from './collections/ShortUrls'
 import { HelpEntries } from './collections/HelpEntries'
 import { Surveys } from './collections/surveys/Surveys'
@@ -166,6 +169,15 @@ const plugins: Plugin[] = [
       // plan §2.1) so it is deliberately NOT opted in here.
       menus: {},
       webContents: {},
+      // Versioned privacy/terms documents (Task 4E; refs 2-14..2-16) —
+      // tenant-scoped like webContents, with Payload versions+drafts. The
+      // ONLY OTHER tenant-scoped collection with versions, so it also needs the
+      // B1 `readVersions` scoping on `version.tenant` (see TermsDocuments.ts).
+      termsDocuments: {},
+      // Public satisfaction ratings + traffic capture (Task 4E; refs 2-18/2-19,
+      // TODO 4.9) — tenant-scoped; both feed the Phase-5 statistics module.
+      satisfactionRatings: {},
+      pageViews: {},
       shortUrls: {},
       // Survey system (Task 4D; refs 2-9..2-12) — all three tenant-scoped
       // (per-site). Questions/responses derive their tenant from the parent
@@ -292,12 +304,18 @@ export default buildConfig({
     // helpEntries is global.
     Menus,
     WebContents,
+    // Versioned privacy/terms documents (Task 4E): tenant-scoped, versions+drafts.
+    TermsDocuments,
     ShortUrls,
     HelpEntries,
     // Survey system (Task 4D): tenant-scoped surveys + questions + responses.
     Surveys,
     SurveyQuestions,
     SurveyResponses,
+    // Public satisfaction ratings + traffic capture (Task 4E) — tenant-scoped;
+    // both feed the Phase-5 statistics module.
+    SatisfactionRatings,
+    PageViews,
     Roles,
     AdminMenus,
     PasswordPolicies,

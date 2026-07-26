@@ -86,7 +86,7 @@ export const membersStep: SeedStep = {
           status: member.status,
           tenant: demo.id,
           marketingConsent: false,
-          termsConsents: buildTermsConsents(),
+          termsConsents: await buildTermsConsents(payload, demo.id),
         },
         overrideAccess: true,
       })

@@ -259,16 +259,20 @@ export const publicSiteStep: SeedStep = {
     const site = await demoSite(payload)
     const tenantId = site.id
 
-    // ── logo + footer on the demo site ────────────────────────────────────
+    // ── logo + footer + feature toggles on the demo site ──────────────────
     const needsLogo = !site.logo
     const needsFooter = !site.footer?.copyright?.value
-    if (needsLogo || needsFooter) {
+    // Enable the satisfaction widget on the demo site (Task 4E) so the per-page
+    // rating widget renders out of the box.
+    const needsSatisfaction = site.satisfactionEnabled !== true
+    if (needsLogo || needsFooter || needsSatisfaction) {
       const logoId = needsLogo ? await ensureLogoMedia(payload) : undefined
       await payload.update({
         collection: 'sites',
         id: tenantId,
         data: {
           ...(needsLogo ? { logo: logoId } : {}),
+          ...(needsSatisfaction ? { satisfactionEnabled: true } : {}),
           ...(needsFooter
             ? {
                 footer: {
@@ -283,7 +287,7 @@ export const publicSiteStep: SeedStep = {
         },
         overrideAccess: true,
       })
-      payload.logger.info('[seed:public-site] updated demo site logo/footer.')
+      payload.logger.info('[seed:public-site] updated demo site logo/footer/toggles.')
     }
 
     // ── a top-level section with children (GNB → LNB → breadcrumb) ─────────
@@ -335,14 +339,40 @@ export const publicSiteStep: SeedStep = {
       displayOrder: 0,
       active: true,
     })
+    // The "Privacy Policy" bottom guide points at the real terms page (Task 4E
+    // Part 2b — the legally-emphasized link must resolve to actual content).
     await ensureGuideMenu(payload, tenantId, SEED_DEMO_GUIDE_BOTTOM, {
       position: 'bottom',
-      linkType: 'external',
-      linkExternal: 'https://example.com/privacy',
+      linkType: 'internal',
+      linkInternal: '/terms/personalInfoProcessing',
       newWindow: false,
       displayOrder: 0,
       active: true,
     })
+    // Reconcile an EXISTING demo guide that still points at the old external
+    // placeholder, so the privacy link resolves on already-seeded demo DBs too.
+    const legacyPrivacyGuide = await payload.find({
+      collection: 'guideMenus',
+      where: {
+        and: [
+          { tenant: { equals: tenantId } },
+          { name: { equals: SEED_DEMO_GUIDE_BOTTOM } },
+          { linkExternal: { equals: 'https://example.com/privacy' } },
+        ],
+      },
+      limit: 1,
+      pagination: false,
+      overrideAccess: true,
+    })
+    if (legacyPrivacyGuide.docs[0]) {
+      await payload.update({
+        collection: 'guideMenus',
+        id: legacyPrivacyGuide.docs[0].id,
+        data: { linkType: 'internal', linkInternal: '/terms/personalInfoProcessing' } as never,
+        overrideAccess: true,
+      })
+      payload.logger.info('[seed:public-site] repointed Privacy Policy guide to /terms.')
+    }
 
     // ── a real board + post + attachment (Task 4C list/detail + e2e) ──────────
     await ensureNoticeBoard(payload, tenantId)

@@ -6,6 +6,7 @@ import { buildNav } from '@/site/nav'
 import { getActiveGuideMenus, getActiveSite, getActiveSiteMenus } from '@/site/rsc'
 import { SiteFooter } from './_components/SiteFooter'
 import { SiteHeader } from './_components/SiteHeader'
+import { TrafficBeacon } from './_components/TrafficBeacon'
 import './styles.css'
 
 export const metadata = {
@@ -60,6 +61,8 @@ export default async function FrontendLayout({ children }: { children: React.Rea
           </main>
           <SiteFooter site={site} bottomGuides={bottomGuides} />
         </div>
+        {/* Privacy-conscious traffic capture (feeds Phase-5 stats) — no PII. */}
+        <TrafficBeacon />
       </body>
     </html>
   )

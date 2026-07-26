@@ -177,7 +177,7 @@ export async function submitMemberSignup(
       marketingConsent: fields.marketingConsent,
       tenant: site.id,
       status,
-      termsConsents: buildTermsConsents(),
+      termsConsents: await buildTermsConsents(payload, site.id),
     },
     overrideAccess: true,
     req,

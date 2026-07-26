@@ -16,8 +16,10 @@ import { memberBannedWordsStep } from './steps/memberBannedWords'
 import { displayComponentsStep } from './steps/displayComponents'
 import { contentMenusStep } from './steps/contentMenus'
 import { publicSiteStep } from './steps/publicSite'
+import { termsStep } from './steps/terms'
 import { membersStep } from './steps/members'
 import { surveysStep } from './steps/surveys'
+import { statisticsStep } from './steps/statistics'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -80,8 +82,13 @@ export const seedSteps: SeedStep[] = [
   displayComponentsStep,
   contentMenusStep,
   publicSiteStep,
+  // Task 4E: versioned terms MUST seed BEFORE members (so seeded members'
+  // consent snapshots reference the real active terms version).
+  termsStep,
   membersStep,
   surveysStep,
+  // Task 4E: satisfaction ratings + page views (feed Phase-5 statistics).
+  statisticsStep,
 ]
 
 /**
