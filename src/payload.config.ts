@@ -45,6 +45,7 @@ import { AccessLogs } from './collections/AccessLogs'
 import { LoginHistory } from './collections/LoginHistory'
 import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
+import { PersonalInfoAccessLogs } from './collections/PersonalInfoAccessLogs'
 import { ErrorLogs } from './collections/ErrorLogs'
 import { recordGlobalError } from './audit/recordError'
 import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
@@ -387,6 +388,12 @@ export default buildConfig({
     LoginHistory,
     PermissionChangeLogs,
     MenuPermissionLogs,
+    // Personal-Information Access History (Task 6A; refs 3-8, 1-36) — append-only,
+    // immutable, gated on privacy.personalInfoLogs. The CORE of the Privacy
+    // Protection System: every member-PII touch (view/edit/export) is logged here
+    // by the non-bypassable members afterRead/afterChange hooks + the purpose-gated
+    // export. Written by src/audit/recordPersonalInfoAccess.ts via overrideAccess.
+    PersonalInfoAccessLogs,
     // System-wide error log (Task 5C; refs 1-56..1-59) — append-only, immutable,
     // gated on system.errorLogs. Written by the global afterError capture path
     // (src/audit/recordError.ts) via overrideAccess.

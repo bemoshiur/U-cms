@@ -21,6 +21,7 @@ import { membersStep } from './steps/members'
 import { surveysStep } from './steps/surveys'
 import { statisticsStep } from './steps/statistics'
 import { errorLogsStep } from './steps/errorLogs'
+import { personalInfoAccessLogsStep } from './steps/personalInfoAccessLogs'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -92,6 +93,8 @@ export const seedSteps: SeedStep[] = [
   statisticsStep,
   // Task 5C: a few example error logs so the error-stats tabs + drill-down render.
   errorLogsStep,
+  // Task 6A: example personal-info access logs (needs members/site — runs last).
+  personalInfoAccessLogsStep,
 ]
 
 /**

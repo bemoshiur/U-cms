@@ -266,6 +266,17 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 3,
     collectionSlug: 'permissionChangeLogs',
   },
+  // Personal-Information Access History (Task 6A; refs 3-8, 1-36). Gates the
+  // `personalInfoAccessLogs` collection (the log of every member-PII touch), its
+  // masked CSV export, and — via `hasMenuAccess(privacy.personalInfoLogs)` — the
+  // FULL (unmasked) member export tier. The privacy officer holds this grant.
+  {
+    menuKey: 'privacy.personalInfoLogs',
+    name: 'Personal Info Access History',
+    parentMenuKey: 'privacy',
+    order: 4,
+    collectionSlug: 'personalInfoAccessLogs',
+  },
   // Public-site MEMBER management (Task 4B; refs 2-13). Gates the tenant-scoped
   // `members` auth collection — a SEPARATE audience from admin `users`.
   { menuKey: 'members', name: 'Member Management', order: 4 },

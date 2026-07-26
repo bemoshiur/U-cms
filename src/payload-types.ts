@@ -106,6 +106,7 @@ export interface Config {
     loginHistory: LoginHistory;
     permissionChangeLogs: PermissionChangeLog;
     menuPermissionLogs: MenuPermissionLog;
+    personalInfoAccessLogs: PersonalInfoAccessLog;
     errorLogs: ErrorLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -156,6 +157,7 @@ export interface Config {
     loginHistory: LoginHistorySelect<false> | LoginHistorySelect<true>;
     permissionChangeLogs: PermissionChangeLogsSelect<false> | PermissionChangeLogsSelect<true>;
     menuPermissionLogs: MenuPermissionLogsSelect<false> | MenuPermissionLogsSelect<true>;
+    personalInfoAccessLogs: PersonalInfoAccessLogsSelect<false> | PersonalInfoAccessLogsSelect<true>;
     errorLogs: ErrorLogsSelect<false> | ErrorLogsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -1996,6 +1998,60 @@ export interface MenuPermissionLog {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "personalInfoAccessLogs".
+ */
+export interface PersonalInfoAccessLog {
+  id: number;
+  /**
+   * When the personal-info access occurred (열람일시).
+   */
+  occurredAt: string;
+  /**
+   * Which admin screen produced the access (화면명, e.g. "member-detail").
+   */
+  screen?: string | null;
+  /**
+   * Denormalized "name(loginId)" of the member whose PII was accessed. Masked in the list.
+   */
+  subjectLabel?: string | null;
+  /**
+   * The member id as TEXT (NOT an FK — see the deadlock note).
+   */
+  subjectMemberId?: string | null;
+  /**
+   * The member's site (tenant) id as text — per-site segmentation.
+   */
+  subjectSiteId?: string | null;
+  /**
+   * The full request URL/path (including the target member id).
+   */
+  url: string;
+  action: 'view' | 'edit' | 'export';
+  /**
+   * View-purpose category (열람목적구분).
+   */
+  purposeCategory: 'view' | 'edit' | 'export' | 'inquiry_response' | 'complaint_handling' | 'other';
+  /**
+   * Free-text reason (열람목적). REQUIRED for an export (the purpose modal) — the immutable evidence of why the PII was accessed.
+   */
+  purposeDetail?: string | null;
+  /**
+   * Denormalized "name(loginId)" of the admin who accessed the PII. Masked in the list.
+   */
+  viewerLabel?: string | null;
+  /**
+   * The acting admin id as TEXT (NOT an FK — see the deadlock note).
+   */
+  viewerId?: string | null;
+  /**
+   * Raw client IP (IPv4/IPv6), captured as-is from the request (열람IP).
+   */
+  ipAddress?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "errorLogs".
  */
 export interface ErrorLog {
@@ -2222,6 +2278,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'menuPermissionLogs';
         value: number | MenuPermissionLog;
+      } | null)
+    | ({
+        relationTo: 'personalInfoAccessLogs';
+        value: number | PersonalInfoAccessLog;
       } | null)
     | ({
         relationTo: 'errorLogs';
@@ -3072,6 +3132,26 @@ export interface MenuPermissionLogsSelect<T extends boolean = true> {
   removedMenus?: T;
   roleMemberSnapshot?: T;
   actorLabel?: T;
+  ipAddress?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "personalInfoAccessLogs_select".
+ */
+export interface PersonalInfoAccessLogsSelect<T extends boolean = true> {
+  occurredAt?: T;
+  screen?: T;
+  subjectLabel?: T;
+  subjectMemberId?: T;
+  subjectSiteId?: T;
+  url?: T;
+  action?: T;
+  purposeCategory?: T;
+  purposeDetail?: T;
+  viewerLabel?: T;
+  viewerId?: T;
   ipAddress?: T;
   updatedAt?: T;
   createdAt?: T;

@@ -11,6 +11,12 @@ import { tenantMembershipGuard } from '../access/tenantAccess'
 import { branding } from '../branding'
 import { renderMemberForgotPasswordEmail } from '../email/memberEmails'
 import { REQUIRED_TERMS_CATEGORIES } from '../members/terms'
+import {
+  capturePersonalInfoEdit,
+  capturePersonalInfoView,
+  markPersonalInfoWrite,
+} from '../members/personalInfoAudit'
+import { memberExportEndpoints } from '../endpoints/memberExport'
 
 /**
  * Public-site MEMBER accounts (Task 4B; refs 2-13 회원 관리 / 회원가입). A SEPARATE
@@ -58,6 +64,17 @@ export const Members: CollectionConfig = {
     useAsTitle: 'email',
     defaultColumns: ['email', 'loginId', 'name', 'status', 'tenant'],
     hidden: ({ user }) => !hasMenuAccessSync(user, MEMBERS_MENU_KEY),
+    components: {
+      // Task 6A Part 2 (ref 1-36 callout 5): the browser-confirm-style privacy
+      // notice shown on the member DETAIL view before the PII is worked with —
+      // 'a lookup history is being accumulated'. This is a UI affordance; the
+      // AUTHORITATIVE, non-bypassable capture is the server afterRead hook below.
+      edit: {
+        beforeDocumentControls: [
+          '/components/members/PersonalInfoAccessNotice#PersonalInfoAccessNotice',
+        ],
+      },
+    },
   },
   access: {
     create: memberManageAccess(),
@@ -177,6 +194,8 @@ export const Members: CollectionConfig = {
       ],
     },
   ],
+  // Task 6A Part 3: the purpose-gated member CSV export (POST /api/members/export).
+  endpoints: memberExportEndpoints,
   hooks: {
     // Create-time tenant guard (admin creates) + member password policy on any
     // password set. Sign-up runs with overrideAccess, so the guard is a no-op
@@ -184,5 +203,13 @@ export const Members: CollectionConfig = {
     beforeValidate: [tenantMembershipGuard('tenant'), enforceMemberPasswordPolicy],
     // Only `active` members may authenticate.
     beforeLogin: [blockInactiveMemberLogin],
+    // Task 6A Part 2: NON-BYPASSABLE personal-info capture — a single-doc admin
+    // read logs a `view`, an admin update logs an `edit`, to personalInfoAccessLogs.
+    // (List renders, system reads, and member self-service are skipped — see the hook.)
+    // `markPersonalInfoWrite` runs first so the create/update read-tail is not
+    // mis-logged as a `view` (see the hook doc comment).
+    beforeChange: [markPersonalInfoWrite],
+    afterRead: [capturePersonalInfoView],
+    afterChange: [capturePersonalInfoEdit],
   },
 }

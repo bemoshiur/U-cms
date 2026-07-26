@@ -24,6 +24,7 @@ import { StrikethroughFeatureClient as StrikethroughFeatureClient_e70f5e05f09f93
 import { UnderlineFeatureClient as UnderlineFeatureClient_e70f5e05f09f93e00b997edb1ef0c864 } from '@payloadcms/richtext-lexical/client'
 import { BoldFeatureClient as BoldFeatureClient_e70f5e05f09f93e00b997edb1ef0c864 } from '@payloadcms/richtext-lexical/client'
 import { ItalicFeatureClient as ItalicFeatureClient_e70f5e05f09f93e00b997edb1ef0c864 } from '@payloadcms/richtext-lexical/client'
+import { PersonalInfoAccessNotice as PersonalInfoAccessNotice_954caf87c0096f37d411db63de8801e7 } from '../../../components/members/PersonalInfoAccessNotice'
 import { MaskedCell as MaskedCell_ad147b5f0d54c45e625b612a992c9063 } from '../../../components/audit/MaskedCell'
 import { Icon as Icon_60be061a35ba65b3ac8380ea7d755990 } from '../../../components/branding/Icon'
 import { Logo as Logo_b1bbc7110cb2a1b52a7180329d8cc3a9 } from '../../../components/branding/Logo'
@@ -94,6 +95,8 @@ export const importMap = {
     BoldFeatureClient_e70f5e05f09f93e00b997edb1ef0c864,
   '@payloadcms/richtext-lexical/client#ItalicFeatureClient':
     ItalicFeatureClient_e70f5e05f09f93e00b997edb1ef0c864,
+  '/components/members/PersonalInfoAccessNotice#PersonalInfoAccessNotice':
+    PersonalInfoAccessNotice_954caf87c0096f37d411db63de8801e7,
   '/components/audit/MaskedCell#MaskedCell': MaskedCell_ad147b5f0d54c45e625b612a992c9063,
   '/components/branding/Icon#Icon': Icon_60be061a35ba65b3ac8380ea7d755990,
   '/components/branding/Logo#Logo': Logo_b1bbc7110cb2a1b52a7180329d8cc3a9,
