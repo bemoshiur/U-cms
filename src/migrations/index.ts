@@ -16,6 +16,9 @@ import * as migration_20260725_131049_task_4b_members from './20260725_131049_ta
 import * as migration_20260726_051201_task_4d_surveys from './20260726_051201_task_4d_surveys';
 import * as migration_20260726_054751_task_4d_survey_dedup_unique from './20260726_054751_task_4d_survey_dedup_unique';
 import * as migration_20260726_062809_task_4e_terms_satisfaction_traffic from './20260726_062809_task_4e_terms_satisfaction_traffic';
+import * as migration_20260726_080648_task_5a_traffic_daily from './20260726_080648_task_5a_traffic_daily';
+import * as migration_20260726_090701_task_5b_survey_public_freetext from './20260726_090701_task_5b_survey_public_freetext';
+import * as migration_20260726_094846_task_5c_error_logs from './20260726_094846_task_5c_error_logs';
 
 export const migrations = [
   {
@@ -106,6 +109,21 @@ export const migrations = [
   {
     up: migration_20260726_062809_task_4e_terms_satisfaction_traffic.up,
     down: migration_20260726_062809_task_4e_terms_satisfaction_traffic.down,
-    name: '20260726_062809_task_4e_terms_satisfaction_traffic'
+    name: '20260726_062809_task_4e_terms_satisfaction_traffic',
+  },
+  {
+    up: migration_20260726_080648_task_5a_traffic_daily.up,
+    down: migration_20260726_080648_task_5a_traffic_daily.down,
+    name: '20260726_080648_task_5a_traffic_daily',
+  },
+  {
+    up: migration_20260726_090701_task_5b_survey_public_freetext.up,
+    down: migration_20260726_090701_task_5b_survey_public_freetext.down,
+    name: '20260726_090701_task_5b_survey_public_freetext',
+  },
+  {
+    up: migration_20260726_094846_task_5c_error_logs.up,
+    down: migration_20260726_094846_task_5c_error_logs.down,
+    name: '20260726_094846_task_5c_error_logs'
   },
 ];

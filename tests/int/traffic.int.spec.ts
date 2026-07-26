@@ -84,10 +84,13 @@ describe('pageViews: privacy-conscious traffic capture (Task 4E)', () => {
       id: id as number,
       overrideAccess: true,
     })
-    // Path is query/fragment-stripped.
-    expect(row.path).toBe('/board/B1')
-    // Coarse device class.
+    // D6: /board/B1 has no matching board on this site → bucketed to __other__
+    // (query/fragment already stripped); an attacker-chosen path never becomes a
+    // distinct stored page. A KNOWN board path staying concrete is covered below.
+    expect(row.path).toBe('__other__')
+    // Coarse device class + coarse OS family (no version — Task 5A).
     expect(row.deviceType).toBe('mobile')
+    expect(row.osFamily).toBe('ios')
     // Referrer reduced to the HOST — no path/query.
     expect(row.referrerHost).toBe('search.example.com')
     // A session hash exists but is NOT the raw IP.

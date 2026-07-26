@@ -28,8 +28,15 @@ import { MaskedCell as MaskedCell_ad147b5f0d54c45e625b612a992c9063 } from '../..
 import { Icon as Icon_60be061a35ba65b3ac8380ea7d755990 } from '../../../components/branding/Icon'
 import { Logo as Logo_b1bbc7110cb2a1b52a7180329d8cc3a9 } from '../../../components/branding/Logo'
 import { IdleLogout as IdleLogout_9a2706a383e1ae800d015c2468e5c9bc } from '../../../components/admin/IdleLogout'
+import { StatisticsNavLink as StatisticsNavLink_090ed7d34dc872de92e5b1d9343dce14 } from '../../../components/statistics/StatisticsNavLink'
 import { TenantSelector as TenantSelector_d6d5f193a167989e2ee7d14202901e62 } from '@payloadcms/plugin-multi-tenant/rsc'
 import { TenantSelectionProvider as TenantSelectionProvider_d6d5f193a167989e2ee7d14202901e62 } from '@payloadcms/plugin-multi-tenant/rsc'
+import { AdminDashboardView as AdminDashboardView_d9ea5f032f3ccf5d5eecd9765d2f9fb8 } from '../../../components/dashboard/AdminDashboardView'
+import { TrafficStatisticsView as TrafficStatisticsView_172e9f66506a711344c8c015ec5c890a } from '../../../components/statistics/TrafficStatisticsView'
+import { DownloadStatisticsView as DownloadStatisticsView_27b729628e2e82abd9c6fa2d5cd3f645 } from '../../../components/statistics/DownloadStatisticsView'
+import { SatisfactionStatisticsView as SatisfactionStatisticsView_abffd592819bcd445f57d1d7437396b8 } from '../../../components/statistics/SatisfactionStatisticsView'
+import { ErrorStatisticsView as ErrorStatisticsView_1a2d85d7ff0de92fb2d3794902002bd6 } from '../../../components/statistics/ErrorStatisticsView'
+import { AccessHistoryView as AccessHistoryView_3f0107abfc9bd423772cbfd67cacdc36 } from '../../../components/statistics/AccessHistoryView'
 import { LoginView as LoginView_7af18470411f801d2687404387d2db4e } from '../../../components/login/LoginView'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
@@ -91,10 +98,24 @@ export const importMap = {
   '/components/branding/Icon#Icon': Icon_60be061a35ba65b3ac8380ea7d755990,
   '/components/branding/Logo#Logo': Logo_b1bbc7110cb2a1b52a7180329d8cc3a9,
   '/components/admin/IdleLogout#IdleLogout': IdleLogout_9a2706a383e1ae800d015c2468e5c9bc,
+  '/components/statistics/StatisticsNavLink#StatisticsNavLink':
+    StatisticsNavLink_090ed7d34dc872de92e5b1d9343dce14,
   '@payloadcms/plugin-multi-tenant/rsc#TenantSelector':
     TenantSelector_d6d5f193a167989e2ee7d14202901e62,
   '@payloadcms/plugin-multi-tenant/rsc#TenantSelectionProvider':
     TenantSelectionProvider_d6d5f193a167989e2ee7d14202901e62,
+  '/components/dashboard/AdminDashboardView#AdminDashboardView':
+    AdminDashboardView_d9ea5f032f3ccf5d5eecd9765d2f9fb8,
+  '/components/statistics/TrafficStatisticsView#TrafficStatisticsView':
+    TrafficStatisticsView_172e9f66506a711344c8c015ec5c890a,
+  '/components/statistics/DownloadStatisticsView#DownloadStatisticsView':
+    DownloadStatisticsView_27b729628e2e82abd9c6fa2d5cd3f645,
+  '/components/statistics/SatisfactionStatisticsView#SatisfactionStatisticsView':
+    SatisfactionStatisticsView_abffd592819bcd445f57d1d7437396b8,
+  '/components/statistics/ErrorStatisticsView#ErrorStatisticsView':
+    ErrorStatisticsView_1a2d85d7ff0de92fb2d3794902002bd6,
+  '/components/statistics/AccessHistoryView#AccessHistoryView':
+    AccessHistoryView_3f0107abfc9bd423772cbfd67cacdc36,
   '/components/login/LoginView#LoginView': LoginView_7af18470411f801d2687404387d2db4e,
   '@payloadcms/next/rsc#CollectionCards': CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
 }

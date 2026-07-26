@@ -25,12 +25,14 @@ const secretServerField = { create: () => false, update: () => false, read: () =
  *
  * ## Privacy posture (Phase-6-ready — NO PII, unlike legacy 사이트 접속 이력)
  *
- * Stores NONE of: raw IP, full URL/query string, referrer path, UA string,
- * OS/browser/version, or member identity. It keeps only a coarse `deviceType`
- * (mobile|desktop), the request `path` (query-stripped), the referrer HOST only,
- * and a rotating salted `sessionKey` HASH that is `read:false`. This is the data
- * the Phase-6 privacy subsystem requires to be PII-free — see
- * `src/content/traffic.ts` for the derivations.
+ * Stores NONE of: raw IP, full URL/query string, referrer path, UA string, an OS
+ * or browser VERSION, or member identity. It keeps only a coarse `deviceType`
+ * (mobile|desktop), coarse `osFamily`/`browserFamily` (family only, NO version —
+ * Task 5A), the request `path` CANONICALIZED to the site's real routes (unknown
+ * paths bucket to `__other__`, so an attacker can't mint unbounded fake pages —
+ * D6), the referrer HOST only, and a rotating salted `sessionKey` HASH that is
+ * `read:false`. This is the data the Phase-6 privacy subsystem requires to be
+ * PII-free — see `src/content/traffic.ts` for the derivations.
  *
  * ## Phase-5 seam
  *
@@ -82,7 +84,46 @@ export const PageViews: CollectionConfig = {
       access: serverForced,
       admin: {
         readOnly: true,
-        description: 'Coarse device class from the UA (no OS/browser stored).',
+        description: 'Coarse device class from the UA.',
+      },
+    },
+    {
+      // Task 5A: coarse OS FAMILY only (windows|macos|ios|android|linux|other) —
+      // NO version, so it aggregates the ref-2-17 OS tab without fingerprinting.
+      name: 'osFamily',
+      type: 'select',
+      options: [
+        { label: 'Windows', value: 'windows' },
+        { label: 'macOS', value: 'macos' },
+        { label: 'iOS', value: 'ios' },
+        { label: 'Android', value: 'android' },
+        { label: 'Linux', value: 'linux' },
+        { label: 'Other', value: 'other' },
+      ],
+      access: serverForced,
+      admin: {
+        readOnly: true,
+        description: 'Coarse OS family derived from the UA (no version — privacy-safe).',
+      },
+    },
+    {
+      // Task 5A: coarse BROWSER FAMILY only — NO version (ref-2-17 browser tab).
+      name: 'browserFamily',
+      type: 'select',
+      options: [
+        { label: 'Chrome', value: 'chrome' },
+        { label: 'Safari', value: 'safari' },
+        { label: 'Firefox', value: 'firefox' },
+        { label: 'Edge', value: 'edge' },
+        { label: 'Opera', value: 'opera' },
+        { label: 'Samsung Internet', value: 'samsung' },
+        { label: 'Internet Explorer', value: 'ie' },
+        { label: 'Other', value: 'other' },
+      ],
+      access: serverForced,
+      admin: {
+        readOnly: true,
+        description: 'Coarse browser family derived from the UA (no version — privacy-safe).',
       },
     },
     {

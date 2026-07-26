@@ -20,6 +20,7 @@ import { termsStep } from './steps/terms'
 import { membersStep } from './steps/members'
 import { surveysStep } from './steps/surveys'
 import { statisticsStep } from './steps/statistics'
+import { errorLogsStep } from './steps/errorLogs'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -89,6 +90,8 @@ export const seedSteps: SeedStep[] = [
   surveysStep,
   // Task 4E: satisfaction ratings + page views (feed Phase-5 statistics).
   statisticsStep,
+  // Task 5C: a few example error logs so the error-stats tabs + drill-down render.
+  errorLogsStep,
 ]
 
 /**

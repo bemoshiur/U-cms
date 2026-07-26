@@ -31,6 +31,7 @@ import { WebContents } from './collections/WebContents'
 import { TermsDocuments } from './collections/TermsDocuments'
 import { SatisfactionRatings } from './collections/SatisfactionRatings'
 import { PageViews } from './collections/PageViews'
+import { TrafficDaily } from './collections/TrafficDaily'
 import { ShortUrls } from './collections/ShortUrls'
 import { HelpEntries } from './collections/HelpEntries'
 import { Surveys } from './collections/surveys/Surveys'
@@ -44,6 +45,8 @@ import { AccessLogs } from './collections/AccessLogs'
 import { LoginHistory } from './collections/LoginHistory'
 import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
+import { ErrorLogs } from './collections/ErrorLogs'
+import { recordGlobalError } from './audit/recordError'
 import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
@@ -178,6 +181,9 @@ const plugins: Plugin[] = [
       // TODO 4.9) — tenant-scoped; both feed the Phase-5 statistics module.
       satisfactionRatings: {},
       pageViews: {},
+      // Aggregated per-(site, day) traffic rollups (Task 5A; TODO 5.1) —
+      // tenant-scoped, written by the aggregation job, read by the stats tabs.
+      trafficDaily: {},
       shortUrls: {},
       // Survey system (Task 4D; refs 2-9..2-12) — all three tenant-scoped
       // (per-site). Questions/responses derive their tenant from the parent
@@ -257,7 +263,57 @@ export default buildConfig({
       // admin views (actions render inside the auth/config context); a no-op on
       // the login view. See src/components/admin/IdleLogout.tsx.
       actions: ['/components/admin/IdleLogout#IdleLogout'],
+      // Task 5A: nav link to the custom Traffic Statistics view (a custom
+      // top-level view has no auto nav entry). Hidden for users without the
+      // statistics.traffic grant. See src/components/statistics/StatisticsNavLink.tsx.
+      afterNavLinks: ['/components/statistics/StatisticsNavLink#StatisticsNavLink'],
       views: {
+        // Task 5D (TODO 5.7; refs 1-7/1-8): the permission-filtered admin landing
+        // dashboard. Payload's built-in DashboardView renders this IN PLACE OF its
+        // DefaultDashboard at `/admin` (it reads
+        // `admin.components.views.dashboard.Component`, falling back to the default
+        // collection-cards view). Every widget is gated server-side on
+        // hasMenuAccess + scoped to the active site. See AdminDashboardView.tsx.
+        dashboard: {
+          Component: '/components/dashboard/AdminDashboardView#AdminDashboardView',
+        },
+        // Task 5A (TODO 5.2): the traffic statistics dashboard (5 tabs), gated
+        // on statistics.traffic + tenant-scoped. See TrafficStatisticsView.tsx.
+        trafficStatistics: {
+          Component: '/components/statistics/TrafficStatisticsView#TrafficStatisticsView',
+          path: '/traffic-statistics',
+          exact: true,
+        },
+        // Task 5B (TODO 5.3): download statistics (TOP-20 + detail), gated on
+        // statistics.downloads + tenant-scoped. See DownloadStatisticsView.tsx.
+        downloadStatistics: {
+          Component: '/components/statistics/DownloadStatisticsView#DownloadStatisticsView',
+          path: '/download-statistics',
+          exact: true,
+        },
+        // Task 5B (TODO 5.4): satisfaction statistics (distribution + per-menu +
+        // dept/menu cascade), gated on statistics.satisfaction + tenant-scoped.
+        // See SatisfactionStatisticsView.tsx.
+        satisfactionStatistics: {
+          Component: '/components/statistics/SatisfactionStatisticsView#SatisfactionStatisticsView',
+          path: '/satisfaction-statistics',
+          exact: true,
+        },
+        // Task 5C (refs 1-58/1-59): error statistics (period/type/URL tabs with
+        // drill-down), gated on system.errorLogs. See ErrorStatisticsView.tsx.
+        errorStatistics: {
+          Component: '/components/statistics/ErrorStatisticsView#ErrorStatisticsView',
+          path: '/error-statistics',
+          exact: true,
+        },
+        // Task 5C (ref 2-20): the site access-history view (masked, searchable,
+        // paginated) over the existing accessLogs, gated on privacy.accessLogs.
+        // See AccessHistoryView.tsx.
+        accessHistory: {
+          Component: '/components/statistics/AccessHistoryView#AccessHistoryView',
+          path: '/access-history',
+          exact: true,
+        },
         // Task 2B: replace the built-in login view with a branded two-step
         // (password → Google-OTP) form that also shows the conditional
         // Account-Request / Find-ID / Find-PW links (ref 1-1). The actual 2FA
@@ -316,6 +372,9 @@ export default buildConfig({
     // both feed the Phase-5 statistics module.
     SatisfactionRatings,
     PageViews,
+    // Aggregated per-(site, day) traffic rollups (Task 5A) — the statistics tabs
+    // read these; written by the aggregation job (src/site/trafficAggregation.ts).
+    TrafficDaily,
     Roles,
     AdminMenus,
     PasswordPolicies,
@@ -328,6 +387,10 @@ export default buildConfig({
     LoginHistory,
     PermissionChangeLogs,
     MenuPermissionLogs,
+    // System-wide error log (Task 5C; refs 1-56..1-59) — append-only, immutable,
+    // gated on system.errorLogs. Written by the global afterError capture path
+    // (src/audit/recordError.ts) via overrideAccess.
+    ErrorLogs,
   ],
   // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
   // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B
@@ -351,6 +414,15 @@ export default buildConfig({
   // security-sensitive email links never fall back to the request Origin
   // header.
   serverURL,
+  // Task 5C (ref 1-56): GLOBAL exception capture. The config-level afterError
+  // hook fires for every REST/GraphQL error via Payload's routeError; this
+  // writes a sanitized `errorLogs` row for genuine unhandled exceptions (HTTP
+  // 500+) and NEVER alters the error response. Extends the T2A per-collection
+  // afterError (login-failure) pattern to a single global capture path. See
+  // src/audit/recordError.ts.
+  hooks: {
+    afterError: [recordGlobalError],
+  },
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },

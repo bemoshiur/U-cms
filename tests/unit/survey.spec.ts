@@ -228,6 +228,53 @@ describe('aggregateSurvey', () => {
   })
 })
 
+describe('aggregateSurvey — D3 public free-text opt-in (Task 5B)', () => {
+  const RESPONSES = [
+    {
+      answers: [
+        { question: 1, optionValues: ['other'], textValue: 'saw it on the radio' },
+        { question: 3, textValue: 'Great survey' },
+      ],
+    },
+    { answers: [{ question: 3, textValue: 'Add more options' }] },
+  ]
+
+  it('PUBLIC audience hides verbatim free-text by default (opt-in OFF) but keeps counts', () => {
+    const agg = aggregateSurvey(QUESTIONS, RESPONSES, { audience: 'public' })
+    const q1 = agg.questions.find((q) => q.questionId === 1)!
+    const q3 = agg.questions.find((q) => q.questionId === 3)!
+
+    // Verbatim withheld ...
+    expect(q1.otherTexts).toEqual([])
+    expect(q3.textAnswers).toEqual([])
+    expect(q1.verbatimSuppressed).toBe(true)
+    expect(q3.verbatimSuppressed).toBe(true)
+    // ... but aggregate counts (not verbatim) still show.
+    expect(q1.options.find((o) => o.value === 'other')!.count).toBe(1)
+    expect(q3.answeredCount).toBe(2)
+  })
+
+  it('PUBLIC audience shows a question opted in via includeInPublicResults', () => {
+    const optedIn = QUESTIONS.map((q) => (q.id === 3 ? { ...q, includeInPublicResults: true } : q))
+    const agg = aggregateSurvey(optedIn, RESPONSES, { audience: 'public' })
+    const q3 = agg.questions.find((q) => q.questionId === 3)!
+    expect(q3.textAnswers.sort()).toEqual(['Add more options', 'Great survey'])
+    expect(q3.verbatimSuppressed).toBe(false)
+    // A DIFFERENT question (q1) not opted in stays suppressed.
+    expect(agg.questions.find((q) => q.questionId === 1)!.otherTexts).toEqual([])
+  })
+
+  it('ADMIN audience (default) always includes verbatim free-text', () => {
+    const agg = aggregateSurvey(QUESTIONS, RESPONSES) // default audience: admin
+    const q1 = agg.questions.find((q) => q.questionId === 1)!
+    const q3 = agg.questions.find((q) => q.questionId === 3)!
+    expect(q1.otherTexts).toEqual(['saw it on the radio'])
+    expect(q3.textAnswers.sort()).toEqual(['Add more options', 'Great survey'])
+    expect(q1.verbatimSuppressed).toBe(false)
+    expect(q3.verbatimSuppressed).toBe(false)
+  })
+})
+
 describe('computeParticipantKey (HMAC, review C3)', () => {
   const SECRET = 'server-secret-A'
   it('is deterministic and identity-free from a member id', () => {

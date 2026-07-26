@@ -185,6 +185,23 @@ export const SurveyQuestions: CollectionConfig = {
     },
     { name: 'required', type: 'checkbox', defaultValue: false },
     {
+      // D3 (Task 5B): free-text privacy opt-in. Verbatim respondent text — a
+      // text/textarea question's answers, or an "Other" free-text on a
+      // single/multi question — is NOT shown in the PUBLIC aggregate results by
+      // default (default OFF). The survey author must explicitly opt a question
+      // in for its verbatim answers to appear publicly. The access-gated ADMIN
+      // CSV export ALWAYS includes the verbatim text regardless of this flag
+      // (see aggregateSurvey's `audience` option + surveyExport.ts). Aggregate
+      // option counts/percentages are never verbatim, so they always show.
+      name: 'includeInPublicResults',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        description:
+          'Show this question’s verbatim free-text/"Other" answers in PUBLIC results. Off by default (privacy); the admin export always includes them.',
+      },
+    },
+    {
       name: 'options',
       type: 'array',
       labels: { singular: 'Option', plural: 'Options' },

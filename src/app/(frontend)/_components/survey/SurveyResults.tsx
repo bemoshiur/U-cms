@@ -43,16 +43,26 @@ export function SurveyResults({ aggregate }: { aggregate: SurveyAggregate }) {
                     ))}
                   </ul>
                 </li>
+              ) : q.verbatimSuppressed ? (
+                <li className="survey-results__others survey-results__hidden">
+                  Individual free-text answers are not shown publicly.
+                </li>
               ) : null}
             </ul>
           ) : (
             <div className="survey-results__texts">
               <p className="survey-results__answered">{q.answeredCount} text answer(s)</p>
-              <ul>
-                {q.textAnswers.map((t, i) => (
-                  <li key={i}>{t}</li>
-                ))}
-              </ul>
+              {q.verbatimSuppressed ? (
+                <p className="survey-results__hidden">
+                  Individual free-text answers are not shown publicly.
+                </p>
+              ) : (
+                <ul>
+                  {q.textAnswers.map((t, i) => (
+                    <li key={i}>{t}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>

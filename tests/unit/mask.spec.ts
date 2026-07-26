@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { maskEmail, maskId, maskLabel, maskName } from '@/lib/mask'
+import { maskEmail, maskId, maskIp, maskLabel, maskName } from '@/lib/mask'
 
 /**
  * Unit tests for the pure PII-masking helpers (Task 2A Part 5). Display-only
@@ -75,5 +75,21 @@ describe('maskLabel (name(id) composite)', () => {
 
   it('handles empty', () => {
     expect(maskLabel('')).toBe('')
+  })
+})
+
+describe('maskIp (Task 5C — access-history "from where (masked)")', () => {
+  it('stars the last octet of an IPv4 address', () => {
+    expect(maskIp('203.0.113.5')).toBe('203.0.113.*')
+    expect(maskIp('192.168.0.1')).toBe('192.168.0.*')
+  })
+
+  it('keeps the first two groups of an IPv6 address', () => {
+    expect(maskIp('2001:db8::1')).toBe('2001:db8:***')
+  })
+
+  it('falls back to maskId for anything else, and handles empty', () => {
+    expect(maskIp('unknown')).toBe(maskId('unknown'))
+    expect(maskIp('')).toBe('')
   })
 })

@@ -11,6 +11,7 @@ import { hasMenuAccessSync, isSuperUser, menuFieldAccess } from '../../access/ha
 import { getAssignedTenantIds, tenantScopedMenuAccess } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
 import { containsProfanity, extractLexicalText } from '../../content/wordFilter'
+import { downloadStatsEndpoints } from '../../endpoints/downloadStatsExport'
 import type { BoardTypeKind } from '../boards/defaults'
 import { toRelationId } from '../utils'
 import { POST_CATEGORY_SLOTS, POSTS_MENU_KEY, REQUIRED_ENFORCED_FIELD_KEYS } from './defaults'
@@ -413,6 +414,10 @@ export const Posts: CollectionConfig = {
     update: tenantScopedMenuAccess(POSTS_MENU_KEY),
     delete: tenantScopedMenuAccess(POSTS_MENU_KEY),
   },
+  // Download statistics (Task 5B; TODO 5.3): GET /api/posts/download-stats[/export].
+  // Gated on `statistics.downloads` + an explicit site-assignment check inside
+  // the handler (NOT the posts `content.posts` access above). See downloadStatsExport.ts.
+  endpoints: downloadStatsEndpoints,
   fields: [
     {
       name: 'board',

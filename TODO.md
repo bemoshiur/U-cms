@@ -133,13 +133,13 @@
 
 ## Phase 5 — Insights
 
-- [ ] 5.1 Raw analytics events → nightly D-1 aggregation job (Payload jobs queue) + retention/pruning
-- [ ] 5.2 Traffic stats views (admin + per-site): 5 tabs (period/menu/OS/browser/device), daily/monthly, chart+table, Excel — refs 1-54, 2-17
-- [ ] 5.3 Attachment download stats: per-file counters, TOP-20 chart, detail table, Excel — ref 2-18
-- [ ] 5.4 Satisfaction stats: dept+menu cascading filters, distribution table w/ % weighting, per-menu bars, Excel — ref 2-19
-- [ ] 5.5 Site access history view — ref 2-20
-- [ ] 5.6 Error-log module: global exception capture (class, URL, user, IP) + list w/ user-centric search + period/type/URL stat tabs w/ drill-down — refs 1-56..1-59
-- [ ] 5.7 Admin dashboard: today visitors/PV, signups, post counts, traffic chart (week/month, chart/table), admin notices, notification area, user notices, recent Q&A/posts + most-viewed (permission-filtered), banner strip, quick menu w/ profile + logout timer — refs 1-7, 1-8
+- [x] 5.1 Raw analytics events → nightly D-1 aggregation job (Payload jobs queue) + retention/pruning
+- [x] 5.2 Traffic stats views (admin + per-site): 5 tabs (period/menu/OS/browser/device), daily/monthly, chart+table, Excel — refs 1-54, 2-17
+- [x] 5.3 Attachment download stats: per-file counters, TOP-20 chart, detail table, Excel — ref 2-18
+- [x] 5.4 Satisfaction stats: dept+menu cascading filters, distribution table w/ % weighting, per-menu bars, Excel — ref 2-19
+- [x] 5.5 Site access history view — ref 2-20
+- [x] 5.6 Error-log module: global exception capture (class, URL, user, IP) + list w/ user-centric search + period/type/URL stat tabs w/ drill-down — refs 1-56..1-59
+- [x] 5.7 Admin dashboard: today visitors/PV, signups, post counts, traffic chart (week/month, chart/table), admin notices, notification area, user notices, recent Q&A/posts + most-viewed (permission-filtered), banner strip, quick menu w/ profile + logout timer — refs 1-7, 1-8
 
 **Exit criteria:** dashboards populated from real captured traffic; D-1 aggregation verified; error drill-downs work.
 
