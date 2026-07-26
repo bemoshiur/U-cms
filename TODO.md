@@ -118,16 +118,16 @@
 
 ## Phase 4 — Public demo site
 
-- [ ] 4.1 Public layout: site logo/footer from `sites`, guide menus, GNB/LNB from user menus (login-state exposure), breadcrumb, sitemap page
-- [ ] 4.2 Members: signup (terms consent snapshot, banned-word checks, dup checks), login, profile edit; `members` auth collection (tenant-scoped)
-- [ ] 4.3 Content pages (webContents renderer) + person-in-charge display (when site data-manager toggle on)
-- [ ] 4.4 Board frontends: notice/press/data-library lists w/ search + pagination, detail w/ attachments, Q&A (member ask, admin answer), FAQ, gallery grid
-- [ ] 4.5 Surveys — refs 2-9..2-12: `surveys` (topic, minute-precision window, audience anyone/members, result-visibility, dept, phone, rich description) + `surveyQuestions` (4 types, required flag, "other" option, dynamic options, skip logic on single-select) + `surveyResponses` (participant count, anonymous rule)
-- [ ] 4.6 Survey rules: questions immutable once started; results visible from in-progress; results view (bars, %, per-respondent list, page size) + 2 Excel exports
-- [ ] 4.7 Privacy terms — refs 2-14..2-16: `termsDocuments` versioned, 5 fixed categories bound per menu (internal-link picker), exactly-one-active version, public page w/ version history
-- [ ] 4.8 Satisfaction widget (5-point) on content pages when site toggle on
-- [ ] 4.9 Public traffic capture middleware (feeds Phase 5)
-- [ ] 4.10 Design pass under new brand (frontend-design review, responsive, WCAG-sane)
+- [x] 4.1 Public layout: site logo/footer from `sites`, guide menus, GNB/LNB from user menus (login-state exposure), breadcrumb, sitemap page
+- [x] 4.2 Members: signup (terms consent snapshot, banned-word checks, dup checks), login, profile edit; `members` auth collection (tenant-scoped)
+- [x] 4.3 Content pages (webContents renderer) + person-in-charge display (when site data-manager toggle on)
+- [x] 4.4 Board frontends: notice/press/data-library lists w/ search + pagination, detail w/ attachments, Q&A (member ask, admin answer), FAQ, gallery grid
+- [x] 4.5 Surveys — refs 2-9..2-12: `surveys` (topic, minute-precision window, audience anyone/members, result-visibility, dept, phone, rich description) + `surveyQuestions` (4 types, required flag, "other" option, dynamic options, skip logic on single-select) + `surveyResponses` (participant count, anonymous rule)
+- [x] 4.6 Survey rules: questions immutable once started; results visible from in-progress; results view (bars, %, per-respondent list, page size) + 2 Excel exports
+- [x] 4.7 Privacy terms — refs 2-14..2-16: `termsDocuments` versioned, 5 fixed categories bound per menu (internal-link picker), exactly-one-active version, public page w/ version history
+- [x] 4.8 Satisfaction widget (5-point) on content pages when site toggle on
+- [x] 4.9 Public traffic capture middleware (feeds Phase 5)
+- [x] 4.10 Design pass under new brand (frontend-design review, responsive, WCAG-sane)
 
 **Exit criteria:** a visitor can browse content/boards, join as member, answer a survey, rate a page; all public pages tenant-scoped.
 

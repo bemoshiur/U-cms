@@ -482,7 +482,7 @@ describe('content engine: menus + web content + short URLs + help (Task 3D)', ()
       const titleDiff = body.diff.find((d) => d.field === 'title')
       expect(titleDiff?.changed).toBe(true)
 
-      // A user scoped to the OTHER site (B) is denied (403).
+      // A user scoped to the OTHER site (B) is denied (404, existence-oracle collapsed).
       const denied = await handleWebContentDiff({
         payload,
         user: scopedBUser,
@@ -490,7 +490,7 @@ describe('content engine: menus + web content + short URLs + help (Task 3D)', ()
         from: fromV.id,
         to: toV.id,
       })
-      expect(denied.status).toBe(403)
+      expect(denied.status).toBe(404)
     })
 
     it('scopes web contents per tenant (cross-tenant create denied)', async () => {
@@ -637,14 +637,14 @@ describe('content engine: menus + web content + short URLs + help (Task 3D)', ()
       expect(text).toContain(postTitle)
     })
 
-    it('is access-gated + tenant-scoped: a user assigned to another site is denied (403)', async () => {
+    it('is access-gated + tenant-scoped: a user assigned to another site is denied (404)', async () => {
       const res = await handleBoardExport({ payload, user: scopedBUser, id: boardAId, params: {} })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
 
-    it('denies an unauthenticated export (403)', async () => {
+    it('denies an unauthenticated export (404)', async () => {
       const res = await handleBoardExport({ payload, user: undefined, id: boardAId, params: {} })
-      expect(res.status).toBe(403)
+      expect(res.status).toBe(404)
     })
   })
 

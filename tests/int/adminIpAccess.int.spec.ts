@@ -160,6 +160,30 @@ describe('admin IP access control (Task 2C)', () => {
       expect(decision.armed).toBe(false)
     })
 
+    it('a bare-`*` allow ruleset is reported as unrestricted (grants everyone)', async () => {
+      const site = await makeSite()
+      await createRule(site, { ipAddress: '*', accessType: 'allow' })
+      const decision = await isIpAllowedForAdmin(payload, undefined, site)
+      expect(decision.armed).toBe(true)
+      expect(decision.unrestricted).toBe(true)
+    })
+
+    it('a `*` allow + any block rule is NOT unrestricted (a block means real restriction)', async () => {
+      const site = await makeSite()
+      await createRule(site, { ipAddress: '*', accessType: 'allow' })
+      await createRule(site, { ipAddress: '203.0.113.7', accessType: 'block' })
+      const decision = await isIpAllowedForAdmin(payload, undefined, site)
+      expect(decision.unrestricted).toBe(false)
+    })
+
+    it('a specific-only allowlist (no `*`) is NOT unrestricted', async () => {
+      const site = await makeSite()
+      await createRule(site, { ipAddress: '203.0.113.7', accessType: 'allow' })
+      const decision = await isIpAllowedForAdmin(payload, undefined, site)
+      expect(decision.armed).toBe(true)
+      expect(decision.unrestricted).toBe(false)
+    })
+
     it('a rule on another site does not grant access here (wrong-site ignored)', async () => {
       const siteA = await makeSite()
       const siteB = await makeSite()
@@ -208,11 +232,11 @@ describe('admin IP access control (Task 2C)', () => {
       expect(result.allowed).toBe(true)
     })
 
-    it('GUARDS both the media collection endpoint AND the media file route (B2)', async () => {
-      // B2 (phase-3-final-review §2): `/api/media/file/*` is no longer exempt —
-      // it held secret/cross-tenant board attachments, so a blocked IP must not
-      // reach it. Both the collection REST endpoints and the file route are now
-      // behind the allowlist.
+    it('GUARDS the media collection list AND every attachments route; EXEMPTS the public media file route (Task 4-zero)', async () => {
+      // Task 4-zero: `/api/media/file/*` is the deliberate PUBLIC logo path
+      // (re-exempted) — `media` holds only public assets now. The media
+      // collection list stays guarded, and the access-controlled `attachments`
+      // routes (collection + file) are guarded too.
       const collection = await evaluateAdminIpRequest({
         payload,
         pathname: '/api/media/123',
@@ -221,13 +245,29 @@ describe('admin IP access control (Task 2C)', () => {
       expect(collection.allowed).toBe(false)
       expect(collection.status).toBe(403)
 
-      const file = await evaluateAdminIpRequest({
+      const mediaFile = await evaluateAdminIpRequest({
         payload,
         pathname: '/api/media/file/logo.png',
         client: trusted('198.51.100.9'),
       })
-      expect(file.allowed).toBe(false)
-      expect(file.status).toBe(403)
+      expect(mediaFile.allowed).toBe(true)
+      expect(mediaFile.reason).toBe('exempt-path')
+
+      const attachmentsList = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/api/attachments/123',
+        client: trusted('198.51.100.9'),
+      })
+      expect(attachmentsList.allowed).toBe(false)
+      expect(attachmentsList.status).toBe(403)
+
+      const attachmentsFile = await evaluateAdminIpRequest({
+        payload,
+        pathname: '/api/attachments/file/merger-plan.pdf',
+        client: trusted('198.51.100.9'),
+      })
+      expect(attachmentsFile.allowed).toBe(false)
+      expect(attachmentsFile.status).toBe(403)
     })
 
     it('does NOT block a disallowed IP on the public recovery/frontend endpoints', async () => {
@@ -277,6 +317,68 @@ describe('admin IP access control (Task 2C)', () => {
         expect(result.allowed).toBe(false)
         expect(result.status).toBe(503)
         expect(result.reason).toBe('no-trusted-ip-fail-closed')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('EFFECTIVELY-UNRESTRICTED (`*` allow only) + no trusted IP + PRODUCTION → ALLOW (not 503)', async () => {
+      // Task TR2 Part 4: the seeded bootstrap `*` allow means "unrestricted" — it
+      // grants every IP anyway, so an unresolved client IP opens nothing extra.
+      // The guard must NOT 503-brick a demo (e.g. Vercel with TRUSTED_PROXY_HOPS
+      // unset) over an all-allowing list.
+      await deleteAllAdminRules()
+      await createRule(adminSiteId, { ipAddress: '*', accessType: 'allow' })
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(true)
+        expect(result.reason).toBe('unrestricted-open')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('a `*` allow BUT ALSO a block rule → genuinely restrictive → still FAIL CLOSED (503)', async () => {
+      // A single block rule proves the operator is genuinely restricting; an
+      // unresolved IP could be an attempt to evade it, so we must NOT treat the
+      // list as open — protection is preserved.
+      await deleteAllAdminRules()
+      await createRule(adminSiteId, { ipAddress: '*', accessType: 'allow' })
+      await createRule(adminSiteId, { ipAddress: '203.0.113.7', accessType: 'block' })
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(503)
+        expect(result.reason).toBe('no-trusted-ip-fail-closed')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('a SPECIFIC allowlist (no `*`) + no trusted IP + PRODUCTION → still FAIL CLOSED (503)', async () => {
+      // Genuinely restrictive: only specific IPs are allowed; an unresolved IP
+      // matches nothing, so it must not be admitted.
+      await deleteAllAdminRules()
+      await createRule(adminSiteId, { ipAddress: '203.0.113.7', accessType: 'allow' })
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(503)
       } finally {
         vi.unstubAllEnvs()
       }

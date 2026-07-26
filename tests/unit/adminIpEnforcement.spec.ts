@@ -101,14 +101,23 @@ describe('resolveClientIp (trusted-proxy model)', () => {
   })
 })
 
-describe('classifyAdminPath (media is fully guarded — B2)', () => {
-  it('GUARDS /api/media/file/* AND the media collection REST endpoints', () => {
-    // B2 (phase-3-final-review §2): the file route is no longer exempt — it
-    // held secret/cross-tenant board attachments. Phase 4 will re-open a
-    // deliberate public path with a tenant/secret-aware split.
-    expect(classifyAdminPath('/api/media/file/logo.png')).toBe('guard')
+describe('classifyAdminPath (Task 4-zero: public media file route, guarded attachments)', () => {
+  it('EXEMPTS the public /api/media/file/* route but GUARDS the media collection list', () => {
+    // Task 4-zero: `media` is the PUBLIC display-asset pool (logos etc.) — the
+    // file route is the deliberate public path (re-exempted), safe now that all
+    // access-controlled attachments moved to the `attachments` collection. The
+    // collection list stays guarded (no anonymous enumeration).
+    expect(classifyAdminPath('/api/media/file/logo.png')).toBe('exempt')
     expect(classifyAdminPath('/api/media')).toBe('guard')
     expect(classifyAdminPath('/api/media/123')).toBe('guard')
+  })
+
+  it('GUARDS the attachments collection AND its file route (never public)', () => {
+    // Access-controlled files: the raw attachment routes must stay guarded +
+    // tenant-gated; the ONLY sanctioned fetch is /api/files/download.
+    expect(classifyAdminPath('/api/attachments/file/merger-plan.pdf')).toBe('guard')
+    expect(classifyAdminPath('/api/attachments')).toBe('guard')
+    expect(classifyAdminPath('/api/attachments/123')).toBe('guard')
   })
 
   it('guards /admin and /api generally, exempts recovery + public frontend', () => {

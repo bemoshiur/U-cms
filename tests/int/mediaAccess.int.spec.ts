@@ -9,28 +9,22 @@ import { sitesStep } from '@/seed/steps/sites'
 import { classifyAdminPath } from '@/security/adminIpEnforcement'
 
 /**
- * B2 regression (phase-3-final-review §2) — INTERIM media read gate.
+ * Task 4-zero — `media` is the PUBLIC display-asset pool (criterion 4).
  *
- * `media.read` was `() => true` (fully public, no auth, no tenant) AND
- * `/api/media/file/*` was exempt from the admin IP guard. In Phase 3 `media`
- * also holds secret + cross-tenant board attachments (`Posts.attachments[]`),
- * so an unauthenticated caller could list every tenant's files via `/api/media`
- * and stream any file via `/api/media/file/<filename>`.
+ * The Phase-3 interim B2 fix made `media.read` require auth and guarded
+ * `/api/media/file`, which closed the leak but ALSO made site logos
+ * unreadable to the public site. Task 4-zero moved every access-controlled
+ * attachment into the tenant-scoped `attachments` collection, so `media` holds
+ * ONLY public assets and its read is public again — the deliberate public logo
+ * path Phase 4 T4A needs. Attachment confidentiality is proven separately in
+ * `attachmentAccess.int.spec.ts`.
  *
- * INTERIM FIX (closes the UNAUTHENTICATED vector; full tenant/secret-aware fix
- * is Phase 4 T-zero):
- *   1. `media.read` now requires an authenticated user — the same access fn
- *      gates `/api/media` (list), `/api/media/<id>`, AND `/api/media/file/*`.
- *   2. `/api/media/file` removed from `EXEMPT_API_PREFIXES` → also behind the IP guard.
- *
- * These tests FAIL without the fix:
- *   - with `read: () => true`, the unauthenticated list returns the media doc, and
- *   - with the route still exempt, `classifyAdminPath('/api/media/file/...')` is `exempt`.
+ * These assertions FAIL if `media.read` is re-closed to authenticated-only, or
+ * if `/api/media/file` is dropped from the exempt list.
  */
 
 let payload: Payload
 
-const TEST_PASSWORD = 'a-long-enough-test-password-1'
 const PNG_1x1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
   'base64',
@@ -39,102 +33,66 @@ const PNG_1x1 = Buffer.from(
 function marker(label: string): string {
   return `${label}-${Date.now()}-${Math.floor(Math.random() * 100000)}`
 }
+function uniqueSiteId(label: string): string {
+  return `t${label}${Date.now()}${Math.floor(Math.random() * 10000)}`.toLowerCase()
+}
 
-describe('B2: media reads require authentication (interim gate)', () => {
-  let mediaId: number
-  let mediaFilename: string
-  let adminUser: Awaited<ReturnType<typeof payload.create>>
+describe('Task 4-zero: media is the public display-asset pool (site logos readable)', () => {
+  let logoId: number
+  let logoFilename: string
 
   beforeAll(async () => {
     const payloadConfig = await config
     payload = await getPayload({ config: payloadConfig })
     await runSeed(payload, [adminMenusStep, sitesStep])
 
-    const name = `${marker('secret-attachment')}.png`
-    const created = await payload.create({
+    const name = `${marker('site-logo')}.png`
+    const logo = await payload.create({
       collection: 'media',
       data: { alt: name },
       file: { data: PNG_1x1, name, mimetype: 'image/png', size: PNG_1x1.length },
       overrideAccess: true,
     })
-    mediaId = created.id
-    mediaFilename = created.filename as string
+    logoId = logo.id
+    logoFilename = logo.filename as string
 
-    // Any authenticated user is sufficient for the interim gate (read =
-    // Boolean(req.user)); a super role keeps setup independent of menu grants.
-    const superRole = await payload.create({
-      collection: 'roles',
+    // Attach the logo to a real site — the genuinely-public asset the public
+    // site renders unauthenticated.
+    await payload.create({
+      collection: 'sites',
       data: {
-        roleId: `ROLE_B2_SUPER_${Date.now()}`,
-        name: 'B2 super role',
-        description: 'isSuper for B2 tests.',
-        isSuper: true,
-      },
-      overrideAccess: true,
-    })
-    adminUser = await payload.create({
-      collection: 'users',
-      data: {
-        email: `b2-admin-${Date.now()}-${Math.floor(Math.random() * 100000)}@example.com`,
-        password: TEST_PASSWORD,
-        roles: [superRole.id],
-        status: 'active',
-      },
+        siteId: uniqueSiteId('logo'),
+        name: 'Logo site',
+        url: 'https://logo.example.com',
+        logo: logoId,
+      } as never,
       overrideAccess: true,
     })
   })
 
-  it('UNAUTHENTICATED list (/api/media) is denied', async () => {
-    // With `read: ({ req }) => Boolean(req.user)`, an anonymous list is refused
-    // (Payload throws Forbidden when read access resolves to `false`). Without
-    // the fix (`read: () => true`) this call resolves and returns the doc.
-    await expect(
-      payload.find({
-        collection: 'media',
-        overrideAccess: false, // no `user` → read access sees no req.user
-        limit: 0,
-        pagination: false,
-      }),
-    ).rejects.toThrow()
-  })
-
-  it('UNAUTHENTICATED read-by-id (/api/media/:id) is denied — throws', async () => {
-    // The `/api/media/file/<filename>` route runs this same `read` access, so a
-    // denied unauthenticated read-by-id proves the file route denies anon too.
-    await expect(
-      payload.findByID({
-        collection: 'media',
-        id: mediaId,
-        overrideAccess: false,
-      }),
-    ).rejects.toThrow()
-  })
-
-  it('an AUTHENTICATED admin still can list and read media (behavior preserved)', async () => {
+  it('an UNAUTHENTICATED caller CAN read a media doc (public logo path — criterion 4)', async () => {
+    // `read: () => true`, so an anonymous list/read resolves (before Task 4-zero
+    // the interim gate threw here). This is what lets T4A render a logo with no
+    // session.
     const list = await payload.find({
       collection: 'media',
-      overrideAccess: false,
-      user: adminUser,
+      overrideAccess: false, // no user
       limit: 0,
       pagination: false,
     })
-    expect(list.docs.map((d) => d.id)).toContain(mediaId)
+    expect(list.docs.map((d) => d.id)).toContain(logoId)
 
     const byId = await payload.findByID({
       collection: 'media',
-      id: mediaId,
-      overrideAccess: false,
-      user: adminUser,
+      id: logoId,
+      overrideAccess: false, // no user — the /api/media/file route runs this same read
     })
-    expect(byId.id).toBe(mediaId)
-    expect(byId.filename).toBe(mediaFilename)
+    expect(byId.filename).toBe(logoFilename)
   })
 
-  it('the media FILE route is now behind the admin IP guard (no longer exempt)', async () => {
-    // Without the fix this classified as `exempt`.
-    expect(classifyAdminPath(`/api/media/file/${mediaFilename}`)).toBe('guard')
-    // The collection REST endpoints were already guarded — still are.
+  it('exposes the public media FILE route (exempt) but keeps the collection list guarded', () => {
+    expect(classifyAdminPath(`/api/media/file/${logoFilename}`)).toBe('exempt')
     expect(classifyAdminPath('/api/media')).toBe('guard')
-    expect(classifyAdminPath(`/api/media/${mediaId}`)).toBe('guard')
+    expect(classifyAdminPath(`/api/media/${logoId}`)).toBe('guard')
   })
 })

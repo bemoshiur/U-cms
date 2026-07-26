@@ -96,7 +96,7 @@ export const adminIpRulesStep: SeedStep = {
         collection: 'adminIpRules',
         data: {
           applicantName: 'System',
-          affiliation: 'Pulse CMS (seed)',
+          affiliation: 'U-CMS (seed)',
           phone: '000-0000-0000',
           memo: rule.memo,
           ipAddress: rule.ipAddress,

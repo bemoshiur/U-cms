@@ -54,7 +54,7 @@ const validateNoticeAttachments: CollectionBeforeValidateHook = async ({ data, r
       continue
     }
     const media = await req.payload.findByID({
-      collection: 'media',
+      collection: 'attachments',
       id: mediaId,
       depth: 0,
       overrideAccess: true,
@@ -150,7 +150,11 @@ export const AdminNotices: CollectionConfig = {
         description: `Up to ${ADMIN_NOTICE_MAX_ATTACHMENTS} image files (png/gif/jpg), each with an optional description (ref 1-50).`,
       },
       fields: [
-        { name: 'media', type: 'upload', relationTo: 'media', required: true },
+        // Repointed media → `attachments` (Task 4-zero): admin-notice images are
+        // moved OUT of the public `media` pool into the tenant-scoped
+        // `attachments` pool, so making `media.read` public (for logos) cannot
+        // re-expose them. Field name kept `media` (stable column).
+        { name: 'media', type: 'upload', relationTo: 'attachments', required: true },
         {
           name: 'description',
           type: 'text',

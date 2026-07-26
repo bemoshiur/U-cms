@@ -52,6 +52,23 @@ async function createMedia(name: string, mimetype = 'image/png'): Promise<number
   return doc.id
 }
 
+// Task 4-zero: admin-notice attachments live in the tenant-scoped `attachments`
+// collection (moved out of the public `media` pool). Display IMAGES (banner/
+// popup/notification-area) stay in `media` (public assets) via createMedia above.
+async function createNoticeAttachment(
+  name: string,
+  tenantId: number,
+  mimetype = 'image/png',
+): Promise<number> {
+  const doc = await payload.create({
+    collection: 'attachments',
+    data: { alt: name, tenant: tenantId } as never,
+    file: { data: PNG_1x1, name, mimetype, size: PNG_1x1.length },
+    overrideAccess: true,
+  })
+  return doc.id
+}
+
 const DISPLAY_MENU_KEYS = [
   'content.notificationAreas',
   'content.popups',
@@ -381,7 +398,7 @@ describe('per-site display components (Task 3C)', () => {
     it(`rejects more than ${ADMIN_NOTICE_MAX_ATTACHMENTS} attachments`, async () => {
       const media = await Promise.all(
         Array.from({ length: ADMIN_NOTICE_MAX_ATTACHMENTS + 1 }, (_i, n) =>
-          createMedia(`${marker('att')}-${n}.png`),
+          createNoticeAttachment(`${marker('att')}-${n}.png`, siteAId),
         ),
       )
       await expect(
@@ -399,7 +416,7 @@ describe('per-site display components (Task 3C)', () => {
     })
 
     it('accepts up to the max attachments and rejects a disallowed extension', async () => {
-      const png = await createMedia(`${marker('ok')}.png`)
+      const png = await createNoticeAttachment(`${marker('ok')}.png`, siteAId)
       const ok = await payload.create({
         collection: 'adminNotices',
         data: {
@@ -412,7 +429,7 @@ describe('per-site display components (Task 3C)', () => {
       })
       expect(ok.attachments?.length).toBe(1)
 
-      const pdf = await createMedia(`${marker('bad')}.pdf`, 'application/pdf')
+      const pdf = await createNoticeAttachment(`${marker('bad')}.pdf`, siteAId, 'application/pdf')
       await expect(
         payload.create({
           collection: 'adminNotices',

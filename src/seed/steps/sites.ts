@@ -8,7 +8,7 @@ import type { SeedStep } from '../types'
 export const SEED_SITES = [
   {
     siteId: 'bos',
-    name: 'Pulse CMS Back Office',
+    name: 'U-CMS Back Office',
     url: 'http://localhost:3000/admin',
     isAdminSite: true,
   },

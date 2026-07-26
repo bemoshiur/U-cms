@@ -1,5 +1,7 @@
 import type { PayloadRequest } from 'payload'
 
+import { branding } from '../branding'
+import { resolvePublicServerURL } from '../env/serverUrl'
 import { renderEmail } from './renderEmail'
 
 /**
@@ -21,14 +23,16 @@ import { renderEmail } from './renderEmail'
  * explicitly in `src/payload.config.ts` from `PAYLOAD_PUBLIC_SERVER_URL`)
  * is the only trusted, server-controlled source of truth; the final
  * fallback below is for the rare case `req.payload` isn't populated and is
- * itself server-side config, never request-derived.
+ * itself server-side config, never request-derived (resolved via the shared
+ * `resolvePublicServerURL`, so it matches payload.config's authoritative
+ * `serverURL` — incl. the Vercel-host fallback).
  */
 function resolveServerURL(req?: Partial<PayloadRequest>): string {
   const fromConfig = req?.payload?.config?.serverURL
   if (fromConfig) {
     return fromConfig.replace(/\/$/, '')
   }
-  return (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
+  return resolvePublicServerURL()
 }
 
 /**
@@ -46,10 +50,10 @@ export function renderForgotPasswordEmail(args: {
   const resetUrl = `${serverURL}/admin/reset/${token ?? ''}`
 
   return renderEmail({
-    preheader: 'Reset your Pulse CMS administrator password.',
+    preheader: `Reset your ${branding.productName} administrator password.`,
     heading: 'Reset your password',
     bodyHtml:
-      '<p>We received a request to reset the password for your Pulse CMS administrator account.</p>' +
+      `<p>We received a request to reset the password for your ${branding.productName} administrator account.</p>` +
       '<p>Click the button below to choose a new password. If you did not request this, you can safely ignore this email — your password will not change.</p>',
     ctaLabel: 'Reset password',
     ctaUrl: resetUrl,
@@ -65,10 +69,10 @@ export function renderForgotPasswordEmail(args: {
  */
 export function renderTwoFactorResetEmail(): string {
   return renderEmail({
-    preheader: 'Your Pulse CMS two-factor authentication has been reset.',
+    preheader: `Your ${branding.productName} two-factor authentication has been reset.`,
     heading: 'Two-factor authentication reset',
     bodyHtml:
-      '<p>An administrator has reset the two-factor authentication (Google OTP) on your Pulse CMS account.</p>' +
+      `<p>An administrator has reset the two-factor authentication (Google OTP) on your ${branding.productName} account.</p>` +
       '<p>Your previous authenticator entry will no longer work. The next time you sign in, you will be guided through setting up two-factor authentication again with a new QR code.</p>' +
       '<p>If you did not expect this, please contact an administrator immediately.</p>',
   })
@@ -77,10 +81,10 @@ export function renderTwoFactorResetEmail(): string {
 /** ID-recovery email HTML (ref 1-3 Find ID → email the account's login ID). */
 export function renderFindIdEmail(loginId: string): string {
   return renderEmail({
-    preheader: 'Your Pulse CMS administrator login ID.',
+    preheader: `Your ${branding.productName} administrator login ID.`,
     heading: 'Your login ID',
     bodyHtml:
-      '<p>You requested to recover the login ID for your Pulse CMS administrator account.</p>' +
+      `<p>You requested to recover the login ID for your ${branding.productName} administrator account.</p>` +
       `<p>Your login ID is: <strong>${escapeHtml(loginId)}</strong></p>` +
       '<p>If you did not request this, you can safely ignore this email.</p>',
   })

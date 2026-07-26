@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <!--
-    Pulse CMS favicon. Colors mirror `branding.colors.primary` / `primaryDark` from
+    U-CMS favicon. Colors mirror `branding.colors.primary` / `primaryDark` from
     src/branding.ts (kept in sync by hand — SVG can't import the TS module). Adapts to the
     OS/browser color scheme via `prefers-color-scheme` so it stays legible in dark browser
     chrome/tab bars.

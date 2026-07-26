@@ -14,7 +14,7 @@ export type RenderEmailOptions = {
 }
 
 /**
- * Renders a minimal, email-client-safe HTML shell branded with Pulse CMS's
+ * Renders a minimal, email-client-safe HTML shell branded with U-CMS's
  * product identity (`src/branding.ts`).
  *
  * Uses inline styles and a table-based layout (no external CSS, no flex/grid)

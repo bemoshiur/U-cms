@@ -21,7 +21,7 @@ const SEED_PNG_BASE64 =
 const SEED_IMAGE_ALT = 'Seed display component image'
 
 /** Exported so the integration test asserts against the same source of truth. */
-export const SEED_NOTIFICATION_TITLE = 'Pulse CMS v3.0 released'
+export const SEED_NOTIFICATION_TITLE = 'U-CMS v3.0 released'
 export const SEED_POPUP_TITLE = 'Welcome to the demo site'
 export const SEED_BANNER_TITLE = 'Sample banner'
 export const SEED_ADMIN_NOTICE_TITLE = 'Please always check administrator notices'

@@ -70,6 +70,12 @@ export const PUBLIC_ENDPOINT_NAMES = {
   findPassword: 'find-password',
   forgotPassword: 'users/forgot-password',
   resetPassword: 'users/reset-password',
+  // Public survey submit (Task 4D) + member Q&A ask (Task 4C).
+  surveyRespond: 'survey-respond',
+  memberAsk: 'member-ask',
+  // Public satisfaction rating + traffic beacon (Task 4E).
+  satisfactionRate: 'satisfaction-rate',
+  trackView: 'track-view',
 } as const
 
 export type RateLimitConfig = {

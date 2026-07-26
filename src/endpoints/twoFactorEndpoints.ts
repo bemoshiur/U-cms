@@ -45,9 +45,17 @@ function unauthorized(): Response {
 
 /** Loads the caller's own user row including the hidden `totpSecret`. */
 async function loadSelf(req: PayloadRequest) {
+  // Belt-and-braces (B1): NEVER resolve a non-admin principal's id against the
+  // `users` table. Members (Task 4B) share the `payload-token` namespace and the
+  // two id sequences collide, so a member's id would findByID an id-colliding
+  // admin here. The handlers already gate on `collection === 'users'`; this is a
+  // defensive fail-closed guard so a future caller can never bypass it.
+  if (req.user?.collection !== 'users') {
+    throw new Error('twoFactor: loadSelf requires an authenticated `users` principal')
+  }
   return req.payload.findByID({
     collection: 'users',
-    id: req.user!.id,
+    id: req.user.id,
     overrideAccess: true,
     showHiddenFields: true,
     req,
@@ -59,6 +67,13 @@ export const enrollTwoFactorEndpoint: Endpoint = {
   method: 'post',
   handler: async (req) => {
     if (!req.user) {
+      return unauthorized()
+    }
+    // B1: these endpoints write TOTP onto the `users` collection by the caller's
+    // id. Members (Task 4B) share the `payload-token` namespace and their ids
+    // collide with users ids, so a member session must be refused here — else it
+    // would enrol/confirm an attacker-controlled secret onto an id-colliding admin.
+    if (req.user.collection !== 'users') {
       return unauthorized()
     }
 
@@ -133,6 +148,12 @@ export const verifyEnrollTwoFactorEndpoint: Endpoint = {
   method: 'post',
   handler: async (req) => {
     if (!req.user) {
+      return unauthorized()
+    }
+    // B1: refuse a non-`users` principal (e.g. a Task-4B member) — its id would
+    // collide with an admin's in the `users` table and confirm TOTP onto that
+    // admin. See the enroll handler + `loadSelf` for the full rationale.
+    if (req.user.collection !== 'users') {
       return unauthorized()
     }
 

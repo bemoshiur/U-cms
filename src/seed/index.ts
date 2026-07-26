@@ -15,6 +15,11 @@ import { profanityWordsStep } from './steps/profanityWords'
 import { memberBannedWordsStep } from './steps/memberBannedWords'
 import { displayComponentsStep } from './steps/displayComponents'
 import { contentMenusStep } from './steps/contentMenus'
+import { publicSiteStep } from './steps/publicSite'
+import { termsStep } from './steps/terms'
+import { membersStep } from './steps/members'
+import { surveysStep } from './steps/surveys'
+import { statisticsStep } from './steps/statistics'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -52,6 +57,13 @@ export type { SeedStep } from './types'
  *    appended last.
  *  - `contentMenusStep` (Task 3D) needs the demo site (`sitesStep`) and the
  *    seeded Notice board (`boardsStep`); appended last.
+ *  - `publicSiteStep` (Task 4A) needs the demo site + its content menus
+ *    (`contentMenusStep`); adds the demo logo/footer, a top+child section, and
+ *    guide-menu extras for the public frontend. Appended last.
+ *  - `membersStep` (Task 4B) needs the demo site (`sitesStep`); seeds example
+ *    public-site members (one active, one pending). Appended last.
+ *  - `surveysStep` (Task 4D) needs the demo site (`sitesStep`); seeds one open
+ *    example survey with questions + responses. Appended last.
  */
 export const seedSteps: SeedStep[] = [
   adminMenusStep,
@@ -69,6 +81,14 @@ export const seedSteps: SeedStep[] = [
   postsStep,
   displayComponentsStep,
   contentMenusStep,
+  publicSiteStep,
+  // Task 4E: versioned terms MUST seed BEFORE members (so seeded members'
+  // consent snapshots reference the real active terms version).
+  termsStep,
+  membersStep,
+  surveysStep,
+  // Task 4E: satisfaction ratings + page views (feed Phase-5 statistics).
+  statisticsStep,
 ]
 
 /**

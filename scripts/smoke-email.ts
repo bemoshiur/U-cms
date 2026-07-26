@@ -34,7 +34,7 @@ type MailpitMessagesResponse = {
 async function main() {
   const payload = await getPayload({ config })
 
-  const subject = `Pulse CMS smoke test — ${new Date().toISOString()}`
+  const subject = `${branding.productName} smoke test — ${new Date().toISOString()}`
   const html = renderEmail({
     preheader: 'This is an automated smoke test email.',
     heading: 'Smoke test email',

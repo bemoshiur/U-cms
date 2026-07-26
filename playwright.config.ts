@@ -46,12 +46,13 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     /*
-     * `next start` always runs with NODE_ENV=production, which now requires
-     * `SMTP_HOST` (see the production fail-fast in src/payload.config.ts).
-     * Point it at the local Mailpit relay (docker-compose's `mailpit`
-     * service) by default so `pnpm test:e2e` keeps working out of the box,
-     * both locally and in CI, without requiring extra env setup. An
-     * explicit SMTP_HOST already in the environment still wins.
+     * `next start` always runs with NODE_ENV=production. Since Task TR2 Part 3,
+     * production WITHOUT `SMTP_HOST` no longer throws — it disables email (no-op
+     * logging transport). We still point e2e at the local Mailpit relay
+     * (docker-compose's `mailpit` service) by default so any email-dependent
+     * flow actually delivers to a real inbox during the run, keeping
+     * `pnpm test:e2e` deterministic out of the box. An explicit SMTP_HOST in the
+     * environment still wins.
      */
     env: {
       SMTP_HOST: process.env.SMTP_HOST || 'localhost',

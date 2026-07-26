@@ -64,11 +64,13 @@ export type SupportedTimezones =
 export interface Config {
   auth: {
     users: UserAuthOperations;
+    members: MemberAuthOperations;
   };
   blocks: {};
   collections: {
     users: User;
     media: Media;
+    attachments: Attachment;
     sites: Site;
     departments: Department;
     codeClassifications: CodeClassification;
@@ -79,6 +81,7 @@ export interface Config {
     posts: Post;
     profanityWords: ProfanityWord;
     memberBannedWords: MemberBannedWord;
+    members: Member;
     notificationAreas: NotificationArea;
     popups: Popup;
     banners: Banner;
@@ -86,8 +89,14 @@ export interface Config {
     guideMenus: GuideMenu;
     menus: Menu;
     webContents: WebContent;
+    termsDocuments: TermsDocument;
     shortUrls: ShortUrl;
     helpEntries: HelpEntry;
+    surveys: Survey;
+    surveyQuestions: SurveyQuestion;
+    surveyResponses: SurveyResponse;
+    satisfactionRatings: SatisfactionRating;
+    pageViews: PageView;
     roles: Role;
     adminMenus: AdminMenu;
     passwordPolicies: PasswordPolicy;
@@ -109,6 +118,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    attachments: AttachmentsSelect<false> | AttachmentsSelect<true>;
     sites: SitesSelect<false> | SitesSelect<true>;
     departments: DepartmentsSelect<false> | DepartmentsSelect<true>;
     codeClassifications: CodeClassificationsSelect<false> | CodeClassificationsSelect<true>;
@@ -119,6 +129,7 @@ export interface Config {
     posts: PostsSelect<false> | PostsSelect<true>;
     profanityWords: ProfanityWordsSelect<false> | ProfanityWordsSelect<true>;
     memberBannedWords: MemberBannedWordsSelect<false> | MemberBannedWordsSelect<true>;
+    members: MembersSelect<false> | MembersSelect<true>;
     notificationAreas: NotificationAreasSelect<false> | NotificationAreasSelect<true>;
     popups: PopupsSelect<false> | PopupsSelect<true>;
     banners: BannersSelect<false> | BannersSelect<true>;
@@ -126,8 +137,14 @@ export interface Config {
     guideMenus: GuideMenusSelect<false> | GuideMenusSelect<true>;
     menus: MenusSelect<false> | MenusSelect<true>;
     webContents: WebContentsSelect<false> | WebContentsSelect<true>;
+    termsDocuments: TermsDocumentsSelect<false> | TermsDocumentsSelect<true>;
     shortUrls: ShortUrlsSelect<false> | ShortUrlsSelect<true>;
     helpEntries: HelpEntriesSelect<false> | HelpEntriesSelect<true>;
+    surveys: SurveysSelect<false> | SurveysSelect<true>;
+    surveyQuestions: SurveyQuestionsSelect<false> | SurveyQuestionsSelect<true>;
+    surveyResponses: SurveyResponsesSelect<false> | SurveyResponsesSelect<true>;
+    satisfactionRatings: SatisfactionRatingsSelect<false> | SatisfactionRatingsSelect<true>;
+    pageViews: PageViewsSelect<false> | PageViewsSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     adminMenus: AdminMenusSelect<false> | AdminMenusSelect<true>;
     passwordPolicies: PasswordPoliciesSelect<false> | PasswordPoliciesSelect<true>;
@@ -151,13 +168,31 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: User | Member;
   jobs: {
     tasks: unknown;
     workflows: unknown;
   };
 }
 export interface UserAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
+  };
+}
+export interface MemberAuthOperations {
   forgotPassword: {
     email: string;
     password: string;
@@ -400,6 +435,10 @@ export interface Site {
   satisfactionEnabled?: boolean | null;
   dataManagerEnabled?: boolean | null;
   /**
+   * Require administrator approval before a newly signed-up member can log in.
+   */
+  memberApprovalRequired?: boolean | null;
+  /**
    * Web accessibility validation usage (operates only in local/dev environments per legacy behavior).
    */
   accessibilityValidation?: ('off' | 'popup' | 'db' | 'popup_db') | null;
@@ -447,6 +486,26 @@ export interface Site {
   };
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments".
+ */
+export interface Attachment {
+  id: number;
+  tenant?: (number | null) | Site;
+  alt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -764,7 +823,7 @@ export interface Post {
    */
   attachments?:
     | {
-        media: number | Media;
+        media: number | Attachment;
         description?: string | null;
         /**
          * The gallery thumbnail (photo boards). At most one per post.
@@ -799,7 +858,13 @@ export interface Post {
     };
     [k: string]: unknown;
   } | null;
+  /**
+   * Auto-stamped to the admin who wrote the answer.
+   */
   answeredBy?: (number | null) | User;
+  /**
+   * Auto-stamped when the answer was written.
+   */
   answeredAt?: string | null;
   /**
    * Derived: true once an answer is present.
@@ -849,6 +914,59 @@ export interface MemberBannedWord {
   isActive?: boolean | null;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members".
+ */
+export interface Member {
+  id: number;
+  /**
+   * Public-site login ID (unique per site).
+   */
+  loginId: string;
+  /**
+   * Display name / nickname. Member-editable.
+   */
+  name: string;
+  /**
+   * Mobile phone number (optional). Member-editable.
+   */
+  mobile?: string | null;
+  /**
+   * Membership lifecycle. Only "Active" members may log in.
+   */
+  status: 'active' | 'pending' | 'dormant' | 'withdrawn';
+  /**
+   * The site (tenant) this member belongs to.
+   */
+  tenant: number | Site;
+  /**
+   * Optional opt-in to marketing messages. Member-editable.
+   */
+  marketingConsent?: boolean | null;
+  /**
+   * Snapshot of the terms this member accepted at sign-up (category + version + timestamp). Retained as consent evidence; not member-editable.
+   */
+  termsConsents?:
+    | {
+        category: 'service' | 'privacy';
+        version: string;
+        agreedAt: string;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  password?: string | null;
+  collection: 'members';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1054,7 +1172,7 @@ export interface AdminNotice {
    */
   attachments?:
     | {
-        media: number | Media;
+        media: number | Attachment;
         /**
          * Attachment description (첨부파일 설명).
          */
@@ -1218,6 +1336,51 @@ export interface WebContent {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "termsDocuments".
+ */
+export interface TermsDocument {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * One of the five fixed legacy terms categories (ref 2-14). Unique per site.
+   */
+  category: 'termsOfUse' | 'personalInfoProcessing' | 'thirdPartyProvision' | 'uniqueIdCollection' | 'other';
+  /**
+   * Optional site menu this terms document is surfaced under (ref 2-15). Must belong to the same site.
+   */
+  menu?: (number | null) | Menu;
+  /**
+   * Display title of the terms document.
+   */
+  title: string;
+  /**
+   * The terms body. Versioned — every save creates a new version; the published version is the active one shown publicly.
+   */
+  content: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  };
+  /**
+   * The date this version takes effect (shown in the public change history, ref 2-16).
+   */
+  effectiveDate?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "shortUrls".
  */
 export interface ShortUrl {
@@ -1291,6 +1454,228 @@ export interface HelpEntry {
    * The menu number to bind to (when Menu) — matched against the current menu.
    */
   menuNumber?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveys".
+ */
+export interface Survey {
+  id: number;
+  tenant?: (number | null) | Site;
+  title: string;
+  /**
+   * Intro/description shown above the survey (rendered via the safe serializer).
+   */
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Owning department (person-in-charge context, ref 2-9).
+   */
+  department?: (number | null) | Department;
+  /**
+   * Contact phone for enquiries (ref 2-9).
+   */
+  contactPhone?: string | null;
+  /**
+   * Survey topic/category (ref 2-9).
+   */
+  topic?: string | null;
+  /**
+   * Survey opens at this time. Leave empty for a draft (questions stay editable).
+   */
+  openFrom?: string | null;
+  /**
+   * Survey closes at this time. Empty means no upper bound.
+   */
+  openTo?: string | null;
+  /**
+   * Master on/off toggle. An inactive survey is always Closed.
+   */
+  isActive?: boolean | null;
+  /**
+   * Derived lifecycle: scheduled | open | closed (from the window + Active toggle).
+   */
+  status?: string | null;
+  /**
+   * Who may respond. Members-only surveys require a public-site login.
+   */
+  audience: 'anyone' | 'members';
+  /**
+   * When aggregate results are viewable on the public site (ref 2-12).
+   */
+  resultVisibility: 'afterClose' | 'duringAndAfter' | 'adminsOnly';
+  /**
+   * Responses are not tied to a member identity (respondent stored as null). One-response is still deduped by a hashed key.
+   */
+  anonymous?: boolean | null;
+  /**
+   * True once the first response has been recorded.
+   */
+  hasResponses?: boolean | null;
+  /**
+   * Sticky start latch — set once the survey opens or gets its first response, never cleared. Freezes the questions.
+   */
+  startedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyQuestions".
+ */
+export interface SurveyQuestion {
+  id: number;
+  tenant?: (number | null) | Site;
+  survey: number | Survey;
+  /**
+   * Display/ask order (lower first).
+   */
+  order?: number | null;
+  text: string;
+  type: 'single' | 'multi' | 'text' | 'textarea';
+  required?: boolean | null;
+  /**
+   * Choices for single/multi questions. An "Other" option renders a free-text box.
+   */
+  options?:
+    | {
+        label: string;
+        /**
+         * Stored value for this option (unique within the question).
+         */
+        value: string;
+        order?: number | null;
+        /**
+         * Renders an extra free-text input; its text is required when chosen.
+         */
+        isOther?: boolean | null;
+        /**
+         * Skip logic (single-choice only, ref 2-11): jump to the question with this order when chosen.
+         */
+        nextQuestionOrder?: number | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyResponses".
+ */
+export interface SurveyResponse {
+  id: number;
+  tenant?: (number | null) | Site;
+  survey: number | Survey;
+  /**
+   * The member who responded, or null (anonymous survey/submitter).
+   */
+  respondent?: (number | null) | Member;
+  /**
+   * Server-stamped submission time.
+   */
+  submittedAt?: string | null;
+  /**
+   * Server-only HMAC dedup key (never read back). Identity-free — enforces one-response without storing who.
+   */
+  participantKey?: string | null;
+  answers?:
+    | {
+        question: number | SurveyQuestion;
+        /**
+         * Selected option value(s) for single/multi questions.
+         */
+        optionValues?: string[] | null;
+        /**
+         * Free text for text/textarea questions and "other" options.
+         */
+        textValue?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "satisfactionRatings".
+ */
+export interface SatisfactionRating {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * The rated page menu (per-menu satisfaction dimension, ref 2-19), or null.
+   */
+  menu?: (number | null) | Menu;
+  /**
+   * The rated public page path (server-forced).
+   */
+  pageKey: string;
+  /**
+   * 5-point satisfaction score (1-5, server-validated).
+   */
+  score: number;
+  /**
+   * The member who rated, or null (anonymous).
+   */
+  member?: (number | null) | Member;
+  /**
+   * Server-stamped submission time.
+   */
+  submittedAt?: string | null;
+  /**
+   * Server-only salted dedup hash (never read back) — stores NO raw IP.
+   */
+  ipHash?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pageViews".
+ */
+export interface PageView {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * Captured public path (query string stripped).
+   */
+  path: string;
+  /**
+   * The owning menu (resolved for /page/{menuNumber} paths), or null.
+   */
+  menu?: (number | null) | Menu;
+  /**
+   * Coarse device class from the UA (no OS/browser stored).
+   */
+  deviceType?: ('mobile' | 'desktop') | null;
+  /**
+   * Referrer HOST only (never the full referring URL).
+   */
+  referrerHost?: string | null;
+  /**
+   * Server-only rotating salted hash — stores NO PII.
+   */
+  sessionKey?: string | null;
+  /**
+   * Server-stamped view time.
+   */
+  ts: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -1556,6 +1941,10 @@ export interface PayloadLockedDocument {
         value: number | Media;
       } | null)
     | ({
+        relationTo: 'attachments';
+        value: number | Attachment;
+      } | null)
+    | ({
         relationTo: 'sites';
         value: number | Site;
       } | null)
@@ -1596,6 +1985,10 @@ export interface PayloadLockedDocument {
         value: number | MemberBannedWord;
       } | null)
     | ({
+        relationTo: 'members';
+        value: number | Member;
+      } | null)
+    | ({
         relationTo: 'notificationAreas';
         value: number | NotificationArea;
       } | null)
@@ -1624,12 +2017,36 @@ export interface PayloadLockedDocument {
         value: number | WebContent;
       } | null)
     | ({
+        relationTo: 'termsDocuments';
+        value: number | TermsDocument;
+      } | null)
+    | ({
         relationTo: 'shortUrls';
         value: number | ShortUrl;
       } | null)
     | ({
         relationTo: 'helpEntries';
         value: number | HelpEntry;
+      } | null)
+    | ({
+        relationTo: 'surveys';
+        value: number | Survey;
+      } | null)
+    | ({
+        relationTo: 'surveyQuestions';
+        value: number | SurveyQuestion;
+      } | null)
+    | ({
+        relationTo: 'surveyResponses';
+        value: number | SurveyResponse;
+      } | null)
+    | ({
+        relationTo: 'satisfactionRatings';
+        value: number | SatisfactionRating;
+      } | null)
+    | ({
+        relationTo: 'pageViews';
+        value: number | PageView;
       } | null)
     | ({
         relationTo: 'roles';
@@ -1664,10 +2081,15 @@ export interface PayloadLockedDocument {
         value: number | MenuPermissionLog;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: number | User;
+      }
+    | {
+        relationTo: 'members';
+        value: number | Member;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -1677,10 +2099,15 @@ export interface PayloadLockedDocument {
  */
 export interface PayloadPreference {
   id: number;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: number | User;
+      }
+    | {
+        relationTo: 'members';
+        value: number | Member;
+      };
   key?: string | null;
   value?:
     | {
@@ -1770,6 +2197,25 @@ export interface MediaSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "attachments_select".
+ */
+export interface AttachmentsSelect<T extends boolean = true> {
+  tenant?: T;
+  alt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "sites_select".
  */
 export interface SitesSelect<T extends boolean = true> {
@@ -1779,6 +2225,7 @@ export interface SitesSelect<T extends boolean = true> {
   isAdminSite?: T;
   satisfactionEnabled?: T;
   dataManagerEnabled?: T;
+  memberApprovalRequired?: T;
   accessibilityValidation?: T;
   twoFactorEnabled?: T;
   accountApplicationEnabled?: T;
@@ -2038,6 +2485,35 @@ export interface MemberBannedWordsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "members_select".
+ */
+export interface MembersSelect<T extends boolean = true> {
+  loginId?: T;
+  name?: T;
+  mobile?: T;
+  status?: T;
+  tenant?: T;
+  marketingConsent?: T;
+  termsConsents?:
+    | T
+    | {
+        category?: T;
+        version?: T;
+        agreedAt?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "notificationAreas_select".
  */
 export interface NotificationAreasSelect<T extends boolean = true> {
@@ -2178,6 +2654,21 @@ export interface WebContentsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "termsDocuments_select".
+ */
+export interface TermsDocumentsSelect<T extends boolean = true> {
+  tenant?: T;
+  category?: T;
+  menu?: T;
+  title?: T;
+  content?: T;
+  effectiveDate?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "shortUrls_select".
  */
 export interface ShortUrlsSelect<T extends boolean = true> {
@@ -2202,6 +2693,104 @@ export interface HelpEntriesSelect<T extends boolean = true> {
   bindType?: T;
   urlPattern?: T;
   menuNumber?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveys_select".
+ */
+export interface SurveysSelect<T extends boolean = true> {
+  tenant?: T;
+  title?: T;
+  description?: T;
+  department?: T;
+  contactPhone?: T;
+  topic?: T;
+  openFrom?: T;
+  openTo?: T;
+  isActive?: T;
+  status?: T;
+  audience?: T;
+  resultVisibility?: T;
+  anonymous?: T;
+  hasResponses?: T;
+  startedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyQuestions_select".
+ */
+export interface SurveyQuestionsSelect<T extends boolean = true> {
+  tenant?: T;
+  survey?: T;
+  order?: T;
+  text?: T;
+  type?: T;
+  required?: T;
+  options?:
+    | T
+    | {
+        label?: T;
+        value?: T;
+        order?: T;
+        isOther?: T;
+        nextQuestionOrder?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "surveyResponses_select".
+ */
+export interface SurveyResponsesSelect<T extends boolean = true> {
+  tenant?: T;
+  survey?: T;
+  respondent?: T;
+  submittedAt?: T;
+  participantKey?: T;
+  answers?:
+    | T
+    | {
+        question?: T;
+        optionValues?: T;
+        textValue?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "satisfactionRatings_select".
+ */
+export interface SatisfactionRatingsSelect<T extends boolean = true> {
+  tenant?: T;
+  menu?: T;
+  pageKey?: T;
+  score?: T;
+  member?: T;
+  submittedAt?: T;
+  ipHash?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pageViews_select".
+ */
+export interface PageViewsSelect<T extends boolean = true> {
+  tenant?: T;
+  path?: T;
+  menu?: T;
+  deviceType?: T;
+  referrerHost?: T;
+  sessionKey?: T;
+  ts?: T;
   updatedAt?: T;
   createdAt?: T;
 }

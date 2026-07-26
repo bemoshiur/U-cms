@@ -7,6 +7,32 @@ export const DEFAULT_SEED_ADMIN_EMAIL = 'admin@publicpulse.com.bd'
 export const DEFAULT_SEED_ADMIN_PASSWORD = 'changeme-dev-only!'
 
 /**
+ * SECURITY fail-fast (Task TR2 hardening): refuses to seed the KNOWN, built-in
+ * default super-admin password (`DEFAULT_SEED_ADMIN_PASSWORD`) into a production
+ * deployment. Seeding a public, internet-reachable URL with a hard-coded admin
+ * password is a real credential exposure, so when `NODE_ENV==='production'` AND
+ * `SEED_ADMIN_PASSWORD` is unset (i.e. the default would be written), this THROWS
+ * with an actionable message instead of creating the account. Dev/test with the
+ * default is unaffected. Only the PASSWORD is gated — the email default is fine.
+ *
+ * Pure + testable; called only on the CREATE path in `superAdminStep` (a re-seed
+ * that merely HEALS an existing admin never writes a password, so the
+ * lockout-safety heal path keeps working even without `SEED_ADMIN_PASSWORD`).
+ */
+export function assertSeedAdminPasswordSafeForProduction(
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (env.NODE_ENV === 'production' && !env.SEED_ADMIN_PASSWORD) {
+    throw new Error(
+      '[seed:super-admin] SEED_ADMIN_PASSWORD is required when seeding in production — ' +
+        'refusing to create the super-admin with the built-in development-only default password ' +
+        '(a known credential on a public deployment is a security exposure). Set ' +
+        'SEED_ADMIN_PASSWORD to a strong, unique value and re-run the seed.',
+    )
+  }
+}
+
+/**
  * Creates the initial super-admin user in the `users` auth collection, and
  * assigns it the `ROLE_ADMIN` super-admin role (see `rolesStep` — must run
  * first, per the registration order in `src/seed/index.ts`).
@@ -102,6 +128,10 @@ export const superAdminStep: SeedStep = {
     }
 
     if (usingDefaultPassword) {
+      // Hard fail-fast in production (public deploy); loud warning in dev/test.
+      // Only reached on the CREATE path, so healing an existing admin is never
+      // blocked (lockout safety) even when SEED_ADMIN_PASSWORD is unset.
+      assertSeedAdminPasswordSafeForProduction()
       payload.logger.warn(
         '[seed:super-admin] SEED_ADMIN_PASSWORD is not set — seeding the super-admin with the ' +
           'default development-only password. This is NOT safe for any shared, staging, or ' +

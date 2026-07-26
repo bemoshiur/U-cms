@@ -3,6 +3,7 @@ import type { Endpoint, Payload, PayloadRequest } from 'payload'
 import { extractLexicalText } from '../content/wordFilter'
 import { diffContent } from '../content/webContentDiff'
 import type { WebContentSnapshot } from '../content/webContentDiff'
+import { findAccessibleDoc, notFoundResponse } from '../security/existenceOracle'
 
 /**
  * Web-content version DIFF endpoint (Task 3D Part 2; ref 2-4). Collection
@@ -67,39 +68,20 @@ export async function handleWebContentDiff(args: {
     return json(400, { ok: false, message: 'Both "from" and "to" version ids are required.' })
   }
 
-  // Existence first (overrideAccess) so a genuine 404 is distinct from a 403.
-  const exists = await payload.findByID({
+  // Existence-then-access via the shared guard (D1/D2/D3): a missing doc, a
+  // cross-tenant doc, and a missing grant ALL collapse to the SAME 404, so the
+  // status code is never an existence oracle for web-content ids. No custom
+  // predicate → the collection's tenant-scoped `content.webContents` read
+  // access decides.
+  const exists = await findAccessibleDoc({
+    payload,
     collection: 'webContents',
     id,
-    depth: 0,
-    overrideAccess: true,
+    user,
     req,
-    disableErrors: true,
   })
   if (!exists) {
-    return json(404, { ok: false, message: 'Web content not found.' })
-  }
-
-  // Access gate — respects the collection's tenant-scoped `content.webContents`
-  // access. A missing grant throws Forbidden; a wrong-tenant doc filters out to
-  // null. Either way → 403.
-  let allowed = false
-  try {
-    const readable = await payload.findByID({
-      collection: 'webContents',
-      id,
-      depth: 0,
-      overrideAccess: false,
-      user: user as PayloadRequest['user'],
-      req,
-      disableErrors: true,
-    })
-    allowed = Boolean(readable)
-  } catch {
-    allowed = false
-  }
-  if (!allowed) {
-    return json(403, { ok: false, message: 'You are not allowed to view this content’s versions.' })
+    return notFoundResponse()
   }
 
   // Load both versions (access already confirmed on the parent). Guard that
@@ -115,13 +97,16 @@ export async function handleWebContentDiff(args: {
     })) as unknown as VersionRow | null
 
   const [fromVersion, toVersion] = await Promise.all([loadVersion(args.from), loadVersion(args.to)])
+  // A missing version OR a version that belongs to ANOTHER document both collapse
+  // to the same 404 (D1/D2/D3) — a cross-document version id must not be
+  // distinguishable ("belongs elsewhere" 400) from a non-existent one.
   if (!fromVersion || !toVersion) {
-    return json(404, { ok: false, message: 'One or both versions were not found.' })
+    return notFoundResponse()
   }
   const belongsToDoc = (row: VersionRow): boolean =>
     row.parent !== undefined && String(row.parent) === String(id)
   if (!belongsToDoc(fromVersion) || !belongsToDoc(toVersion)) {
-    return json(400, { ok: false, message: 'A version does not belong to this web content.' })
+    return notFoundResponse()
   }
 
   const diff = diffContent(toSnapshot(fromVersion), toSnapshot(toVersion))

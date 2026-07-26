@@ -1,4 +1,4 @@
-# Pulse CMS
+# U-CMS
 
 Payload CMS 3 on Next.js 16 (App Router, TypeScript), backed by PostgreSQL.
 

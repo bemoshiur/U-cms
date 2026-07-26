@@ -9,6 +9,7 @@ import { APIError } from 'payload'
 
 import { extractLoginIdentifier } from '../audit/helpers'
 import { recordAccess } from '../audit/recordAccess'
+import { branding } from '../branding'
 import { renderTwoFactorResetEmail } from '../email/authEmails'
 import {
   generateTotpSecret,
@@ -361,7 +362,7 @@ export const notifyTwoFactorReset: CollectionAfterChangeHook = async ({ doc, req
     if (to) {
       await req.payload.sendEmail({
         to,
-        subject: 'Your Pulse CMS two-factor authentication was reset',
+        subject: `Your ${branding.productName} two-factor authentication was reset`,
         html: renderTwoFactorResetEmail(),
       })
     }

@@ -1,6 +1,7 @@
 import type { Access, CollectionConfig, TextFieldSingleValidation } from 'payload'
 
 import { hasMenuAccessSync, menuAccess, menuFieldAccess } from '../access/hasMenuAccess'
+import { isMemberPrincipal } from '../access/memberAccess'
 import { auditCollection } from '../audit/auditCollection'
 import { recordLoginFailure, recordLogout } from '../audit/authHooks'
 import { journalUserRoleChanges } from '../audit/permissionJournals'
@@ -19,6 +20,7 @@ import {
   revokeSessionsOnStatusChange,
   throttleTwoFactorFailure,
 } from '../auth/twoFactorHooks'
+import { branding } from '../branding'
 import { renderForgotPasswordEmail } from '../email/authEmails'
 
 /**
@@ -59,7 +61,12 @@ function selfOrMenuAccess(menuKey: string): Access {
   const menuGate = menuAccess(menuKey)
   return async (args) => {
     const { id, req } = args
-    if (!req.user) {
+    // No user, OR a PUBLIC-SITE MEMBER (a different audience that shares the
+    // token-cookie space) → deny. Without the member check, the self-access
+    // `Where` below (`{ id: { equals: req.user.id } }`) would match the admin
+    // `users` row whose numeric id collides with the member's — a cross-audience
+    // leak. A member must have NIL access to `users`.
+    if (!req.user || isMemberPrincipal(req.user)) {
       return false
     }
     if (id !== undefined && id === req.user.id) {
@@ -139,7 +146,7 @@ export const Users: CollectionConfig = {
     lockTime: 10 * 60 * 1000, // 10 minutes
     // Password recovery email (ref 1-3 Find PW) uses the branded template.
     forgotPassword: {
-      generateEmailSubject: () => 'Reset your Pulse CMS password',
+      generateEmailSubject: () => `Reset your ${branding.productName} password`,
       generateEmailHTML: (args) => renderForgotPasswordEmail(args ?? {}),
     },
   },

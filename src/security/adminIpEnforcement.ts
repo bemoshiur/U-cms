@@ -82,18 +82,21 @@ const EXEMPT_ADMIN_PREFIXES = [
 /**
  * API paths that MUST stay reachable regardless of IP: the public
  * account/recovery endpoints (Task 1D), Payload's built-in password
- * reset/unlock, and the static 2FA setup guide.
+ * reset/unlock, the static 2FA setup guide, and the public media FILE route.
  *
- * SECURITY (B2, phase-3-final-review §2): `/api/media/file/*` is NO LONGER
- * exempt. It previously was so the public frontend could load `<img>`s, but in
- * Phase 3 `media` also holds secret + cross-tenant board attachments, so an
- * exempt (off-allowlist) file route + a public `media.read` let anyone fetch
- * them unauthenticated. Combined with the interim `media.read` auth gate (see
- * src/collections/Media.ts), the file route is now behind BOTH the admin IP
- * guard and authentication (belt-and-suspenders). Phase 4 (T-zero) will
- * re-open a DELIBERATE public path with a tenant/secret-aware split before any
- * public read ships; until then nothing in the app needs an anonymous media
- * read (the frontend scaffold renders no upload).
+ * SECURITY (Task 4-zero, closes phase-3-final-review §2-B2): `/api/media/file/*`
+ * is the DELIBERATE public path for genuinely-public display assets (site logos,
+ * banner/popup images) that the public site renders unauthenticated. Re-exempting
+ * it is safe ONLY because Task 4-zero moved every access-controlled attachment
+ * OUT of `media` into the tenant-scoped `attachments` collection: `media` now
+ * holds public assets only, so this route can never serve a private/secret/
+ * cross-tenant file. Note two guardrails that keep the B2 hole shut:
+ *   - Only the FILE route is exempt, NOT `/api/media` (the collection list stays
+ *     guarded — no anonymous enumeration of the pool).
+ *   - `/api/attachments` and `/api/attachments/file/*` are deliberately NOT here:
+ *     attachment reads stay GUARDED and tenant-gated, and downloads go through
+ *     the `canDownloadPost`-gated `/api/files/download`. Never add an
+ *     `/api/attachments` prefix to this list.
  */
 const EXEMPT_API_PREFIXES = [
   '/api/account-request',
@@ -103,6 +106,18 @@ const EXEMPT_API_PREFIXES = [
   '/api/users/reset-password',
   '/api/users/unlock',
   '/api/2fa/guide',
+  // Public display-asset file route (Task 4-zero). Serves ONLY public assets
+  // (logos, banner/popup images) now that all access-controlled attachments
+  // live in the tenant-scoped `attachments` collection. See Media.ts.
+  '/api/media/file',
+  // Managed attachment download (Task 4B seam #4). Exempt so a logged-in public
+  // MEMBER can download a non-secret post's attachment. Safe because
+  // `canDownloadPost` (src/endpoints/fileDownload.ts) is the sole gate and
+  // DENIES anonymous requests + secret/cross-tenant files — the exemption drops
+  // only the network allowlist, never the visibility check. Note this is the
+  // `/api/files/download` endpoint ONLY; the raw `/api/attachments/file/*` route
+  // stays GUARDED (see the guardrails note below) — never add `/api/attachments`.
+  '/api/files/download',
   // Public short-URL redirect (Task 3D; refs 1-42/1-43). `GET /api/s/:code`
   // 302s an anonymous visitor to the stored (re-validated) target, so it must
   // stay reachable regardless of the admin IP allowlist — like the public
@@ -287,8 +302,17 @@ export async function evaluateAdminIpRequest(args: {
     } else if (!decision.armed) {
       // KNOWN-SAFE: unarmed allowlist never blocks (bootstrap net).
       return ALLOW('unarmed-open', undefined)
+    } else if (decision.unrestricted) {
+      // KNOWN-SAFE (Task TR2 Part 4): the active ruleset is effectively
+      // unrestricted (only bare-`*` allow rules, no block/specific rules), so it
+      // grants EVERY IP anyway — admitting this unresolved IP opens nothing that
+      // wasn't already open. Allow instead of 503-bricking a demo (e.g. the
+      // seeded `*` allow on Vercel with TRUSTED_PROXY_HOPS unset). A genuinely
+      // restrictive ruleset has `unrestricted === false` and still fails closed.
+      return ALLOW('unrestricted-open', undefined)
     } else if (isProductionRuntime()) {
-      // Armed allowlist, no trustworthy IP, production → FAIL CLOSED.
+      // Armed, genuinely-restrictive allowlist, no trustworthy IP, production →
+      // FAIL CLOSED (protection preserved).
       deny = { status: 503, reason: 'no-trusted-ip-fail-closed' }
     } else {
       // Dev: permissive so localhost is never bricked.

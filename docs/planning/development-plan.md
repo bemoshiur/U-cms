@@ -102,7 +102,7 @@ Two distinct layers:
 - `admin.meta` (title suffix, favicon set incl. dark-mode variants, OG images);
 - Payload CSS variable overrides (`--theme-elevation-*`, brand primary) via custom SCSS;
 - custom login view text, email templates, error pages.
-  Working name to confirm with owner (e.g. "Pulse CMS" for Public Pulse) — every occurrence flows from the single branding module, so renaming stays a one-file change.
+  Working name confirmed with owner: "U-CMS" for Public Pulse — every occurrence flows from the single branding module, so renaming stays a one-file change.
 
 **B. Runtime per-site branding (a legacy feature, kept):** each `sites` record manages its own logo upload, footer (org name/address/phone/fax/copyright with per-item show-hide), guide menus — rendered by the public site at request time.
 

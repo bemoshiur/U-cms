@@ -1,8 +1,13 @@
 import { extname } from 'path'
-import type { CollectionBeforeValidateHook, CollectionConfig, Field } from 'payload'
+import type {
+  CollectionBeforeChangeHook,
+  CollectionBeforeValidateHook,
+  CollectionConfig,
+  Field,
+} from 'payload'
 import { APIError } from 'payload'
 
-import { hasMenuAccessSync, isSuperUser } from '../../access/hasMenuAccess'
+import { hasMenuAccessSync, isSuperUser, menuFieldAccess } from '../../access/hasMenuAccess'
 import { getAssignedTenantIds, tenantScopedMenuAccess } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
 import { containsProfanity, extractLexicalText } from '../../content/wordFilter'
@@ -211,7 +216,7 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
         continue
       }
       const media = await req.payload.findByID({
-        collection: 'media',
+        collection: 'attachments',
         id: mediaId,
         depth: 0,
         overrideAccess: true,
@@ -313,6 +318,54 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
     }
   }
 
+  return data
+}
+
+/**
+ * Q&A answer attribution auto-stamp (Task 4B / carried Phase-3 seam D4). When a
+ * write carries a non-empty `answer`, this stamps `answeredBy` from the ACTING
+ * user (`req.user`) and `answeredAt` from the server clock, IGNORING any
+ * client-supplied `answeredBy`/`answeredAt` — so attribution can never be forged.
+ * Clearing the answer clears the attribution.
+ *
+ * ## Why this closes the seam (with the field-level access on the three fields)
+ *
+ * Before member posting existed, `answer`/`answeredBy`/`answeredAt` had NO
+ * field-level access and no auto-stamp, so a Q&A questioner could forge an
+ * answer or its author. Now: (1) those fields carry `menuFieldAccess('content.
+ * posts')`, so ONLY a post-admin (or `overrideAccess`) can write them — a member
+ * asking a question can't set them at all (stripped in the field phase); and
+ * (2) this hook re-derives `answeredBy`/`answeredAt` server-side, so even a
+ * post-admin cannot claim a different admin answered. `req.context.
+ * skipPostSideEffects` (the download counter's bump) short-circuits it. When
+ * there's no acting user (a system/`overrideAccess` write with no `req.user`,
+ * e.g. seed), it leaves existing attribution untouched rather than nulling it.
+ */
+const stampAnswerAttribution: CollectionBeforeChangeHook = ({ data, req }) => {
+  if (!data || req.context?.skipPostSideEffects) {
+    return data
+  }
+  if (!('answer' in data)) {
+    // Not touching the answer this write — never trust a client-supplied
+    // attribution injected without an answer (field access already gates it,
+    // but drop it defensively so it can never be set out-of-band).
+    delete (data as Record<string, unknown>).answeredBy
+    delete (data as Record<string, unknown>).answeredAt
+    return data
+  }
+  const hasAnswer = extractLexicalText((data as Record<string, unknown>).answer).trim().length > 0
+  if (!hasAnswer) {
+    data.answeredBy = null
+    data.answeredAt = null
+    return data
+  }
+  const actorId = (req.user as { id?: number | string } | undefined)?.id
+  if (actorId !== undefined) {
+    data.answeredBy = actorId
+    data.answeredAt = new Date().toISOString()
+  }
+  // No acting user (system/overrideAccess write) → leave existing attribution
+  // as-is; an anonymous client can never reach a post write anyway.
   return data
 }
 
@@ -450,7 +503,11 @@ export const Posts: CollectionConfig = {
           'Uploaded files. Constraints (count/size/extensions) come from the board; download via the managed endpoint (/api/files/download).',
       },
       fields: [
-        { name: 'media', type: 'upload', relationTo: 'media', required: true },
+        // Repointed media → `attachments` (Task 4-zero): board/post files live
+        // in the tenant-scoped, access-controlled `attachments` pool, not the
+        // public `media` pool. Field name kept `media` (stable column) — only
+        // the target collection changed. Fetch via /api/files/download.
+        { name: 'media', type: 'upload', relationTo: 'attachments', required: true },
         { name: 'description', type: 'text' },
         {
           name: 'isRepresentative',
@@ -463,9 +520,17 @@ export const Posts: CollectionConfig = {
       ],
     },
     // ── Q&A behavior (kind qna, ref 1-33/2-8) ─────────────────────────────
+    // D4 (Task 4B): `answer`/`answeredBy`/`answeredAt` are ADMIN-ONLY — gated on
+    // `content.posts` so a Q&A questioner (member) can never write them — and
+    // `answeredBy`/`answeredAt` are auto-stamped by `stampAnswerAttribution`
+    // (unforgeable). See that hook's doc comment.
     {
       name: 'answer',
       type: 'richText',
+      access: {
+        create: menuFieldAccess(POSTS_MENU_KEY),
+        update: menuFieldAccess(POSTS_MENU_KEY),
+      },
       admin: {
         condition: (_d, sibling) => sibling?.boardKind === 'qna',
         description: "Admin's answer to a Q&A question. Presence sets isAnswered.",
@@ -475,12 +540,28 @@ export const Posts: CollectionConfig = {
       name: 'answeredBy',
       type: 'relationship',
       relationTo: 'users',
-      admin: { condition: (_d, sibling) => sibling?.boardKind === 'qna' },
+      access: {
+        create: menuFieldAccess(POSTS_MENU_KEY),
+        update: menuFieldAccess(POSTS_MENU_KEY),
+      },
+      admin: {
+        readOnly: true,
+        condition: (_d, sibling) => sibling?.boardKind === 'qna',
+        description: 'Auto-stamped to the admin who wrote the answer.',
+      },
     },
     {
       name: 'answeredAt',
       type: 'date',
-      admin: { condition: (_d, sibling) => sibling?.boardKind === 'qna' },
+      access: {
+        create: menuFieldAccess(POSTS_MENU_KEY),
+        update: menuFieldAccess(POSTS_MENU_KEY),
+      },
+      admin: {
+        readOnly: true,
+        condition: (_d, sibling) => sibling?.boardKind === 'qna',
+        description: 'Auto-stamped when the answer was written.',
+      },
     },
     {
       name: 'isAnswered',
@@ -496,6 +577,9 @@ export const Posts: CollectionConfig = {
   ],
   hooks: {
     beforeValidate: [validatePostAgainstBoard],
+    // D4: auto-stamp Q&A answer attribution (runs after field-access has already
+    // gated who may write `answer`/`answeredBy`/`answeredAt`).
+    beforeChange: [stampAnswerAttribution],
     afterChange: [postsAudit.afterChange],
     afterDelete: [postsAudit.afterDelete],
   },

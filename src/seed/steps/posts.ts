@@ -121,9 +121,12 @@ export const postsStep: SeedStep = {
       overrideAccess: true,
     })
     if (galleryExists.docs.length === 0) {
+      // Task 4-zero: post attachments live in the tenant-scoped `attachments`
+      // collection (not the public `media` pool). Seed the representative image
+      // there, carrying the demo site's tenant so read-scoping applies.
       const image = await payload.create({
-        collection: 'media',
-        data: { alt: 'Seed gallery representative image' },
+        collection: 'attachments',
+        data: { alt: 'Seed gallery representative image', tenant: demoSiteId } as never,
         file: {
           data: Buffer.from(SEED_PNG_BASE64, 'base64'),
           name: `seed-gallery-${Date.now()}.png`,
