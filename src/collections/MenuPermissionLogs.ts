@@ -18,7 +18,7 @@ import { auditLogAccess, readOnly, rejectLogUpdate } from './logCollection'
 export const MenuPermissionLogs: CollectionConfig = {
   slug: 'menuPermissionLogs',
   admin: {
-    group: 'Audit',
+    group: 'Privacy Protection System',
     useAsTitle: 'roleLabel',
     defaultColumns: ['createdAt', 'roleId', 'roleLabel', 'actorLabel', 'ipAddress'],
     hidden: ({ user }) => !hasMenuAccessSync(user, 'privacy.permissionLogs'),

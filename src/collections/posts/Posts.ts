@@ -1,5 +1,6 @@
 import { extname } from 'path'
 import type {
+  CollectionAfterChangeHook,
   CollectionBeforeChangeHook,
   CollectionBeforeValidateHook,
   CollectionConfig,
@@ -7,9 +8,16 @@ import type {
 } from 'payload'
 import { APIError } from 'payload'
 
-import { hasMenuAccessSync, isSuperUser, menuFieldAccess } from '../../access/hasMenuAccess'
-import { getAssignedTenantIds, tenantScopedMenuAccess } from '../../access/tenantAccess'
+import {
+  hasMenuAccess,
+  hasMenuAccessSync,
+  isSuperUser,
+  menuFieldAccess,
+} from '../../access/hasMenuAccess'
+import { SECURITY_DOCS_MENU_KEY, securityDocScopedAccess } from '../../access/securityDocs'
+import { getAssignedTenantIds } from '../../access/tenantAccess'
 import { auditCollection } from '../../audit/auditCollection'
+import { postAttachmentRefIds } from '../../content/attachmentRefs'
 import { containsProfanity, extractLexicalText } from '../../content/wordFilter'
 import { downloadStatsEndpoints } from '../../endpoints/downloadStatsExport'
 import type { BoardTypeKind } from '../boards/defaults'
@@ -112,6 +120,13 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
   const kind = (board.boardType as { kind?: BoardTypeKind } | null)?.kind
   data.boardKind = kind ?? null
 
+  // §3 security-document class (Task 6D; ref 3-4). Denormalized from the board
+  // (like `boardKind`) so `posts` access can gate security-doc posts on
+  // `privacy.securityDocs` without a relationship join — see the collection
+  // `access` and src/access/securityDocs.ts.
+  const boardIsSecurityDoc = board.securityDoc === true
+  data.securityDoc = boardIsSecurityDoc
+
   // ── (2) tenant inheritance + create-time membership guard ────────────────
   if (boardTenantId !== undefined) {
     data.tenant = boardTenantId
@@ -120,6 +135,51 @@ const validatePostAgainstBoard: CollectionBeforeValidateHook = async ({
     const assigned = getAssignedTenantIds(req.user)
     if (!assigned.some((id) => String(id) === String(boardTenantId))) {
       throw new APIError("You are not assigned to this post's board site (tenant).", 403)
+    }
+  }
+
+  // Security-document posts are §3: a non-super writer must hold
+  // `privacy.securityDocs` to create/update a post under one of the four
+  // security-doc libraries (the read gate already hides them; this closes the
+  // write side so a content admin can't inject posts into a privacy library).
+  if (boardIsSecurityDoc && req.user && !isSuperUser(req.user)) {
+    if (!(await hasMenuAccess(req, SECURITY_DOCS_MENU_KEY))) {
+      throw new APIError('You do not have permission to post to a security-document board.', 403)
+    }
+  }
+
+  // §3 attachment cross-reference guard (Task 6D round-4; round-5 extends to ALL
+  // reference sites). A NON-security-doc post may not reference an attachment
+  // currently flagged `securityDoc` through ANY site — the `attachments[]` array
+  // OR an upload node embedded in the `content`/`answer` richText — since that
+  // would pull a §3 file into an ordinary post and (via the denorm sync) attempt
+  // to re-expose it. Security-doc attachments belong ONLY to security-doc posts.
+  // Rejected at the SOURCE so the shared-reference state never forms; the
+  // recompute-any denorm sync is the backstop. Skipped for the privileged
+  // board→posts flip (that path runs with `skipPostSideEffects`, short-circuited
+  // above) and for security-doc posts themselves.
+  if (!boardIsSecurityDoc) {
+    const refIds = postAttachmentRefIds({
+      attachments: eff('attachments'),
+      content: eff('content'),
+      answer: eff('answer'),
+    })
+    if (refIds.length > 0) {
+      const secureRefs = await req.payload.find({
+        collection: 'attachments',
+        where: { and: [{ id: { in: refIds } }, { securityDoc: { equals: true } }] },
+        depth: 0,
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+        req,
+      })
+      if (secureRefs.docs.length > 0) {
+        throw new APIError(
+          'This attachment belongs to a security-document library and cannot be added to an ordinary post.',
+          403,
+        )
+      }
     }
   }
 
@@ -370,6 +430,91 @@ const stampAnswerAttribution: CollectionBeforeChangeHook = ({ data, req }) => {
   return data
 }
 
+/**
+ * Denormalizes the §3 class onto the `attachments` a post references (Task 6D —
+ * round-3 fix; round-4 hardening). The raw `/api/attachments[/file]` routes gate
+ * on the attachment's own `read`, which keys off `attachments.securityDoc`; that
+ * flag must track the owning post(s) or a §3 file leaks via that alternate door.
+ *
+ * RECOMPUTE-ANY (round-4; round-5 covers ALL reference sites): an attachment's
+ * flag is recomputed as "is this attachment referenced by ANY security-doc post,
+ * through the array field OR an upload node embedded in content/answer richText?"
+ * — NOT blindly set to the writing post's class. Otherwise an ORDINARY post
+ * referencing a security-doc attachment id would STRIP the flag (true→false) and
+ * re-expose the bytes. Because the value is derived from the full set of
+ * referencing security-doc posts (via `postAttachmentRefIds`, which covers all
+ * three sites), an unrelated ordinary write can never lower it while a
+ * security-doc post still references it; it is cleared ONLY when no security-doc
+ * post references it any more (e.g. the privileged board→ordinary flip). The
+ * source-guard in `validatePostAgainstBoard` additionally REJECTS an ordinary
+ * post referencing a security-doc attachment (any site), so the shared-reference
+ * state never even forms; this recompute is the correctness backstop.
+ *
+ * The security-doc reverse set is computed by scanning security-doc posts (a
+ * small set — the §3 libraries) and extracting each one's COMPLETE reference set
+ * in JS, because a richText-embedded upload id lives in the Lexical JSON, not the
+ * `posts_attachments` join table (so it cannot be matched by a SQL `where`).
+ *
+ * Runs regardless of `skipPostSideEffects`, so it ALSO fires under the board→posts
+ * flag-flip propagation (`propagateSecurityDocToPosts` in Boards.ts) — that is
+ * what re-syncs attachment flags on a board flip. DELETE is intentionally NOT
+ * handled (fail-closed: an orphaned attachment keeps its restricted flag).
+ * `overrideAccess` bypasses the attachment field's write-lock; runs inside the
+ * post write's `req`/transaction (so the reverse scan sees this write).
+ */
+const syncAttachmentSecurityDoc: CollectionAfterChangeHook = async ({ doc, req }) => {
+  const mediaIds = postAttachmentRefIds(doc)
+  if (mediaIds.length === 0) {
+    return doc
+  }
+
+  // Authoritative reverse set: every attachment id referenced by ANY security-doc
+  // post across ALL three sites (this write included, since it shares the txn).
+  // Scanned in JS so richText-embedded ids (not in the join table) are covered.
+  const securePosts = await req.payload.find({
+    collection: 'posts',
+    where: { securityDoc: { equals: true } },
+    depth: 0,
+    limit: 0,
+    pagination: false,
+    overrideAccess: true,
+    req,
+  })
+  const secureMediaIds = new Set<string>()
+  for (const p of securePosts.docs) {
+    for (const id of postAttachmentRefIds(p)) {
+      secureMediaIds.add(String(id))
+    }
+  }
+
+  const shouldBeTrue = mediaIds.filter((id: string | number) => secureMediaIds.has(String(id)))
+  const shouldBeFalse = mediaIds.filter((id: string | number) => !secureMediaIds.has(String(id)))
+
+  // Raise to true where still false/NULL, and clear to false ONLY where currently
+  // true AND no security-doc post references it any more (privileged clear).
+  if (shouldBeTrue.length > 0) {
+    await req.payload.update({
+      collection: 'attachments',
+      where: { and: [{ id: { in: shouldBeTrue } }, { securityDoc: { not_equals: true } }] },
+      data: { securityDoc: true } as never,
+      overrideAccess: true,
+      req,
+      context: { skipAudit: true },
+    })
+  }
+  if (shouldBeFalse.length > 0) {
+    await req.payload.update({
+      collection: 'attachments',
+      where: { and: [{ id: { in: shouldBeFalse } }, { securityDoc: { equals: true } }] },
+      data: { securityDoc: false } as never,
+      overrideAccess: true,
+      req,
+      context: { skipAudit: true },
+    })
+  }
+  return doc
+}
+
 function categoryField(index: number): Field {
   return {
     name: `category${index}`,
@@ -406,13 +551,19 @@ export const Posts: CollectionConfig = {
     group: 'Content',
     useAsTitle: 'title',
     defaultColumns: ['title', 'board', 'author', 'isNotice', 'isSecret', 'createdAt'],
-    hidden: ({ user }) => !hasMenuAccessSync(user, POSTS_MENU_KEY),
+    // Visible to content admins (ordinary posts) AND privacy-role admins (§3
+    // security-document posts); the `access` below filters WHICH each sees.
+    hidden: ({ user }) =>
+      !hasMenuAccessSync(user, POSTS_MENU_KEY) && !hasMenuAccessSync(user, SECURITY_DOCS_MENU_KEY),
   },
+  // §3 security-document split (Task 6D): ordinary posts gated on `content.posts`;
+  // posts under a `securityDoc` board gated on `privacy.securityDocs`. See
+  // src/access/securityDocs.ts.
   access: {
-    create: tenantScopedMenuAccess(POSTS_MENU_KEY),
-    read: tenantScopedMenuAccess(POSTS_MENU_KEY),
-    update: tenantScopedMenuAccess(POSTS_MENU_KEY),
-    delete: tenantScopedMenuAccess(POSTS_MENU_KEY),
+    create: securityDocScopedAccess(POSTS_MENU_KEY),
+    read: securityDocScopedAccess(POSTS_MENU_KEY),
+    update: securityDocScopedAccess(POSTS_MENU_KEY),
+    delete: securityDocScopedAccess(POSTS_MENU_KEY),
   },
   // Download statistics (Task 5B; TODO 5.3): GET /api/posts/download-stats[/export].
   // Gated on `statistics.downloads` + an explicit site-assignment check inside
@@ -433,6 +584,20 @@ export const Posts: CollectionConfig = {
       admin: {
         readOnly: true,
         description: "Denormalized board kind (auto-set from the board's type on save).",
+      },
+    },
+    // §3 security-document class, denormalized from the board (Task 6D; ref 3-4).
+    // Machine-set from `board.securityDoc` in `validatePostAgainstBoard`; drives
+    // the privacy access gate. Write-locked (never client-set) like `boardKind`.
+    {
+      name: 'securityDoc',
+      type: 'checkbox',
+      defaultValue: false,
+      access: { create: () => false, update: () => false },
+      admin: {
+        readOnly: true,
+        description:
+          "Denormalized security-document flag (auto-set from the post's board on save).",
       },
     },
     { name: 'title', type: 'text', required: true },
@@ -585,7 +750,7 @@ export const Posts: CollectionConfig = {
     // D4: auto-stamp Q&A answer attribution (runs after field-access has already
     // gated who may write `answer`/`answeredBy`/`answeredAt`).
     beforeChange: [stampAnswerAttribution],
-    afterChange: [postsAudit.afterChange],
+    afterChange: [postsAudit.afterChange, syncAttachmentSecurityDoc],
     afterDelete: [postsAudit.afterDelete],
   },
 }

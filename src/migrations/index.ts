@@ -19,6 +19,11 @@ import * as migration_20260726_062809_task_4e_terms_satisfaction_traffic from '.
 import * as migration_20260726_080648_task_5a_traffic_daily from './20260726_080648_task_5a_traffic_daily';
 import * as migration_20260726_090701_task_5b_survey_public_freetext from './20260726_090701_task_5b_survey_public_freetext';
 import * as migration_20260726_094846_task_5c_error_logs from './20260726_094846_task_5c_error_logs';
+import * as migration_20260726_185505_task_6a_personal_info_logs from './20260726_185505_task_6a_personal_info_logs';
+import * as migration_20260726_203134_task_6c_password_policy_created_by from './20260726_203134_task_6c_password_policy_created_by';
+import * as migration_20260727_120000_task_6d_security_docs from './20260727_120000_task_6d_security_docs';
+import * as migration_20260727_130000_task_6d_attachment_security_doc from './20260727_130000_task_6d_attachment_security_doc';
+import * as migration_20260727_140000_task_6d_richtext_attachment_backfill from './20260727_140000_task_6d_richtext_attachment_backfill';
 
 export const migrations = [
   {
@@ -124,6 +129,31 @@ export const migrations = [
   {
     up: migration_20260726_094846_task_5c_error_logs.up,
     down: migration_20260726_094846_task_5c_error_logs.down,
-    name: '20260726_094846_task_5c_error_logs'
+    name: '20260726_094846_task_5c_error_logs',
+  },
+  {
+    up: migration_20260726_185505_task_6a_personal_info_logs.up,
+    down: migration_20260726_185505_task_6a_personal_info_logs.down,
+    name: '20260726_185505_task_6a_personal_info_logs',
+  },
+  {
+    up: migration_20260726_203134_task_6c_password_policy_created_by.up,
+    down: migration_20260726_203134_task_6c_password_policy_created_by.down,
+    name: '20260726_203134_task_6c_password_policy_created_by'
+  },
+  {
+    up: migration_20260727_120000_task_6d_security_docs.up,
+    down: migration_20260727_120000_task_6d_security_docs.down,
+    name: '20260727_120000_task_6d_security_docs',
+  },
+  {
+    up: migration_20260727_130000_task_6d_attachment_security_doc.up,
+    down: migration_20260727_130000_task_6d_attachment_security_doc.down,
+    name: '20260727_130000_task_6d_attachment_security_doc',
+  },
+  {
+    up: migration_20260727_140000_task_6d_richtext_attachment_backfill.up,
+    down: migration_20260727_140000_task_6d_richtext_attachment_backfill.down,
+    name: '20260727_140000_task_6d_richtext_attachment_backfill',
   },
 ];

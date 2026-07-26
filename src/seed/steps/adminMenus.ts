@@ -266,6 +266,41 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 3,
     collectionSlug: 'permissionChangeLogs',
   },
+  // Personal-Information Access History (Task 6A; refs 3-8, 1-36). Gates the
+  // `personalInfoAccessLogs` collection (the log of every member-PII touch), its
+  // masked CSV export, and — via `hasMenuAccess(privacy.personalInfoLogs)` — the
+  // FULL (unmasked) member export tier. The privacy officer holds this grant.
+  {
+    menuKey: 'privacy.personalInfoLogs',
+    name: 'Personal Info Access History',
+    parentMenuKey: 'privacy',
+    order: 4,
+    collectionSlug: 'personalInfoAccessLogs',
+  },
+  // Auto-generated privacy organization chart (Task 6C; ref 3-10). A VIEW grant
+  // (no collection of its own — the chart is derived from privacy-role
+  // assignments); gates the /admin/privacy-org-chart custom view. The seeded
+  // privacy roles (ROLE_PRIVACY_OFFICER/DEPUTY/TEAM/STAFF) all grant this menu.
+  {
+    menuKey: 'privacy.orgChart',
+    name: 'Privacy Organization Chart',
+    parentMenuKey: 'privacy',
+    order: 5,
+  },
+  // Security-document libraries (Task 6D; ref 3-4). A single VIEW/grant node
+  // gating the FOUR §3 document boards (보안교육/보안사례/관리계획/대응지침), which are
+  // mounted board-engine records flagged `securityDoc: true` — "implement once,
+  // mount four times", no new code (plan §2.3). Gates those boards + their posts
+  // via `securityDocScopedAccess` (src/access/securityDocs.ts), so ONLY a
+  // privacy-role (or super) admin can reach the security docs — a general content
+  // admin cannot. No `collectionSlug`: the flagged rows live in the shared
+  // `boards`/`posts` collections, filtered by the access gate.
+  {
+    menuKey: 'privacy.securityDocs',
+    name: 'Security Documents',
+    parentMenuKey: 'privacy',
+    order: 6,
+  },
   // Public-site MEMBER management (Task 4B; refs 2-13). Gates the tenant-scoped
   // `members` auth collection — a SEPARATE audience from admin `users`.
   { menuKey: 'members', name: 'Member Management', order: 4 },

@@ -36,7 +36,11 @@ export async function loadDownloadRows(
   const { tenantId, req } = args
   const found = await payload.find({
     collection: 'posts',
-    where: { tenant: { equals: tenantId } },
+    // Exclude §3 security-document posts (Task 6D L1): download stats are gated
+    // on `statistics.downloads`, NOT the privacy grant, so a stats admin must
+    // never see security-doc file metadata. `not_equals: true` keeps ordinary
+    // posts (securityDoc NULL/false) in the counts.
+    where: { and: [{ tenant: { equals: tenantId } }, { securityDoc: { not_equals: true } }] },
     // depth 1 populates the post's `board` (name) and each attachment's `media`
     // upload (filename) so labels resolve without an N+1 per-file lookup.
     depth: 1,

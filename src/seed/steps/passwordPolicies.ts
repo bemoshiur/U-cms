@@ -35,7 +35,10 @@ export const passwordPoliciesStep: SeedStep = {
 
     await payload.create({
       collection: 'passwordPolicies',
-      data: { ruleText: DEFAULT_PASSWORD_POLICY_TEXT, isActive: true },
+      // `createdBy` is system-stamped and not client-writable; overrideAccess
+      // (used here) bypasses that field gate so the seeded default carries a
+      // clear attribution in the version-history view (Task 6C ref 3-9).
+      data: { ruleText: DEFAULT_PASSWORD_POLICY_TEXT, isActive: true, createdBy: 'system (seed)' },
       overrideAccess: true,
     })
     payload.logger.info('[seed:password-policies] created default active policy.')

@@ -106,6 +106,7 @@ export interface Config {
     loginHistory: LoginHistory;
     permissionChangeLogs: PermissionChangeLog;
     menuPermissionLogs: MenuPermissionLog;
+    personalInfoAccessLogs: PersonalInfoAccessLog;
     errorLogs: ErrorLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -156,6 +157,7 @@ export interface Config {
     loginHistory: LoginHistorySelect<false> | LoginHistorySelect<true>;
     permissionChangeLogs: PermissionChangeLogsSelect<false> | PermissionChangeLogsSelect<true>;
     menuPermissionLogs: MenuPermissionLogsSelect<false> | MenuPermissionLogsSelect<true>;
+    personalInfoAccessLogs: PersonalInfoAccessLogsSelect<false> | PersonalInfoAccessLogsSelect<true>;
     errorLogs: ErrorLogsSelect<false> | ErrorLogsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -499,6 +501,10 @@ export interface Attachment {
   id: number;
   tenant?: (number | null) | Site;
   alt?: string | null;
+  /**
+   * Denormalized security-document flag (auto-set from the referencing post's board).
+   */
+  securityDoc?: boolean | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -615,6 +621,10 @@ export interface Board {
    */
   bbsId?: string | null;
   name: string;
+  /**
+   * Privacy §3 security-document library (ref 3-4). Gated on Privacy · Security Documents instead of Board Management.
+   */
+  securityDoc?: boolean | null;
   /**
    * The board's type (from Board Type Management). Locked to the integrated type when Integrated board is checked.
    */
@@ -759,6 +769,10 @@ export interface Post {
    * Denormalized board kind (auto-set from the board's type on save).
    */
   boardKind?: string | null;
+  /**
+   * Denormalized security-document flag (auto-set from the post's board on save).
+   */
+  securityDoc?: boolean | null;
   title: string;
   /**
    * Display name of the author (legacy stored a free-text name).
@@ -1779,6 +1793,10 @@ export interface PasswordPolicy {
    * Legacy 사용여부. The most recently created policy among those marked active is the one displayed to users.
    */
   isActive?: boolean | null;
+  /**
+   * Who created this policy version (legacy version-history attribution). A denormalized name(loginId) snapshot, stamped by the system on create; not editable.
+   */
+  createdBy?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1989,6 +2007,60 @@ export interface MenuPermissionLog {
   actorLabel?: string | null;
   /**
    * The actor’s IP (legacy 변경IP).
+   */
+  ipAddress?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "personalInfoAccessLogs".
+ */
+export interface PersonalInfoAccessLog {
+  id: number;
+  /**
+   * When the personal-info access occurred (열람일시).
+   */
+  occurredAt: string;
+  /**
+   * Which admin screen produced the access (화면명, e.g. "member-detail").
+   */
+  screen?: string | null;
+  /**
+   * Denormalized "name(loginId)" of the member whose PII was accessed. Masked in the list.
+   */
+  subjectLabel?: string | null;
+  /**
+   * The member id as TEXT (NOT an FK — see the deadlock note).
+   */
+  subjectMemberId?: string | null;
+  /**
+   * The member's site (tenant) id as text — per-site segmentation.
+   */
+  subjectSiteId?: string | null;
+  /**
+   * The full request URL/path (including the target member id).
+   */
+  url: string;
+  action: 'view' | 'edit' | 'export';
+  /**
+   * View-purpose category (열람목적구분).
+   */
+  purposeCategory: 'view' | 'edit' | 'export' | 'inquiry_response' | 'complaint_handling' | 'other';
+  /**
+   * Free-text reason (열람목적). REQUIRED for an export (the purpose modal) — the immutable evidence of why the PII was accessed.
+   */
+  purposeDetail?: string | null;
+  /**
+   * Denormalized "name(loginId)" of the admin who accessed the PII. Masked in the list.
+   */
+  viewerLabel?: string | null;
+  /**
+   * The acting admin id as TEXT (NOT an FK — see the deadlock note).
+   */
+  viewerId?: string | null;
+  /**
+   * Raw client IP (IPv4/IPv6), captured as-is from the request (열람IP). Masked in the list.
    */
   ipAddress?: string | null;
   updatedAt: string;
@@ -2224,6 +2296,10 @@ export interface PayloadLockedDocument {
         value: number | MenuPermissionLog;
       } | null)
     | ({
+        relationTo: 'personalInfoAccessLogs';
+        value: number | PersonalInfoAccessLog;
+      } | null)
+    | ({
         relationTo: 'errorLogs';
         value: number | ErrorLog;
       } | null);
@@ -2349,6 +2425,7 @@ export interface MediaSelect<T extends boolean = true> {
 export interface AttachmentsSelect<T extends boolean = true> {
   tenant?: T;
   alt?: T;
+  securityDoc?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;
@@ -2504,6 +2581,7 @@ export interface BoardsSelect<T extends boolean = true> {
   tenant?: T;
   bbsId?: T;
   name?: T;
+  securityDoc?: T;
   boardType?: T;
   isIntegrated?: T;
   skin?: T;
@@ -2569,6 +2647,7 @@ export interface PostsSelect<T extends boolean = true> {
   tenant?: T;
   board?: T;
   boardKind?: T;
+  securityDoc?: T;
   title?: T;
   author?: T;
   authorUser?: T;
@@ -2994,6 +3073,7 @@ export interface AdminMenusSelect<T extends boolean = true> {
 export interface PasswordPoliciesSelect<T extends boolean = true> {
   ruleText?: T;
   isActive?: T;
+  createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -3072,6 +3152,26 @@ export interface MenuPermissionLogsSelect<T extends boolean = true> {
   removedMenus?: T;
   roleMemberSnapshot?: T;
   actorLabel?: T;
+  ipAddress?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "personalInfoAccessLogs_select".
+ */
+export interface PersonalInfoAccessLogsSelect<T extends boolean = true> {
+  occurredAt?: T;
+  screen?: T;
+  subjectLabel?: T;
+  subjectMemberId?: T;
+  subjectSiteId?: T;
+  url?: T;
+  action?: T;
+  purposeCategory?: T;
+  purposeDetail?: T;
+  viewerLabel?: T;
+  viewerId?: T;
   ipAddress?: T;
   updatedAt?: T;
   createdAt?: T;

@@ -401,4 +401,58 @@ describe('Task 5D — permission-filtered admin dashboard', () => {
     expect(serialized).not.toContain('A-Charlie-Question')
     expect(serialized).not.toContain('A Pinned Notice')
   })
+
+  // Task 6D phase-6 fix: §3 security-doc posts must be EXCLUDED from the
+  // content-admin dashboard (widgets + counts) — the dashboard is gated on
+  // content.posts, not the privacy grant. Fail-without-fix.
+  it('excludes §3 security-doc posts from the dashboard widgets + post counts (content.posts admin)', async () => {
+    const site = await makeSite(`dsd${rand().slice(0, 4)}`)
+    const ordBoard = await makeBoard(site, 'SD Ordinary', 'PG0001')
+    const secBoard = await payload.create({
+      collection: 'boards',
+      data: {
+        tenant: site,
+        name: 'SD Security',
+        boardType: await boardTypeIdByCode('PG0006'),
+        securityDoc: true,
+      } as never,
+      overrideAccess: true,
+    })
+    await makePost(site, ordBoard, { title: 'SD-Ordinary-Post', viewCount: 3 })
+    const secPost = await payload.create({
+      collection: 'posts',
+      data: { board: secBoard.id, title: 'SD-Security-Post' } as never,
+      overrideAccess: true,
+    })
+    // A high view count would top Most-Viewed if it were not excluded.
+    await payload.update({
+      collection: 'posts',
+      id: secPost.id,
+      data: { viewCount: 999 } as never,
+      overrideAccess: true,
+      context: { skipPostSideEffects: true },
+    })
+
+    const admin = await makeLimitedAdmin(['content.posts'], [site])
+    const data = await loadDashboardData({ payload, req: reqFor(admin), tenantId: site, now })
+
+    const recentTitles = data.recent!.map((p) => p.title)
+    expect(recentTitles).toContain('SD-Ordinary-Post')
+    expect(recentTitles).not.toContain('SD-Security-Post')
+    expect(data.mostViewed!.map((p) => p.title)).not.toContain('SD-Security-Post')
+    // Counts exclude the §3 post (would be 2 each without the fix).
+    expect(data.metricCards.find((c) => c.key === 'postsTotal')!.value).toBe(1)
+    expect(data.metricCards.find((c) => c.key === 'postsToday')!.value).toBe(1)
+    // Nothing about the §3 post leaks anywhere in the payload.
+    expect(JSON.stringify(data)).not.toContain('SD-Security-Post')
+
+    // A super-admin dashboard is unaffected — the ordinary post still shows.
+    const superData = await loadDashboardData({
+      payload,
+      req: reqFor(superUser),
+      tenantId: site,
+      now,
+    })
+    expect(superData.recent!.map((p) => p.title)).toContain('SD-Ordinary-Post')
+  })
 })

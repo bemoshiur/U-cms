@@ -44,3 +44,70 @@ html[data-theme='dark'] {
     --hover-color: #051530;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Member-detail PII watermark (Task 6B Part 1; feature-inventory ref 1-37)
+// ---------------------------------------------------------------------------
+// A diagonal, repeated, semi-transparent overlay painted over the member-detail
+// screen carrying the viewer's identity, the access time, and a per-view
+// management/tracking number (all server-derived — see
+// src/components/members/MemberDetailWatermark.tsx). This is an anti-exfiltration
+// deterrent: any screenshot or printout of a member's personal information
+// carries, indelibly, WHO looked and WHEN.
+//
+// `position: fixed` + `pointer-events: none` means the overlay blankets the
+// viewport WITHOUT ever blocking clicks/typing, so normal admin editing is
+// unaffected. The `@media print` block re-asserts (and darkens) the watermark so
+// it is NOT trivially removed by printing — print is the primary exfiltration
+// path the legacy screen guards against.
+.pii-watermark {
+  position: fixed;
+  inset: 0;
+  z-index: 70; // above the document content; irrelevant to interaction (pointer-events: none)
+  pointer-events: none;
+  overflow: hidden;
+
+  &__tiles {
+    position: absolute;
+    // Oversize + offset so the rotated grid still covers every corner.
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 3.25rem 5rem;
+    transform: rotate(-30deg);
+    transform-origin: center center;
+  }
+
+  &__tile {
+    color: rgba(15, 98, 254, 0.1); // branding.colors.primary at low opacity
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+html[data-theme='dark'] .pii-watermark__tile {
+  color: rgba(255, 255, 255, 0.09);
+}
+
+@media print {
+  .pii-watermark {
+    position: fixed;
+    display: block !important;
+    inset: 0;
+  }
+
+  .pii-watermark__tile {
+    // Force the ink so browsers that drop "backgrounds" on print still emit it.
+    color: rgba(0, 0, 0, 0.22) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

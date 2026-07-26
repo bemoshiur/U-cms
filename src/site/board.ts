@@ -112,9 +112,19 @@ export function boardKind(board: Board): BoardKind {
 }
 
 /**
+ * §3 security-document exclusion (Task 6D C1): the privacy security-doc boards
+ * (and their posts) are admin-only — never surfaced on the public site. Added to
+ * EVERY public board/post read here (defense-in-depth alongside the board-level
+ * exclusion in `resolveBoardByBbsId`). `not_equals: true` compiles to
+ * `(col IS NULL OR col <> true)`, so ordinary rows (NULL/false) are unaffected.
+ */
+const NOT_SECURITY_DOC: Where = { securityDoc: { not_equals: true } }
+
+/**
  * Loads a board by `bbsId` on the active site at depth 1 (so `boardType.kind`
  * and each category's `classificationCode` group are populated for rendering).
- * Tenant-scoped — a bbsId on another site resolves to `null`.
+ * Tenant-scoped — a bbsId on another site resolves to `null`; a §3 security-doc
+ * board resolves to `null` (never public — Task 6D C1).
  */
 export async function loadBoardDetail(
   payload: Payload,
@@ -126,7 +136,9 @@ export async function loadBoardDetail(
   }
   const found = await payload.find({
     collection: 'boards',
-    where: { and: [{ tenant: { equals: tenantId } }, { bbsId: { equals: bbsId } }] },
+    where: {
+      and: [{ tenant: { equals: tenantId } }, { bbsId: { equals: bbsId } }, NOT_SECURITY_DOC],
+    },
     depth: 1,
     limit: 1,
     pagination: false,
@@ -170,9 +182,10 @@ export async function loadBoardListPage(
     typeof board.pageCount === 'number' && board.pageCount > 0 ? board.pageCount : 10
   const search = buildPostSearchWhere(board, board.id, params)
 
-  // Regular posts: search AND non-secret AND non-notice, paginated by listCount.
+  // Regular posts: search AND non-secret AND non-notice AND non-security-doc,
+  // paginated by listCount.
   const regularWhere: Where = {
-    and: [search, NON_SECRET, { isNotice: { not_equals: true } }],
+    and: [search, NON_SECRET, NOT_SECURITY_DOC, { isNotice: { not_equals: true } }],
   }
   const regular = await payload.find({
     collection: 'posts',
@@ -191,7 +204,14 @@ export async function loadBoardListPage(
   if (pagination.page === 1) {
     const noticeDocs = await payload.find({
       collection: 'posts',
-      where: { and: [{ board: { equals: board.id } }, NON_SECRET, { isNotice: { equals: true } }] },
+      where: {
+        and: [
+          { board: { equals: board.id } },
+          NON_SECRET,
+          NOT_SECURITY_DOC,
+          { isNotice: { equals: true } },
+        ],
+      },
       depth: 1,
       limit: 0,
       pagination: false,
@@ -226,7 +246,7 @@ export async function loadGalleryPosts(
 export async function loadAllBoardPosts(payload: Payload, board: Board): Promise<Post[]> {
   const found = await payload.find({
     collection: 'posts',
-    where: { and: [{ board: { equals: board.id } }, NON_SECRET] },
+    where: { and: [{ board: { equals: board.id } }, NON_SECRET, NOT_SECURITY_DOC] },
     depth: 1,
     limit: 0,
     pagination: false,

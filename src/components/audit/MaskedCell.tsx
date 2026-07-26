@@ -4,7 +4,7 @@ import type { DefaultCellComponentProps } from 'payload'
 
 import React from 'react'
 
-import { maskId, maskLabel, maskName } from '@/lib/mask'
+import { maskId, maskIp, maskLabel, maskName } from '@/lib/mask'
 
 /**
  * Display-only PII masking for audit-log list-view cells (Task 2A Part 5;
@@ -13,9 +13,10 @@ import { maskId, maskLabel, maskName } from '@/lib/mask'
  * admin list. The masking strategy is chosen from the field name it is wired
  * onto, so one component serves all three masked columns:
  *
- *  - `loginId`                 → {@link maskId}   (e.g. `ha***g`)
- *  - `actorLabel` (`name(id)`) → {@link maskLabel}(e.g. `강*아(ha***g)`)
- *  - anything else (userLabel) → {@link maskName} (e.g. `강*아`)
+ *  - `loginId`                          → {@link maskId}   (e.g. `ha***g`)
+ *  - `actorLabel`/`viewerLabel`/`subjectLabel` (`name(id)`) → {@link maskLabel} (e.g. `강*아(ha***g)`)
+ *  - `ipAddress`                        → {@link maskIp}   (e.g. `203.0.113.*`)
+ *  - anything else (userLabel)          → {@link maskName} (e.g. `강*아`)
  *
  * A client component (`admin.components.Cell`), registered in the admin
  * import map like the branding graphics.
@@ -27,8 +28,14 @@ export const MaskedCell: React.FC<DefaultCellComponentProps> = ({ cellData, fiel
   let masked: string
   if (fieldName === 'loginId') {
     masked = maskId(raw)
-  } else if (fieldName === 'actorLabel') {
+  } else if (
+    fieldName === 'actorLabel' ||
+    fieldName === 'viewerLabel' ||
+    fieldName === 'subjectLabel'
+  ) {
     masked = maskLabel(raw)
+  } else if (fieldName === 'ipAddress') {
+    masked = maskIp(raw)
   } else {
     masked = maskName(raw)
   }
