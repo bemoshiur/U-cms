@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
 import { hasMenuAccessSync } from '../access/hasMenuAccess'
+import { accessHistoryEndpoints } from '../endpoints/accessHistoryExport'
 import { auditLogAccess, readOnly, rejectLogUpdate } from './logCollection'
 
 /**
@@ -28,6 +29,10 @@ export const AccessLogs: CollectionConfig = {
   // Newest first in the list view (ref 1-55 shows most-recent-first ordering).
   defaultSort: '-createdAt',
   access: auditLogAccess('privacy.accessLogs'),
+  // Task 5C: the site access-history view + CSV export (ref 2-20) — a masked,
+  // date+keyword-searchable, paginated VIEW over these logs. Gated on the same
+  // `privacy.accessLogs` grant; see src/endpoints/accessHistoryExport.ts.
+  endpoints: accessHistoryEndpoints,
   hooks: {
     // Append-only: reject updates even under overrideAccess (defense in depth
     // beyond `access.update: false`).

@@ -106,6 +106,7 @@ export interface Config {
     loginHistory: LoginHistory;
     permissionChangeLogs: PermissionChangeLog;
     menuPermissionLogs: MenuPermissionLog;
+    errorLogs: ErrorLog;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -155,6 +156,7 @@ export interface Config {
     loginHistory: LoginHistorySelect<false> | LoginHistorySelect<true>;
     permissionChangeLogs: PermissionChangeLogsSelect<false> | PermissionChangeLogsSelect<true>;
     menuPermissionLogs: MenuPermissionLogsSelect<false> | MenuPermissionLogsSelect<true>;
+    errorLogs: ErrorLogsSelect<false> | ErrorLogsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -1994,6 +1996,59 @@ export interface MenuPermissionLog {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "errorLogs".
+ */
+export interface ErrorLog {
+  id: number;
+  /**
+   * When the exception occurred (the period-tab axis).
+   */
+  occurredAt: string;
+  /**
+   * The exception class name (the by-type stat tab).
+   */
+  exceptionClass?: string | null;
+  /**
+   * SANITIZED error message (secrets/PII redacted before storage).
+   */
+  message?: string | null;
+  /**
+   * The request URL/path where the error occurred (the by-URL stat tab).
+   */
+  url?: string | null;
+  /**
+   * The HTTP method of the failing request, if known.
+   */
+  httpMethod?: string | null;
+  /**
+   * The HTTP status returned (>= 500 = captured unhandled exception).
+   */
+  statusCode?: number | null;
+  /**
+   * Denormalized "name(id)" of the acting admin (null for anonymous). Masked in the list.
+   */
+  actorLabel?: string | null;
+  /**
+   * The acting admin id as text (NOT an FK — see the deadlock note).
+   */
+  actorId?: string | null;
+  /**
+   * Raw client IP (IPv4/IPv6), captured as-is from the trusted request.
+   */
+  ipAddress?: string | null;
+  /**
+   * Truncated + SANITIZED stack (top frames only; no full internals/secrets).
+   */
+  stackDigest?: string | null;
+  /**
+   * Coarse OS/browser family (no version — never fingerprints).
+   */
+  userAgentFamily?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -2167,6 +2222,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'menuPermissionLogs';
         value: number | MenuPermissionLog;
+      } | null)
+    | ({
+        relationTo: 'errorLogs';
+        value: number | ErrorLog;
       } | null);
   globalSlug?: string | null;
   user:
@@ -3014,6 +3073,25 @@ export interface MenuPermissionLogsSelect<T extends boolean = true> {
   roleMemberSnapshot?: T;
   actorLabel?: T;
   ipAddress?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "errorLogs_select".
+ */
+export interface ErrorLogsSelect<T extends boolean = true> {
+  occurredAt?: T;
+  exceptionClass?: T;
+  message?: T;
+  url?: T;
+  httpMethod?: T;
+  statusCode?: T;
+  actorLabel?: T;
+  actorId?: T;
+  ipAddress?: T;
+  stackDigest?: T;
+  userAgentFamily?: T;
   updatedAt?: T;
   createdAt?: T;
 }

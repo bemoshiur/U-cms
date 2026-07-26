@@ -18,6 +18,7 @@ import * as migration_20260726_054751_task_4d_survey_dedup_unique from './202607
 import * as migration_20260726_062809_task_4e_terms_satisfaction_traffic from './20260726_062809_task_4e_terms_satisfaction_traffic';
 import * as migration_20260726_080648_task_5a_traffic_daily from './20260726_080648_task_5a_traffic_daily';
 import * as migration_20260726_090701_task_5b_survey_public_freetext from './20260726_090701_task_5b_survey_public_freetext';
+import * as migration_20260726_094846_task_5c_error_logs from './20260726_094846_task_5c_error_logs';
 
 export const migrations = [
   {
@@ -118,6 +119,11 @@ export const migrations = [
   {
     up: migration_20260726_090701_task_5b_survey_public_freetext.up,
     down: migration_20260726_090701_task_5b_survey_public_freetext.down,
-    name: '20260726_090701_task_5b_survey_public_freetext'
+    name: '20260726_090701_task_5b_survey_public_freetext',
+  },
+  {
+    up: migration_20260726_094846_task_5c_error_logs.up,
+    down: migration_20260726_094846_task_5c_error_logs.down,
+    name: '20260726_094846_task_5c_error_logs'
   },
 ];

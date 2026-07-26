@@ -3,8 +3,10 @@ import React from 'react'
 
 import { hasMenuAccessSync } from '@/access/hasMenuAccess'
 import { DOWNLOAD_STATS_MENU_KEY } from '@/endpoints/downloadStatsExport'
+import { ERROR_LOGS_MENU_KEY } from '@/endpoints/errorStatsExport'
 import { SATISFACTION_MENU_KEY } from '@/endpoints/satisfactionStatsExport'
 import { TRAFFIC_DAILY_MENU_KEY } from '@/endpoints/trafficExport'
+import { ACCESS_HISTORY_MENU_KEY } from '@/site/accessHistoryData'
 
 /**
  * Nav links to the custom statistics views (Task 5A traffic + Task 5B downloads
@@ -30,6 +32,18 @@ const LINKS: { menuKey: string; href: string; label: string }[] = [
     menuKey: SATISFACTION_MENU_KEY,
     href: '/admin/satisfaction-statistics',
     label: 'Satisfaction Statistics',
+  },
+  // Task 5C: error-log statistics (system.errorLogs) + the site access-history
+  // view (privacy.accessLogs). Each hidden from anyone without that grant.
+  {
+    menuKey: ERROR_LOGS_MENU_KEY,
+    href: '/admin/error-statistics',
+    label: 'Error Statistics',
+  },
+  {
+    menuKey: ACCESS_HISTORY_MENU_KEY,
+    href: '/admin/access-history',
+    label: 'Access History',
   },
 ]
 

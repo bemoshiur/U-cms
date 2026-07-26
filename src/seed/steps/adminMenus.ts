@@ -95,6 +95,16 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 8,
     collectionSlug: 'adminIpRules',
   },
+  // System-wide error log (Task 5C; refs 1-56..1-59). Gates the errorLogs
+  // collection (list + user-centric search), the /admin/error-statistics view
+  // (period/type/URL tabs + drill-down), and the /api/errorLogs/stats export.
+  {
+    menuKey: 'system.errorLogs',
+    name: 'Error Log',
+    parentMenuKey: 'system',
+    order: 9,
+    collectionSlug: 'errorLogs',
+  },
   { menuKey: 'content', name: 'Content Management', order: 2 },
   {
     menuKey: 'content.media',

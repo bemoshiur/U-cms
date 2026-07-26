@@ -34,6 +34,8 @@ import { TenantSelectionProvider as TenantSelectionProvider_d6d5f193a167989e2ee7
 import { TrafficStatisticsView as TrafficStatisticsView_172e9f66506a711344c8c015ec5c890a } from '../../../components/statistics/TrafficStatisticsView'
 import { DownloadStatisticsView as DownloadStatisticsView_27b729628e2e82abd9c6fa2d5cd3f645 } from '../../../components/statistics/DownloadStatisticsView'
 import { SatisfactionStatisticsView as SatisfactionStatisticsView_abffd592819bcd445f57d1d7437396b8 } from '../../../components/statistics/SatisfactionStatisticsView'
+import { ErrorStatisticsView as ErrorStatisticsView_1a2d85d7ff0de92fb2d3794902002bd6 } from '../../../components/statistics/ErrorStatisticsView'
+import { AccessHistoryView as AccessHistoryView_3f0107abfc9bd423772cbfd67cacdc36 } from '../../../components/statistics/AccessHistoryView'
 import { LoginView as LoginView_7af18470411f801d2687404387d2db4e } from '../../../components/login/LoginView'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
@@ -107,6 +109,10 @@ export const importMap = {
     DownloadStatisticsView_27b729628e2e82abd9c6fa2d5cd3f645,
   '/components/statistics/SatisfactionStatisticsView#SatisfactionStatisticsView':
     SatisfactionStatisticsView_abffd592819bcd445f57d1d7437396b8,
+  '/components/statistics/ErrorStatisticsView#ErrorStatisticsView':
+    ErrorStatisticsView_1a2d85d7ff0de92fb2d3794902002bd6,
+  '/components/statistics/AccessHistoryView#AccessHistoryView':
+    AccessHistoryView_3f0107abfc9bd423772cbfd67cacdc36,
   '/components/login/LoginView#LoginView': LoginView_7af18470411f801d2687404387d2db4e,
   '@payloadcms/next/rsc#CollectionCards': CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
 }

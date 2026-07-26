@@ -107,6 +107,36 @@ export function maskEmail(value: string): string {
 }
 
 /**
+ * Masks a client IP address for the access-history view (Task 5C ref 2-20
+ * "from where (masked)"). Keeps the network portion and stars the host portion,
+ * so the origin is still coarsely identifiable without exposing the exact
+ * address:
+ *
+ *  - IPv4 `203.0.113.5`  → `203.0.113.*`  (last octet starred)
+ *  - IPv6 `2001:db8::1`  → `2001:db8:***` (keep the first two groups)
+ *  - anything else       → falls back to {@link maskId}.
+ *
+ * Pure — safe on both server and client (used by the server-rendered view).
+ */
+export function maskIp(value: string): string {
+  const s = (value ?? '').trim()
+  if (s.length === 0) {
+    return ''
+  }
+  // IPv4 (optionally IPv4-mapped already normalized by the audit layer).
+  const v4 = s.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/)
+  if (v4) {
+    return `${v4[1]}.${v4[2]}.${v4[3]}.*`
+  }
+  // IPv6 — keep the first two groups, star the rest.
+  if (s.includes(':')) {
+    const groups = s.split(':')
+    return `${groups.slice(0, 2).join(':')}:***`
+  }
+  return maskId(s)
+}
+
+/**
  * Masks a denormalized actor label of the form `name(id)` (the shape produced
  * by `resolveActorLabel` in `src/audit/helpers.ts`), masking the name part
  * with {@link maskName} and the id part with {@link maskId}, e.g.

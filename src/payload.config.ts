@@ -45,6 +45,8 @@ import { AccessLogs } from './collections/AccessLogs'
 import { LoginHistory } from './collections/LoginHistory'
 import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
+import { ErrorLogs } from './collections/ErrorLogs'
+import { recordGlobalError } from './audit/recordError'
 import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
 import { twoFactorEndpoints } from './endpoints/twoFactorEndpoints'
@@ -288,6 +290,21 @@ export default buildConfig({
           path: '/satisfaction-statistics',
           exact: true,
         },
+        // Task 5C (refs 1-58/1-59): error statistics (period/type/URL tabs with
+        // drill-down), gated on system.errorLogs. See ErrorStatisticsView.tsx.
+        errorStatistics: {
+          Component: '/components/statistics/ErrorStatisticsView#ErrorStatisticsView',
+          path: '/error-statistics',
+          exact: true,
+        },
+        // Task 5C (ref 2-20): the site access-history view (masked, searchable,
+        // paginated) over the existing accessLogs, gated on privacy.accessLogs.
+        // See AccessHistoryView.tsx.
+        accessHistory: {
+          Component: '/components/statistics/AccessHistoryView#AccessHistoryView',
+          path: '/access-history',
+          exact: true,
+        },
         // Task 2B: replace the built-in login view with a branded two-step
         // (password → Google-OTP) form that also shows the conditional
         // Account-Request / Find-ID / Find-PW links (ref 1-1). The actual 2FA
@@ -361,6 +378,10 @@ export default buildConfig({
     LoginHistory,
     PermissionChangeLogs,
     MenuPermissionLogs,
+    // System-wide error log (Task 5C; refs 1-56..1-59) — append-only, immutable,
+    // gated on system.errorLogs. Written by the global afterError capture path
+    // (src/audit/recordError.ts) via overrideAccess.
+    ErrorLogs,
   ],
   // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
   // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B
@@ -384,6 +405,15 @@ export default buildConfig({
   // security-sensitive email links never fall back to the request Origin
   // header.
   serverURL,
+  // Task 5C (ref 1-56): GLOBAL exception capture. The config-level afterError
+  // hook fires for every REST/GraphQL error via Payload's routeError; this
+  // writes a sanitized `errorLogs` row for genuine unhandled exceptions (HTTP
+  // 500+) and NEVER alters the error response. Extends the T2A per-collection
+  // afterError (login-failure) pattern to a single global capture path. See
+  // src/audit/recordError.ts.
+  hooks: {
+    afterError: [recordGlobalError],
+  },
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
