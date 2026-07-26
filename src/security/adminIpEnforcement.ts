@@ -302,8 +302,17 @@ export async function evaluateAdminIpRequest(args: {
     } else if (!decision.armed) {
       // KNOWN-SAFE: unarmed allowlist never blocks (bootstrap net).
       return ALLOW('unarmed-open', undefined)
+    } else if (decision.unrestricted) {
+      // KNOWN-SAFE (Task TR2 Part 4): the active ruleset is effectively
+      // unrestricted (only bare-`*` allow rules, no block/specific rules), so it
+      // grants EVERY IP anyway — admitting this unresolved IP opens nothing that
+      // wasn't already open. Allow instead of 503-bricking a demo (e.g. the
+      // seeded `*` allow on Vercel with TRUSTED_PROXY_HOPS unset). A genuinely
+      // restrictive ruleset has `unrestricted === false` and still fails closed.
+      return ALLOW('unrestricted-open', undefined)
     } else if (isProductionRuntime()) {
-      // Armed allowlist, no trustworthy IP, production → FAIL CLOSED.
+      // Armed, genuinely-restrictive allowlist, no trustworthy IP, production →
+      // FAIL CLOSED (protection preserved).
       deny = { status: 503, reason: 'no-trusted-ip-fail-closed' }
     } else {
       // Dev: permissive so localhost is never bricked.

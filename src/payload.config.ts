@@ -1,5 +1,4 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
-import { nodemailerAdapter } from '@payloadcms/email-nodemailer'
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant'
 import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
@@ -46,92 +45,30 @@ import { fileEndpoints } from './endpoints/fileDownload'
 import { shortUrlRedirectEndpoint } from './endpoints/shortUrlRedirect'
 import { richTextEditor } from './richTextEditor'
 import { branding } from './branding'
+import { buildEmailAdapter } from './email/emailConfig'
+import { resolvePublicServerURL } from './env/serverUrl'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
-const smtpHost = process.env.SMTP_HOST
-const smtpUser = process.env.SMTP_USER
-const smtpPass = process.env.SMTP_PASS
-
 /**
- * Validates `SMTP_PORT` and returns the port to use. Mirrors the fail-fast
- * posture of `getS3StoragePlugin` below: an invalid value throws at config
- * load rather than silently coercing to a fallback. `undefined`/empty (the
- * expected dev/local state) resolves to Mailpit's default port; `"0"` is
- * treated as an explicit invalid value, not "unset", since port 0 is not a
- * usable SMTP port.
+ * Absolute base URL Payload uses to build every security-sensitive absolute
+ * link it generates itself — most notably the password-reset link in
+ * `renderForgotPasswordEmail` (`src/email/authEmails.ts`). Setting this
+ * explicitly is what makes `req.payload.config.serverURL` available and
+ * authoritative there, so link-building never needs to (and must not) fall
+ * back to the caller-controllable `Origin` request header — see
+ * `.superpowers/sdd/TODO/phase1-final-review.md` I-1 (CWE-640 host/reset-link
+ * poisoning): an attacker could otherwise send `POST /api/find-password` with a
+ * spoofed `Origin` header and have a genuine reset email delivered with a reset
+ * link pointing at an attacker-controlled host, leaking the valid reset token
+ * if clicked. Resolution (all server-controlled, never the request Origin) is
+ * centralized in `resolvePublicServerURL`: PAYLOAD_PUBLIC_SERVER_URL →
+ * SERVER_URL → VERCEL_URL (Vercel's own deployment host) → localhost:3000
+ * (dev only). Always set PAYLOAD_PUBLIC_SERVER_URL to your STABLE production
+ * domain outside local development.
  */
-function getSmtpPort(): number {
-  const raw = process.env.SMTP_PORT
-  if (raw === undefined || raw === '') {
-    return 1025
-  }
-  const parsed = Number(raw)
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`SMTP_PORT must be a positive integer if set; received: "${raw}"`)
-  }
-  return parsed
-}
-
-/**
- * `next build` always runs with NODE_ENV=production (it's how Next.js
- * signals its own build optimizations), but Payload's config is also
- * evaluated during that build step (e.g. while collecting route data) —
- * long before any real SMTP configuration is relevant. Next sets
- * `NEXT_PHASE=phase-production-build` for the duration of `next build`
- * only (see `next/dist/build/index.js`), so we use it to scope the
- * fail-fast below to actual server boot (`next start` / the admin/API
- * runtime), not the build step itself.
- */
-const isProductionBuildPhase = process.env.NEXT_PHASE === 'phase-production-build'
-
-/**
- * Fails fast (throws) if running in production without `SMTP_HOST`, so a
- * production deployment can never silently boot against the dev-only
- * Mailpit relay (localhost:1025) and only discover the misconfiguration at
- * send time. Mirrors the S3 fail-fast in `getS3StoragePlugin` below.
- * Outside production, an unset `SMTP_HOST` still falls back to Mailpit —
- * dev/local behavior is unchanged.
- */
-if (process.env.NODE_ENV === 'production' && !isProductionBuildPhase && !smtpHost) {
-  throw new Error(
-    'SMTP_HOST is required when NODE_ENV=production — refusing to silently fall back to the dev Mailpit relay (localhost:1025). Set SMTP_HOST (and SMTP_PORT/SMTP_USER/SMTP_PASS as needed).',
-  )
-}
-
-/**
- * Fails fast if only one of SMTP_USER/SMTP_PASS is set, so partial auth
- * config is never silently dropped (the previous behavior of
- * `smtpUser && smtpPass ? { auth } : {}`).
- */
-if ((smtpUser && !smtpPass) || (!smtpUser && smtpPass)) {
-  throw new Error(
-    'SMTP_USER and SMTP_PASS must both be set together, or both left unset — refusing to silently drop SMTP auth.',
-  )
-}
-
-const smtpPort = getSmtpPort()
-
-/**
- * Absolute base URL Payload uses to build every security-sensitive
- * absolute link it generates itself — most notably the password-reset
- * link in `renderForgotPasswordEmail` (`src/email/authEmails.ts`). Setting
- * this explicitly is what makes `req.payload.config.serverURL` available
- * and authoritative there, so link-building never needs to (and must not)
- * fall back to the caller-controllable `Origin` request header — see
- * `.superpowers/sdd/TODO/phase1-final-review.md` I-1 (CWE-640 host/
- * reset-link poisoning): an attacker could otherwise send
- * `POST /api/find-password` with a spoofed `Origin` header and have a
- * genuine reset email delivered with a reset link pointing at an
- * attacker-controlled host, leaking the valid reset token if clicked.
- * Defaults to `localhost:3000` for local dev only; always set
- * `PAYLOAD_PUBLIC_SERVER_URL` explicitly outside local development.
- */
-const serverURL = (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(
-  /\/$/,
-  '',
-)
+const serverURL = resolvePublicServerURL()
 
 /**
  * Builds the S3-compatible storage plugin. Fails fast (throws) if
@@ -157,7 +94,16 @@ function getS3StoragePlugin(): Plugin {
 
   return s3Storage({
     collections: {
+      // Public display-asset pool (logos, banner/popup images).
       media: true,
+      // Tenant-scoped, access-controlled attachment pool (Task 4-zero). MUST be
+      // covered too: on Vercel the local filesystem is ephemeral, so attachment
+      // uploads have to land in the bucket, and `/api/files/download`'s S3 path
+      // (src/endpoints/fileDownload.ts) serves bytes via THIS collection's
+      // registered S3 static handler. The raw `/api/attachments/file/*` route
+      // stays GUARDED + tenant-gated (never IP-exempt), so enabling S3 here does
+      // not widen the access surface — only the byte SOURCE moves to the bucket.
+      attachments: true,
     },
     bucket: required.S3_BUCKET as string,
     config: {
@@ -396,16 +342,10 @@ export default buildConfig({
       connectionString: process.env.DATABASE_URI || '',
     },
   }),
-  email: nodemailerAdapter({
-    defaultFromAddress: process.env.EMAIL_FROM_ADDRESS || branding.supportEmail,
-    defaultFromName: process.env.EMAIL_FROM_NAME || branding.productName,
-    transportOptions: {
-      host: smtpHost || 'localhost',
-      port: smtpPort,
-      secure: process.env.SMTP_SECURE === 'true',
-      ...(smtpUser && smtpPass ? { auth: { user: smtpUser, pass: smtpPass } } : {}),
-    },
-  }),
+  // Email transport posture (Task TR2 Part 3): prod+SMTP → real transport;
+  // prod without SMTP → email DISABLED (no-op logging transport, never
+  // localhost in prod); dev/build → Mailpit. See src/email/emailConfig.ts.
+  email: buildEmailAdapter(),
   sharp,
   plugins,
 })

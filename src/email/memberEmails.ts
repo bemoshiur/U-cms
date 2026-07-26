@@ -1,6 +1,7 @@
 import type { PayloadRequest } from 'payload'
 
 import { branding } from '../branding'
+import { resolvePublicServerURL } from '../env/serverUrl'
 import { renderEmail } from './renderEmail'
 
 /**
@@ -22,7 +23,7 @@ function resolveServerURL(req?: Partial<PayloadRequest>): string {
   if (fromConfig) {
     return fromConfig.replace(/\/$/, '')
   }
-  return (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
+  return resolvePublicServerURL()
 }
 
 /**

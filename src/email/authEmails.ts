@@ -1,6 +1,7 @@
 import type { PayloadRequest } from 'payload'
 
 import { branding } from '../branding'
+import { resolvePublicServerURL } from '../env/serverUrl'
 import { renderEmail } from './renderEmail'
 
 /**
@@ -22,14 +23,16 @@ import { renderEmail } from './renderEmail'
  * explicitly in `src/payload.config.ts` from `PAYLOAD_PUBLIC_SERVER_URL`)
  * is the only trusted, server-controlled source of truth; the final
  * fallback below is for the rare case `req.payload` isn't populated and is
- * itself server-side config, never request-derived.
+ * itself server-side config, never request-derived (resolved via the shared
+ * `resolvePublicServerURL`, so it matches payload.config's authoritative
+ * `serverURL` — incl. the Vercel-host fallback).
  */
 function resolveServerURL(req?: Partial<PayloadRequest>): string {
   const fromConfig = req?.payload?.config?.serverURL
   if (fromConfig) {
     return fromConfig.replace(/\/$/, '')
   }
-  return (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000').replace(/\/$/, '')
+  return resolvePublicServerURL()
 }
 
 /**

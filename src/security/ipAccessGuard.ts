@@ -42,6 +42,20 @@ export type IpAccessDecision = {
    * ruleset, or one whose rules are all inactive/expired, is unarmed.
    */
   armed: boolean
+  /**
+   * Whether the active ruleset is **effectively unrestricted** — i.e. it grants
+   * EVERY IP anyway, so it can never actually deny anyone. True exactly when
+   * there are NO active `block` rules AND at least one active bare-`*` `allow`
+   * rule (the seeded bootstrap default). The enforcement layer (Task TR2 Part 4)
+   * uses this to AVOID the production fail-closed 503 when it has no trustworthy
+   * client IP: an all-allowing list grants nothing extra by admitting an
+   * unresolved IP, so bricking a demo over it is pure downside. A single `block`
+   * rule, or a specific (non-`*`) allowlist with no `*`, makes this FALSE, so a
+   * genuinely-restrictive ruleset still fails closed. Unarmed/empty rulesets are
+   * reported as `true` here (they too deny no one), but the enforcement layer
+   * already treats unarmed as bootstrap-open before consulting this.
+   */
+  unrestricted: boolean
 }
 
 type AdminIpRuleRow = {
@@ -77,27 +91,36 @@ export async function isIpAllowedForAdmin(
 
   // Empty allowlist → open (bootstrap safety, documented above).
   if (all.docs.length === 0) {
-    return { allowed: true, reason: 'no-rules-bootstrap', armed: false }
+    return { allowed: true, reason: 'no-rules-bootstrap', armed: false, unrestricted: true }
   }
 
   const nowMs = now.getTime()
   const active = (all.docs as AdminIpRuleRow[]).filter((r) => isWithinWindow(r, nowMs))
   const armed = active.length > 0
 
+  // "Effectively unrestricted": no active block rule (a block means the operator
+  // is genuinely restricting — an unresolved IP could be an attempt to evade it,
+  // so we must NOT treat that as open) AND at least one active bare-`*` allow
+  // rule (which grants every IP anyway, including an unresolved one). A specific
+  // allowlist with no `*` is NOT unrestricted (it denies non-matching IPs).
+  const hasActiveBlock = active.some((r) => r.accessType === 'block')
+  const hasStarAllow = active.some((r) => r.accessType === 'allow' && r.ipAddress === '*')
+  const unrestricted = !hasActiveBlock && hasStarAllow
+
   // block wins over allow.
   for (const r of active) {
     if (r.accessType === 'block' && r.ipAddress && ipMatches(clientIp, r.ipAddress)) {
-      return { allowed: false, reason: 'blocked-by-rule', armed }
+      return { allowed: false, reason: 'blocked-by-rule', armed, unrestricted }
     }
   }
   for (const r of active) {
     if (r.accessType === 'allow' && r.ipAddress && ipMatches(clientIp, r.ipAddress)) {
-      return { allowed: true, reason: 'allowed-by-rule', armed }
+      return { allowed: true, reason: 'allowed-by-rule', armed, unrestricted }
     }
   }
 
   // Rules exist but none matched (or all are inactive/expired → unarmed): under
   // default-deny a trusted client is blocked; an unarmed set (armed === false)
   // is treated as bootstrap-open by the enforcement layer.
-  return { allowed: false, reason: 'default-deny', armed }
+  return { allowed: false, reason: 'default-deny', armed, unrestricted }
 }

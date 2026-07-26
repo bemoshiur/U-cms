@@ -48,12 +48,24 @@ import type { Post } from '../payload-types'
  * the visibility check. `/api/attachments/file` MUST stay GUARDED (not exempt):
  * only this endpoint's `canDownloadPost` gate is the sanctioned member seam.
  *
- * ## S3 storage (documented limitation)
+ * ## S3 / storage-driver awareness (Task TR2 Part 2)
  *
- * Byte-serving reads from the local upload dir (the dev/default driver). With
- * `STORAGE_DRIVER=s3` the file is not on local disk; wiring this endpoint to
- * the S3 adapter's fetch is a follow-up. The access + counter logic is
- * storage-agnostic; only the final read differs.
+ * The access + counter logic is storage-AGNOSTIC; only the final byte SOURCE
+ * differs by `STORAGE_DRIVER` (resolved the SAME way `payload.config.ts` gates
+ * storage):
+ *   - `local` (dev/default): read from the local upload dir (unchanged).
+ *   - `s3`: the `@payloadcms/storage-s3` adapter is active and registers a
+ *     static handler on the `attachments` collection's `upload.handlers`. We
+ *     call THAT handler to stream the object out of the bucket (it also supports
+ *     a signed-URL redirect if `signedDownloads` is configured — we don't, so it
+ *     streams), then re-wrap it with our download headers. This is required on
+ *     Vercel, whose filesystem is ephemeral (a file uploaded in one invocation
+ *     is not on disk in another).
+ *
+ * CRITICAL: the storage branch runs ONLY AFTER `canDownloadPost` + the
+ * tenant-coherence check have passed. The access decision is identical for both
+ * drivers — the S3 handler is never reached for a secret/cross-tenant/anonymous
+ * request. See the tests in `tests/int/fileDownloadStorage.int.spec.ts`.
  */
 
 type PostLike = {
@@ -183,6 +195,177 @@ function contentDisposition(filename: string): string {
 }
 
 /**
+ * The active storage driver, resolved the SAME way `payload.config.ts` gates
+ * storage. Read at call time (not module load) so tests can flip it per-case.
+ */
+function getStorageDriver(): 'local' | 's3' {
+  return process.env.STORAGE_DRIVER === 's3' ? 's3' : 'local'
+}
+
+/** Security headers applied to every successfully-served attachment. */
+function withDownloadHeaders(headers: Headers, filename: string, mimeType?: string): Headers {
+  if (!headers.has('Content-Disposition')) {
+    headers.set('Content-Disposition', contentDisposition(filename))
+  }
+  if (mimeType && !headers.has('Content-Type')) {
+    headers.set('Content-Type', mimeType)
+  }
+  headers.set('X-Content-Type-Options', 'nosniff')
+  headers.set('Cache-Control', 'private, no-store')
+  return headers
+}
+
+/**
+ * The S3 static handler the cloud-storage plugin registers on a collection's
+ * `upload.handlers` (it is pushed last). Loose type — we only ever CALL it.
+ */
+type AttachmentStaticHandler = (
+  req: PayloadRequest,
+  args: { headers?: Headers; params: { collection: string; filename: string } },
+) => Promise<Response> | Response
+
+/**
+ * Local-disk byte source (dev/default driver) — unchanged from the pre-TR2
+ * behavior. Reads the file into memory and returns a fully-buffered Response, or
+ * a 4xx error Response (400 traversal guard / 404 missing) that the caller
+ * returns as-is WITHOUT incrementing the counter.
+ */
+async function serveAttachmentFromLocalDisk(args: {
+  payload: Payload
+  filename: string
+  mimeType?: string
+  mediaId: string | number
+}): Promise<Response> {
+  const { payload, filename, mimeType, mediaId } = args
+
+  // Resolve the byte path with a strict traversal guard (mirrors Payload's own
+  // getFileHandler): the resolved path must stay inside the upload dir.
+  const dir = resolveStaticDir(payload, 'attachments')
+  const filePath = path.resolve(dir, filename)
+  if (
+    filePath !== path.join(dir, path.basename(filename)) ||
+    !filePath.startsWith(dir + path.sep)
+  ) {
+    return json(400, 'Invalid file reference.')
+  }
+
+  let bytes: Buffer
+  try {
+    bytes = await fsPromises.readFile(filePath)
+  } catch {
+    payload.logger?.error?.(
+      `[fileDownload] missing file on disk for media ${mediaId} (${filename}).`,
+    )
+    return json(404, 'File not found.')
+  }
+
+  return new Response(new Uint8Array(bytes), {
+    status: 200,
+    headers: withDownloadHeaders(
+      new Headers({ 'Content-Length': String(bytes.length) }),
+      filename,
+      mimeType,
+    ),
+  })
+}
+
+/**
+ * S3 byte source (`STORAGE_DRIVER=s3`). Calls the S3 static handler the
+ * `@payloadcms/storage-s3` adapter registered on the `attachments` collection —
+ * it streams the object out of the bucket (or 302-redirects to a signed URL if
+ * `signedDownloads` were configured). We re-wrap a successful stream with our
+ * download headers so the byte SOURCE moves to S3 while the response shape
+ * (attachment disposition, nosniff, private cache) is unchanged. A missing key
+ * / adapter error maps to a 404 error Response (no counter increment).
+ *
+ * The S3 adapter package is NEVER imported here (so tests need no real bucket) —
+ * we invoke the already-registered handler by reference.
+ */
+async function serveAttachmentFromS3(args: {
+  payload: Payload
+  req?: PayloadRequest
+  filename: string
+  mimeType?: string
+}): Promise<Response> {
+  const { payload, req, filename, mimeType } = args
+
+  const upload = payload.collections?.['attachments']?.config?.upload as
+    { handlers?: unknown[] } | undefined
+  const handlers = Array.isArray(upload?.handlers) ? upload.handlers : []
+  const staticHandler = handlers[handlers.length - 1] as AttachmentStaticHandler | undefined
+
+  if (typeof staticHandler !== 'function') {
+    payload.logger?.error?.(
+      '[fileDownload] STORAGE_DRIVER=s3 but no storage static handler is registered on the attachments collection.',
+    )
+    return json(500, 'File storage is misconfigured.')
+  }
+
+  // The S3 getFile reads `req.payload`/`req.headers`; supply a minimal request
+  // when none is available (Local-API callers / tests).
+  const handlerReq = req ?? ({ payload, headers: new Headers() } as unknown as PayloadRequest)
+
+  let upstream: Response
+  try {
+    upstream = await staticHandler(handlerReq, {
+      headers: new Headers(),
+      params: { collection: 'attachments', filename },
+    })
+  } catch (err) {
+    payload.logger?.error?.({ err }, `[fileDownload] S3 fetch threw for ${filename}.`)
+    return json(404, 'File not found.')
+  }
+
+  if (!upstream || upstream.status >= 400) {
+    payload.logger?.error?.(
+      `[fileDownload] S3 fetch failed for ${filename} (status ${upstream?.status ?? 'none'}).`,
+    )
+    return json(404, 'File not found.')
+  }
+
+  // Success (200/206 stream, 304, or a 302 signed-URL redirect). Preserve the
+  // upstream body + status and add our download headers.
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: withDownloadHeaders(new Headers(upstream.headers), filename, mimeType),
+  })
+}
+
+/**
+ * Increments the attachment's per-file `downloadCount`. Runs ONLY after the
+ * bytes were served successfully, for both drivers. `skipPostSideEffects` makes
+ * the posts beforeValidate hook a no-op; `skipAudit` avoids a log row per
+ * download (downloads are read-like). A counter-write failure must never deny a
+ * legitimate download, so it is swallowed (logged).
+ */
+async function incrementDownloadCount(args: {
+  payload: Payload
+  req?: PayloadRequest
+  postId: string | number
+  attachments: NonNullable<Post['attachments']>
+  index: number
+}): Promise<void> {
+  const { payload, req, postId, attachments, index } = args
+  const updatedAttachments = attachments.map((a, i) =>
+    i === index
+      ? { ...a, downloadCount: (typeof a.downloadCount === 'number' ? a.downloadCount : 0) + 1 }
+      : { ...a },
+  ) as NonNullable<Post['attachments']>
+  try {
+    await payload.update({
+      collection: 'posts',
+      id: postId,
+      data: { attachments: updatedAttachments },
+      overrideAccess: true,
+      req,
+      context: { skipPostSideEffects: true, skipAudit: true },
+    })
+  } catch (err) {
+    payload.logger?.error?.({ err }, '[fileDownload] downloadCount increment failed')
+  }
+}
+
+/**
  * The testable core: resolves access, increments the counter, and returns the
  * file (or an error Response). Pure of any HTTP framework so integration tests
  * can call it directly with a Local-API `payload` + a `user` fixture.
@@ -273,60 +456,25 @@ export async function handleFileDownload(args: {
     return json(404, 'File not found.')
   }
 
-  // Resolve the byte path with a strict traversal guard (mirrors Payload's own
-  // getFileHandler): the resolved path must stay inside the upload dir.
-  const dir = resolveStaticDir(payload, 'attachments')
-  const filePath = path.resolve(dir, media.filename)
-  if (
-    filePath !== path.join(dir, path.basename(media.filename)) ||
-    !filePath.startsWith(dir + path.sep)
-  ) {
-    return json(400, 'Invalid file reference.')
+  // Byte SOURCE by storage driver — the ONLY thing that differs between local
+  // and S3. The access decision (canDownloadPost) + tenant coherence above are
+  // the security gate and are IDENTICAL for both drivers (Task TR2 Part 2).
+  const mimeType = typeof media.mimeType === 'string' ? media.mimeType : 'application/octet-stream'
+  const byteResponse =
+    getStorageDriver() === 's3'
+      ? await serveAttachmentFromS3({ payload, req, filename: media.filename, mimeType })
+      : await serveAttachmentFromLocalDisk({ payload, filename: media.filename, mimeType, mediaId })
+
+  // A 4xx from the byte source means the file could not be served (missing on
+  // disk / missing key). Return it as-is and do NOT increment (mirrors the
+  // pre-TR2 local behavior where a failed read returned 404 before increment).
+  if (byteResponse.status >= 400) {
+    return byteResponse
   }
 
-  let bytes: Buffer
-  try {
-    bytes = await fsPromises.readFile(filePath)
-  } catch {
-    payload.logger?.error?.(
-      `[fileDownload] missing file on disk for media ${mediaId} (${media.filename}).`,
-    )
-    return json(404, 'File not found.')
-  }
+  await incrementDownloadCount({ payload, req, postId, attachments, index })
 
-  // Increment the per-file counter. `skipPostSideEffects` makes the posts
-  // beforeValidate hook a no-op; `skipAudit` avoids a log row per download
-  // (downloads are read-like — read auditing is deferred, see auditCollection).
-  const updatedAttachments = attachments.map((a, i) =>
-    i === index
-      ? { ...a, downloadCount: (typeof a.downloadCount === 'number' ? a.downloadCount : 0) + 1 }
-      : { ...a },
-  ) as NonNullable<Post['attachments']>
-  try {
-    await payload.update({
-      collection: 'posts',
-      id: postId,
-      data: { attachments: updatedAttachments },
-      overrideAccess: true,
-      req,
-      context: { skipPostSideEffects: true, skipAudit: true },
-    })
-  } catch (err) {
-    // A counter-write failure must not deny a legitimate download.
-    payload.logger?.error?.({ err }, '[fileDownload] downloadCount increment failed')
-  }
-
-  return new Response(new Uint8Array(bytes), {
-    status: 200,
-    headers: {
-      'Content-Type':
-        typeof media.mimeType === 'string' ? media.mimeType : 'application/octet-stream',
-      'Content-Length': String(bytes.length),
-      'Content-Disposition': contentDisposition(media.filename),
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'private, no-store',
-    },
-  })
+  return byteResponse
 }
 
 export const fileDownloadEndpoint: Endpoint = {

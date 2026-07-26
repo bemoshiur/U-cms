@@ -6,6 +6,9 @@
   "type": "module",
   "scripts": {
     "build": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=8000\" next build",
+    "ci:migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
+    "ci:seed": "cross-env NODE_OPTIONS=--no-deprecation tsx scripts/seedOnDeploy.ts",
+    "ci:deploy": "pnpm ci:migrate && pnpm ci:seed",
     "dev": "cross-env NODE_OPTIONS=--no-deprecation next dev",
     "devsafe": "rm -rf .next && cross-env NODE_OPTIONS=--no-deprecation next dev",
     "dormancy:sweep": "tsx scripts/mark-dormant.ts",

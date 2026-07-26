@@ -160,6 +160,30 @@ describe('admin IP access control (Task 2C)', () => {
       expect(decision.armed).toBe(false)
     })
 
+    it('a bare-`*` allow ruleset is reported as unrestricted (grants everyone)', async () => {
+      const site = await makeSite()
+      await createRule(site, { ipAddress: '*', accessType: 'allow' })
+      const decision = await isIpAllowedForAdmin(payload, undefined, site)
+      expect(decision.armed).toBe(true)
+      expect(decision.unrestricted).toBe(true)
+    })
+
+    it('a `*` allow + any block rule is NOT unrestricted (a block means real restriction)', async () => {
+      const site = await makeSite()
+      await createRule(site, { ipAddress: '*', accessType: 'allow' })
+      await createRule(site, { ipAddress: '203.0.113.7', accessType: 'block' })
+      const decision = await isIpAllowedForAdmin(payload, undefined, site)
+      expect(decision.unrestricted).toBe(false)
+    })
+
+    it('a specific-only allowlist (no `*`) is NOT unrestricted', async () => {
+      const site = await makeSite()
+      await createRule(site, { ipAddress: '203.0.113.7', accessType: 'allow' })
+      const decision = await isIpAllowedForAdmin(payload, undefined, site)
+      expect(decision.armed).toBe(true)
+      expect(decision.unrestricted).toBe(false)
+    })
+
     it('a rule on another site does not grant access here (wrong-site ignored)', async () => {
       const siteA = await makeSite()
       const siteB = await makeSite()
@@ -293,6 +317,68 @@ describe('admin IP access control (Task 2C)', () => {
         expect(result.allowed).toBe(false)
         expect(result.status).toBe(503)
         expect(result.reason).toBe('no-trusted-ip-fail-closed')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('EFFECTIVELY-UNRESTRICTED (`*` allow only) + no trusted IP + PRODUCTION → ALLOW (not 503)', async () => {
+      // Task TR2 Part 4: the seeded bootstrap `*` allow means "unrestricted" — it
+      // grants every IP anyway, so an unresolved client IP opens nothing extra.
+      // The guard must NOT 503-brick a demo (e.g. Vercel with TRUSTED_PROXY_HOPS
+      // unset) over an all-allowing list.
+      await deleteAllAdminRules()
+      await createRule(adminSiteId, { ipAddress: '*', accessType: 'allow' })
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(true)
+        expect(result.reason).toBe('unrestricted-open')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('a `*` allow BUT ALSO a block rule → genuinely restrictive → still FAIL CLOSED (503)', async () => {
+      // A single block rule proves the operator is genuinely restricting; an
+      // unresolved IP could be an attempt to evade it, so we must NOT treat the
+      // list as open — protection is preserved.
+      await deleteAllAdminRules()
+      await createRule(adminSiteId, { ipAddress: '*', accessType: 'allow' })
+      await createRule(adminSiteId, { ipAddress: '203.0.113.7', accessType: 'block' })
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(503)
+        expect(result.reason).toBe('no-trusted-ip-fail-closed')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    })
+
+    it('a SPECIFIC allowlist (no `*`) + no trusted IP + PRODUCTION → still FAIL CLOSED (503)', async () => {
+      // Genuinely restrictive: only specific IPs are allowed; an unresolved IP
+      // matches nothing, so it must not be admitted.
+      await deleteAllAdminRules()
+      await createRule(adminSiteId, { ipAddress: '203.0.113.7', accessType: 'allow' })
+      vi.stubEnv('NODE_ENV', 'production')
+      try {
+        const result = await evaluateAdminIpRequest({
+          payload,
+          pathname: '/admin',
+          client: UNTRUSTED,
+        })
+        expect(result.allowed).toBe(false)
+        expect(result.status).toBe(503)
       } finally {
         vi.unstubAllEnvs()
       }
