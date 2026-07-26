@@ -267,7 +267,12 @@ export default buildConfig({
       // Task 5A: nav link to the custom Traffic Statistics view (a custom
       // top-level view has no auto nav entry). Hidden for users without the
       // statistics.traffic grant. See src/components/statistics/StatisticsNavLink.tsx.
-      afterNavLinks: ['/components/statistics/StatisticsNavLink#StatisticsNavLink'],
+      // Task 6C: nav links to the password-policy management view (ref 3-9) and
+      // the auto-generated privacy org chart (ref 3-10), each grant-gated.
+      afterNavLinks: [
+        '/components/statistics/StatisticsNavLink#StatisticsNavLink',
+        '/components/privacy/PrivacyNavLink#PrivacyNavLink',
+      ],
       views: {
         // Task 5D (TODO 5.7; refs 1-7/1-8): the permission-filtered admin landing
         // dashboard. Payload's built-in DashboardView renders this IN PLACE OF its
@@ -313,6 +318,22 @@ export default buildConfig({
         accessHistory: {
           Component: '/components/statistics/AccessHistoryView#AccessHistoryView',
           path: '/access-history',
+          exact: true,
+        },
+        // Task 6C (TODO 6.5; ref 3-9): password-policy management — the current
+        // live policy + version history over the passwordPolicies collection,
+        // gated on system.passwordPolicies. See PasswordPolicyView.tsx.
+        passwordPolicies: {
+          Component: '/components/privacy/PasswordPolicyView#PasswordPolicyView',
+          path: '/password-policies',
+          exact: true,
+        },
+        // Task 6C (TODO 6.6; ref 3-10): the auto-generated privacy org chart,
+        // derived from privacy-role assignments, gated on privacy.orgChart. See
+        // PrivacyOrgChartView.tsx.
+        privacyOrgChart: {
+          Component: '/components/privacy/PrivacyOrgChartView#PrivacyOrgChartView',
+          path: '/privacy-org-chart',
           exact: true,
         },
         // Task 2B: replace the built-in login view with a branded two-step

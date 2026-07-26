@@ -131,6 +131,15 @@ export const Users: CollectionConfig = {
     // access config below) — a dedicated "my profile" surface for such
     // users is a later task.
     hidden: ({ user }) => !hasMenuAccessSync(user, 'system.admins'),
+    components: {
+      edit: {
+        // Task 6C Part 1 (ref 3-9): show the CURRENT active password-composition
+        // policy text on the admin account create/edit (password-change) surface.
+        // DISPLAY only — enforcement is fixed in code (validatePassword.ts); this
+        // renders the guidance the operator should follow when setting a password.
+        beforeDocumentControls: ['/components/privacy/PasswordPolicyNotice#PasswordPolicyNotice'],
+      },
+    },
   },
   access: {
     create: menuAccess('system.admins'),

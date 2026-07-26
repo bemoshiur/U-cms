@@ -22,6 +22,7 @@ import { surveysStep } from './steps/surveys'
 import { statisticsStep } from './steps/statistics'
 import { errorLogsStep } from './steps/errorLogs'
 import { personalInfoAccessLogsStep } from './steps/personalInfoAccessLogs'
+import { privacyRolesStep } from './steps/privacyRoles'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -95,6 +96,9 @@ export const seedSteps: SeedStep[] = [
   errorLogsStep,
   // Task 6A: example personal-info access logs (needs members/site — runs last).
   personalInfoAccessLogsStep,
+  // Task 6C: privacy-org roles + example assignments (needs adminMenus, the
+  // super-admin, and departments — so it runs after all of them).
+  privacyRolesStep,
 ]
 
 /**

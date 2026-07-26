@@ -277,6 +277,16 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     order: 4,
     collectionSlug: 'personalInfoAccessLogs',
   },
+  // Auto-generated privacy organization chart (Task 6C; ref 3-10). A VIEW grant
+  // (no collection of its own — the chart is derived from privacy-role
+  // assignments); gates the /admin/privacy-org-chart custom view. The seeded
+  // privacy roles (ROLE_PRIVACY_OFFICER/DEPUTY/TEAM/STAFF) all grant this menu.
+  {
+    menuKey: 'privacy.orgChart',
+    name: 'Privacy Organization Chart',
+    parentMenuKey: 'privacy',
+    order: 5,
+  },
   // Public-site MEMBER management (Task 4B; refs 2-13). Gates the tenant-scoped
   // `members` auth collection — a SEPARATE audience from admin `users`.
   { menuKey: 'members', name: 'Member Management', order: 4 },

@@ -1781,6 +1781,10 @@ export interface PasswordPolicy {
    * Legacy 사용여부. The most recently created policy among those marked active is the one displayed to users.
    */
   isActive?: boolean | null;
+  /**
+   * Who created this policy version (legacy version-history attribution). A denormalized name(loginId) snapshot, stamped by the system on create; not editable.
+   */
+  createdBy?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -3054,6 +3058,7 @@ export interface AdminMenusSelect<T extends boolean = true> {
 export interface PasswordPoliciesSelect<T extends boolean = true> {
   ruleText?: T;
   isActive?: T;
+  createdBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }
