@@ -26,6 +26,7 @@ import * as migration_20260727_130000_task_6d_attachment_security_doc from './20
 import * as migration_20260727_140000_task_6d_richtext_attachment_backfill from './20260727_140000_task_6d_richtext_attachment_backfill';
 import * as migration_20260727_150000_task_7a_member_sessions from './20260727_150000_task_7a_member_sessions';
 import * as migration_20260727_160000_task_7b_perf_indexes from './20260727_160000_task_7b_perf_indexes';
+import * as migration_20260727_170000_task_8_1a_standardization from './20260727_170000_task_8_1a_standardization';
 
 export const migrations = [
   {
@@ -167,5 +168,10 @@ export const migrations = [
     up: migration_20260727_160000_task_7b_perf_indexes.up,
     down: migration_20260727_160000_task_7b_perf_indexes.down,
     name: '20260727_160000_task_7b_perf_indexes',
+  },
+  {
+    up: migration_20260727_170000_task_8_1a_standardization.up,
+    down: migration_20260727_170000_task_8_1a_standardization.down,
+    name: '20260727_170000_task_8_1a_standardization',
   },
 ];

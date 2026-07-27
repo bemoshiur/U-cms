@@ -3,6 +3,7 @@ import { APIError } from 'payload'
 
 import { hasMenuAccessSync, menuAccessConfig } from '../../access/hasMenuAccess'
 import { auditCollection } from '../../audit/auditCollection'
+import { codeSpecEndpoints } from '../../endpoints/codeSpecExport'
 import { toRelationId } from '../utils'
 
 /** Access-history audit hooks (Task 2A) for this collection's mutations. */
@@ -172,6 +173,11 @@ export const Codes: CollectionConfig = {
     hidden: ({ user }) => !hasMenuAccessSync(user, 'system.codes.detail'),
   },
   access: menuAccessConfig('system.codes.detail'),
+  // Code Specification report (ref 1-74; Phase 8, Task 8.1a): a READ-ONLY
+  // report + CSV over these codes, self-gated on `standardization.codeSpec`
+  // (the DBA grant), independent of this collection's own gate. See
+  // src/endpoints/codeSpecExport.ts.
+  endpoints: codeSpecEndpoints,
   // DB-level backstop for the `(group, code)` compound uniqueness rule
   // (see `validateAndComputeDepth` above for the friendly-error layer).
   // Payload supports native compound indexes — no hand-written migration

@@ -108,6 +108,9 @@ export interface Config {
     menuPermissionLogs: MenuPermissionLog;
     personalInfoAccessLogs: PersonalInfoAccessLog;
     errorLogs: ErrorLog;
+    standardDomains: StandardDomain;
+    standardWords: StandardWord;
+    standardTerms: StandardTerm;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -159,6 +162,9 @@ export interface Config {
     menuPermissionLogs: MenuPermissionLogsSelect<false> | MenuPermissionLogsSelect<true>;
     personalInfoAccessLogs: PersonalInfoAccessLogsSelect<false> | PersonalInfoAccessLogsSelect<true>;
     errorLogs: ErrorLogsSelect<false> | ErrorLogsSelect<true>;
+    standardDomains: StandardDomainsSelect<false> | StandardDomainsSelect<true>;
+    standardWords: StandardWordsSelect<false> | StandardWordsSelect<true>;
+    standardTerms: StandardTermsSelect<false> | StandardTermsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -983,6 +989,13 @@ export interface Member {
   hash?: string | null;
   loginAttempts?: number | null;
   lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
   password?: string | null;
   collection: 'members';
 }
@@ -2120,6 +2133,251 @@ export interface ErrorLog {
   createdAt: string;
 }
 /**
+ * 공공데이터 표준 제정 내용은 수정·삭제 시 표준에 위배되므로, 제정 절차(수정/폐기 제안 → DBA 검토·승인)에 따라 처리하시기 바랍니다. Enacted public-data standard entries cannot be edited or deleted directly; changes go through the DBA-reviewed edit/discard proposal workflow (Task 8.1b).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardDomains".
+ */
+export interface StandardDomain {
+  id: number;
+  /**
+   * 표준출처 (Standard Source). MOIS = 행정안전부 baseline; Institution = 기관.
+   */
+  standardSource: 'mois' | 'institution';
+  /**
+   * 개정차수 (Revision). e.g. "6차"; institution-created entries carry "기관생성".
+   */
+  revision?: string | null;
+  /**
+   * 도메인그룹명 (Domain Group Name). e.g. 금액, 날짜/시간.
+   */
+  domainGroup: string;
+  /**
+   * 도메인분류명 (Domain Classification Name). e.g. 금액, 비용, 연월일.
+   */
+  classification: string;
+  /**
+   * 도메인명 (Domain Name) = 도메인그룹 + 자료유형 약자(N/C/V/T) + 자료길이. e.g. 금액N17, 연월일C8. Unique.
+   */
+  domainName: string;
+  /**
+   * 자료유형 (Data Type).
+   */
+  dataType: 'NUMERIC' | 'CHAR' | 'VARCHAR' | 'TEXT';
+  /**
+   * 자료길이 (Data Length). e.g. 17.
+   */
+  dataLength?: number | null;
+  /**
+   * 소수점자릿수 (Decimal Places). e.g. 2 for a 22.2 numeric.
+   */
+  decimalPlaces?: number | null;
+  /**
+   * 저장유형명 (Storage Format mask). e.g. 99,999,999,999,999,900, YYYYMMDD.
+   */
+  storageFormat?: string | null;
+  /**
+   * 표시유형명 (Display Format mask).
+   */
+  displayFormat?: string | null;
+  /**
+   * 단위명 (Unit Name). e.g. 원/KRW.
+   */
+  unitName?: string | null;
+  /**
+   * 도메인설명 (Domain Description).
+   */
+  description?: string | null;
+  /**
+   * 허용값설명 (Allowed-Values Description). e.g. 'YYYY : 0001-9999, MM : 01-12'.
+   */
+  allowedValues?: string | null;
+  /**
+   * 메모내용 (Memo content).
+   */
+  memo?: string | null;
+  /**
+   * 사용여부 (Use Status).
+   */
+  useStatus: 'used' | 'unused';
+  /**
+   * 승인여부 (Approval status). Read-only — set via the 8.1b proposal workflow.
+   */
+  approvalStatus?: ('approved' | 'pending' | 'rejected') | null;
+  /**
+   * 승인일시 (Approval datetime). Read-only.
+   */
+  approvedAt?: string | null;
+  /**
+   * 승인아이디 (Approver ID). Read-only.
+   */
+  approverId?: string | null;
+  /**
+   * 제정 (Enacted standard). When set, this row is a baseline standard and cannot be edited/deleted directly — changes go through the 8.1b proposal workflow.
+   */
+  enacted?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * 공공데이터 표준 제정 내용은 수정·삭제 시 표준에 위배되므로, 제정 절차(수정/폐기 제안 → DBA 검토·승인)에 따라 처리하시기 바랍니다. Enacted public-data standard entries cannot be edited or deleted directly; changes go through the DBA-reviewed edit/discard proposal workflow (Task 8.1b).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardWords".
+ */
+export interface StandardWord {
+  id: number;
+  /**
+   * 표준출처 (Standard Source). MOIS = 행정안전부 baseline; Institution = 기관.
+   */
+  standardSource: 'mois' | 'institution';
+  /**
+   * 개정차수 (Revision). e.g. "6차"; institution-created entries carry "기관생성".
+   */
+  revision?: string | null;
+  /**
+   * 단어약어명 (Word Abbreviation). e.g. MBRCO, YMD, YN. Unique.
+   */
+  abbreviation: string;
+  /**
+   * 단어한글명 (Word Korean Name). e.g. 회원사.
+   */
+  koreanName: string;
+  /**
+   * 단어영문명 (Word English Name). e.g. Member Company.
+   */
+  englishName: string;
+  /**
+   * 형식단어여부 (Formal-Word Status).
+   */
+  isFormalWord?: boolean | null;
+  /**
+   * 도메인분류명 (Domain Classification Name). If set, the word is usable as a domain (ref 1-63).
+   */
+  domainClassification?: string | null;
+  /**
+   * 동의어목록 (Synonym List). One per line or comma-separated.
+   */
+  synonyms?: string | null;
+  /**
+   * 금칙어목록 (Forbidden-Word List).
+   */
+  forbiddenWords?: string | null;
+  /**
+   * 단어설명 (Word Description).
+   */
+  description?: string | null;
+  /**
+   * 메모내용 (Memo content).
+   */
+  memo?: string | null;
+  /**
+   * 사용여부 (Use Status).
+   */
+  useStatus: 'used' | 'unused';
+  /**
+   * 승인여부 (Approval status). Read-only — set via the 8.1b proposal workflow.
+   */
+  approvalStatus?: ('approved' | 'pending' | 'rejected') | null;
+  /**
+   * 승인일시 (Approval datetime). Read-only.
+   */
+  approvedAt?: string | null;
+  /**
+   * 승인아이디 (Approver ID). Read-only.
+   */
+  approverId?: string | null;
+  /**
+   * 제정 (Enacted standard). When set, this row is a baseline standard and cannot be edited/deleted directly — changes go through the 8.1b proposal workflow.
+   */
+  enacted?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * 공공데이터 표준 제정 내용은 수정·삭제 시 표준에 위배되므로, 제정 절차(수정/폐기 제안 → DBA 검토·승인)에 따라 처리하시기 바랍니다. Enacted public-data standard entries cannot be edited or deleted directly; changes go through the DBA-reviewed edit/discard proposal workflow (Task 8.1b).
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardTerms".
+ */
+export interface StandardTerm {
+  id: number;
+  /**
+   * 표준출처 (Standard Source). MOIS = 행정안전부 baseline; Institution = 기관.
+   */
+  standardSource: 'mois' | 'institution';
+  /**
+   * 개정차수 (Revision). e.g. "6차"; institution-created entries carry "기관생성".
+   */
+  revision?: string | null;
+  /**
+   * 용어약어명 (Term Abbreviation). Underscore-joined word abbreviations. e.g. LVABSN_END_YMD. Unique.
+   */
+  termAbbreviation: string;
+  /**
+   * 용어명 (Term Name). e.g. 휴직종료일자.
+   */
+  termName: string;
+  /**
+   * 도메인명 (Bound Domain). The single domain this term binds to (ref 1-65).
+   */
+  boundDomain?: (number | null) | StandardDomain;
+  /**
+   * 허용값설명 (Allowed-Values Description). Auto-derived from the bound domain (8.1b).
+   */
+  allowedValues?: string | null;
+  /**
+   * 저장유형명 (Storage Format). Auto-derived from the bound domain (8.1b).
+   */
+  storageFormat?: string | null;
+  /**
+   * 표시유형명 (Display Format). Auto-derived from the bound domain (8.1b).
+   */
+  displayFormat?: string | null;
+  /**
+   * 용어설명 (Term Description).
+   */
+  termDescription?: string | null;
+  /**
+   * 표준행정코드명 (Standard Administrative Code Name).
+   */
+  standardAdminCodeName?: string | null;
+  /**
+   * 소관기관명 (Competent Agency Name).
+   */
+  competentAgency?: string | null;
+  /**
+   * 동의어목록 (Synonym List).
+   */
+  synonyms?: string | null;
+  /**
+   * 메모내용 (Memo content).
+   */
+  memo?: string | null;
+  /**
+   * 사용여부 (Use Status).
+   */
+  useStatus: 'used' | 'unused';
+  /**
+   * 승인여부 (Approval status). Read-only — set via the 8.1b proposal workflow.
+   */
+  approvalStatus?: ('approved' | 'pending' | 'rejected') | null;
+  /**
+   * 승인일시 (Approval datetime). Read-only.
+   */
+  approvedAt?: string | null;
+  /**
+   * 승인아이디 (Approver ID). Read-only.
+   */
+  approverId?: string | null;
+  /**
+   * 제정 (Enacted standard). When set, this row is a baseline standard and cannot be edited/deleted directly — changes go through the 8.1b proposal workflow.
+   */
+  enacted?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -2302,6 +2560,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'errorLogs';
         value: number | ErrorLog;
+      } | null)
+    | ({
+        relationTo: 'standardDomains';
+        value: number | StandardDomain;
+      } | null)
+    | ({
+        relationTo: 'standardWords';
+        value: number | StandardWord;
+      } | null)
+    | ({
+        relationTo: 'standardTerms';
+        value: number | StandardTerm;
       } | null);
   globalSlug?: string | null;
   user:
@@ -2737,6 +3007,13 @@ export interface MembersSelect<T extends boolean = true> {
   hash?: T;
   loginAttempts?: T;
   lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -3192,6 +3469,83 @@ export interface ErrorLogsSelect<T extends boolean = true> {
   ipAddress?: T;
   stackDigest?: T;
   userAgentFamily?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardDomains_select".
+ */
+export interface StandardDomainsSelect<T extends boolean = true> {
+  standardSource?: T;
+  revision?: T;
+  domainGroup?: T;
+  classification?: T;
+  domainName?: T;
+  dataType?: T;
+  dataLength?: T;
+  decimalPlaces?: T;
+  storageFormat?: T;
+  displayFormat?: T;
+  unitName?: T;
+  description?: T;
+  allowedValues?: T;
+  memo?: T;
+  useStatus?: T;
+  approvalStatus?: T;
+  approvedAt?: T;
+  approverId?: T;
+  enacted?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardWords_select".
+ */
+export interface StandardWordsSelect<T extends boolean = true> {
+  standardSource?: T;
+  revision?: T;
+  abbreviation?: T;
+  koreanName?: T;
+  englishName?: T;
+  isFormalWord?: T;
+  domainClassification?: T;
+  synonyms?: T;
+  forbiddenWords?: T;
+  description?: T;
+  memo?: T;
+  useStatus?: T;
+  approvalStatus?: T;
+  approvedAt?: T;
+  approverId?: T;
+  enacted?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardTerms_select".
+ */
+export interface StandardTermsSelect<T extends boolean = true> {
+  standardSource?: T;
+  revision?: T;
+  termAbbreviation?: T;
+  termName?: T;
+  boundDomain?: T;
+  allowedValues?: T;
+  storageFormat?: T;
+  displayFormat?: T;
+  termDescription?: T;
+  standardAdminCodeName?: T;
+  competentAgency?: T;
+  synonyms?: T;
+  memo?: T;
+  useStatus?: T;
+  approvalStatus?: T;
+  approvedAt?: T;
+  approverId?: T;
+  enacted?: T;
   updatedAt?: T;
   createdAt?: T;
 }

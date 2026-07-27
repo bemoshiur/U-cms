@@ -341,6 +341,39 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     parentMenuKey: 'statistics',
     order: 3,
   },
+  // Public-data Standardization module (Phase 8, Task 8.1a; 공공데이터 표준화 관리,
+  // refs 1-60..1-65, 1-74). GLOBAL (non-tenant) dictionaries + a read-only code
+  // specification report, all gated behind the dedicated ROLE_DBA (see
+  // src/seed/steps/standardizationRoles.ts). `standardization.codeSpec` is a
+  // VIEW grant (no collectionSlug — the report reads the existing `codes`).
+  { menuKey: 'standardization', name: 'Public Data Standardization', order: 6 },
+  {
+    menuKey: 'standardization.domains',
+    name: 'Standard Domain Dictionary',
+    parentMenuKey: 'standardization',
+    order: 1,
+    collectionSlug: 'standardDomains',
+  },
+  {
+    menuKey: 'standardization.words',
+    name: 'Standard Word Dictionary',
+    parentMenuKey: 'standardization',
+    order: 2,
+    collectionSlug: 'standardWords',
+  },
+  {
+    menuKey: 'standardization.terms',
+    name: 'Standard Term Dictionary',
+    parentMenuKey: 'standardization',
+    order: 3,
+    collectionSlug: 'standardTerms',
+  },
+  {
+    menuKey: 'standardization.codeSpec',
+    name: 'Code Specification',
+    parentMenuKey: 'standardization',
+    order: 4,
+  },
 ]
 
 /**

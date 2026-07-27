@@ -47,6 +47,9 @@ import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
 import { PersonalInfoAccessLogs } from './collections/PersonalInfoAccessLogs'
 import { ErrorLogs } from './collections/ErrorLogs'
+import { StandardDomains } from './collections/standardization/StandardDomains'
+import { StandardWords } from './collections/standardization/StandardWords'
+import { StandardTerms } from './collections/standardization/StandardTerms'
 import { recordGlobalError } from './audit/recordError'
 import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
@@ -272,6 +275,9 @@ export default buildConfig({
       afterNavLinks: [
         '/components/statistics/StatisticsNavLink#StatisticsNavLink',
         '/components/privacy/PrivacyNavLink#PrivacyNavLink',
+        // Phase 8 (Task 8.1a): nav link to the Code Specification report view
+        // (ref 1-74), grant-gated on standardization.codeSpec (the DBA grant).
+        '/components/standardization/StandardizationNavLink#StandardizationNavLink',
       ],
       views: {
         // Task 5D (TODO 5.7; refs 1-7/1-8): the permission-filtered admin landing
@@ -334,6 +340,15 @@ export default buildConfig({
         privacyOrgChart: {
           Component: '/components/privacy/PrivacyOrgChartView#PrivacyOrgChartView',
           path: '/privacy-org-chart',
+          exact: true,
+        },
+        // Phase 8 (Task 8.1a; ref 1-74): the Code Specification report — a
+        // read-only, classification+keyword-filterable inventory over the
+        // existing common codes, gated on standardization.codeSpec (DBA). See
+        // CodeSpecView.tsx.
+        codeSpecification: {
+          Component: '/components/standardization/CodeSpecView#CodeSpecView',
+          path: '/code-specification',
           exact: true,
         },
         // Task 2B: replace the built-in login view with a branded two-step
@@ -419,6 +434,14 @@ export default buildConfig({
     // gated on system.errorLogs. Written by the global afterError capture path
     // (src/audit/recordError.ts) via overrideAccess.
     ErrorLogs,
+    // Public-data Standardization dictionaries (Phase 8, Task 8.1a; refs
+    // 1-60..1-65) — GLOBAL (non-tenant), gated on the standardization.* menus
+    // (the DBA role). The Code Specification report (ref 1-74) is NOT a
+    // collection — it's a read-only admin view + CSV over the existing `codes`
+    // (endpoints mounted on Codes.ts; view + nav link registered below).
+    StandardDomains,
+    StandardWords,
+    StandardTerms,
   ],
   // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
   // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B

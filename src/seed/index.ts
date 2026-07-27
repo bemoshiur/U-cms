@@ -25,6 +25,8 @@ import { personalInfoAccessLogsStep } from './steps/personalInfoAccessLogs'
 import { privacyRolesStep } from './steps/privacyRoles'
 import { securityDocsStep } from './steps/securityDocs'
 import { privacyMenuGrantsStep } from './steps/privacyMenuGrants'
+import { standardizationRolesStep } from './steps/standardizationRoles'
+import { standardizationPreloadStep } from './steps/standardization'
 import { richOrgTreeStep, richCodesStep, richAdminsStep } from './steps/rich/foundation'
 import { richBoardsAndPostsStep, richSecurityDocsStep } from './steps/rich/boards'
 import { richMembersStep, richSurveysStep } from './steps/rich/community'
@@ -111,6 +113,13 @@ export const seedSteps: SeedStep[] = [
   // rest of the Privacy Protection System (needs the roles + all §3 adminMenus).
   securityDocsStep,
   privacyMenuGrantsStep,
+  // Phase 8 (Task 8.1a): the DBA role (grants the four standardization menus,
+  // assigned to the super-admin as an additive heal — needs adminMenus + roles +
+  // super-admin), then the MOIS baseline preload for the three dictionaries
+  // (domains → words → terms; idempotent by natural key) so each list renders
+  // non-empty like the manual.
+  standardizationRolesStep,
+  standardizationPreloadStep,
   // ── RICH DEMO SEED (owner mandate: the CMS must not look empty) ───────────
   // Layered LAST, ON TOP of every minimal Phase 1-6 seed, so each rich step can
   // rely on the base data (sites, board types, roles, terms, departments) the
