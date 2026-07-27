@@ -2,6 +2,7 @@ import type { Access, Where } from 'payload'
 
 import { hasMenuAccess, isSuperUser } from './hasMenuAccess'
 import { getAssignedTenantIds } from './tenantAccess'
+import { isTwoFactorEnrolmentConfined } from './twoFactorConfinement'
 
 /**
  * Menu key gating the §3 security-document board libraries (Task 6D; legacy
@@ -52,6 +53,11 @@ export function securityDocScopedAccess(
 ): Access {
   return async ({ req }) => {
     if (!req.user) {
+      return false
+    }
+    // Task 7D (P1): confine an un-enrolled admin under a 2FA-required back-office
+    // BEFORE the `isSuper` bypass below. See twoFactorConfinement.ts.
+    if (await isTwoFactorEnrolmentConfined(req)) {
       return false
     }
     // Super-admins bypass grants AND tenant scoping, for both classes.
@@ -106,6 +112,11 @@ export function securityDocScopedAccess(
 export function securityDocAttachmentRead(tenantFieldName = 'tenant'): Access {
   return async ({ req }) => {
     if (!req.user) {
+      return false
+    }
+    // Task 7D (P1): confine an un-enrolled admin under a 2FA-required back-office
+    // BEFORE the `isSuper` bypass below. See twoFactorConfinement.ts.
+    if (await isTwoFactorEnrolmentConfined(req)) {
       return false
     }
     if (isSuperUser(req.user)) {

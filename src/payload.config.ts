@@ -442,6 +442,12 @@ export default buildConfig({
   // security-sensitive email links never fall back to the request Origin
   // header.
   serverURL,
+  // Task 7D (R6; OWASP audit §3/§6): CSRF Origin allowlist. A second-layer CSRF
+  // defense behind the explicit `SameSite=Lax` cookies — Payload rejects a
+  // state-changing request whose `Origin`/`Referer` is not in this list. The app
+  // is only ever served from `serverURL` (the same origin the cookies are
+  // scoped to), so that is the sole entry to allow.
+  csrf: [serverURL],
   // Task 5C (ref 1-56): GLOBAL exception capture. The config-level afterError
   // hook fires for every REST/GraphQL error via Payload's routeError; this
   // writes a sanitized `errorLogs` row for genuine unhandled exceptions (HTTP

@@ -1,6 +1,7 @@
 import type { Access, FieldAccess, Payload, PayloadRequest } from 'payload'
 
 import { toRelationId } from '../collections/utils'
+import { isTwoFactorEnrolmentConfined } from './twoFactorConfinement'
 
 /**
  * Menu-based access control (Task 1C; plan §2.2; feature-inventory refs
@@ -201,6 +202,17 @@ function grantsMenu(roles: RoleLike[], targetMenuId: string | number | undefined
 export async function hasMenuAccess(req: PayloadRequest, menuKey: string): Promise<boolean> {
   const user = req.user
   if (!user) {
+    return false
+  }
+
+  // Task 7D (P1): server-side 2FA-enrolment confinement. An un-enrolled `users`
+  // principal under a 2FA-required back-office is denied every menu-gated
+  // operation until it confirms a TOTP — the single chokepoint that closes the
+  // direct-API bypass for the (many) collections gated through here. The 2FA
+  // enrolment endpoints use `overrideAccess:true`, so they bypass this and keep
+  // working; `users` self-access (selfOrMenuAccess's self-branch) never reaches
+  // here. See src/access/twoFactorConfinement.ts.
+  if (await isTwoFactorEnrolmentConfined(req)) {
     return false
   }
 

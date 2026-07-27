@@ -11,6 +11,7 @@ import {
   enforcePasswordPolicyOnReset,
   recordLastLogin,
 } from '../auth/userHooks'
+import { resolvePublicServerURL } from '../env/serverUrl'
 import { rateLimitPasswordRecovery } from '../security/rateLimit'
 import {
   auditForcedLogout,
@@ -149,6 +150,18 @@ export const Users: CollectionConfig = {
   },
   auth: {
     depth: 1,
+    // Task 7D (P2; OWASP audit §3 P2): mark the admin `payload-token` session
+    // cookie `Secure` so the post-2FA session bearer is never sent over cleartext
+    // http (closing the on-path capture/replay gap on a custom apex domain or
+    // self-hosted http). `secure` is keyed on the configured serverURL SCHEME —
+    // NOT `NODE_ENV` — so a production build served over http (`next start`
+    // locally / in e2e) still sets the cookie, mirroring how browsers only honor
+    // `Secure` over https. Same resolver + pattern as the member login action
+    // (src/app/(frontend)/login/actions.ts) and payload.config's `serverURL`.
+    cookies: {
+      secure: resolvePublicServerURL().startsWith('https://'),
+      sameSite: 'Lax',
+    },
     // Native transient brute-force lock (ref 1-1 "계정이 잠긴 상태"). Distinct
     // from the `status` lifecycle — see the collection doc comment above.
     maxLoginAttempts: 5,

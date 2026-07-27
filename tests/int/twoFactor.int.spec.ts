@@ -1,7 +1,7 @@
 import { authenticator } from 'otplib'
 import type { Payload, PayloadRequest } from 'payload'
 import { getPayload } from 'payload'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import config from '@/payload.config'
 import { recordLoginFailure } from '@/audit/authHooks'
@@ -11,6 +11,11 @@ import {
 } from '@/endpoints/twoFactorEndpoints'
 import { throttleTwoFactorFailure } from '@/auth/twoFactorHooks'
 import { TWO_FACTOR_MAX_ATTEMPTS } from '@/auth/twoFactor'
+import { hasMenuAccess } from '@/access/hasMenuAccess'
+import { securityDocScopedAccess } from '@/access/securityDocs'
+import { tenantMembershipAccess } from '@/access/tenantAccess'
+import { memberSelfOrManageAccess } from '@/access/memberAccess'
+import { isTwoFactorEnrolmentConfined } from '@/access/twoFactorConfinement'
 import {
   TWO_FACTOR_INVALID_MESSAGE,
   TWO_FACTOR_LOCKED_MESSAGE,
@@ -192,6 +197,29 @@ describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
       overrideAccess: true,
     })
     twoFactorSiteId = site.id
+  })
+
+  // Task 7D (P1): the new server-side confinement makes a 2FA-required
+  // back-office deny un-enrolled `users` sessions at the ACCESS LAYER globally
+  // (not just at login). Since int specs share one persistent dev DB and run
+  // serially, leaving ANY admin site with 2FA on would confine the un-enrolled
+  // admins other specs create. Disable 2FA on every admin site on the way out
+  // so this suite never contaminates the others.
+  afterAll(async () => {
+    const admins = await payload.find({
+      collection: 'sites',
+      where: { and: [{ isAdminSite: { equals: true } }, { twoFactorEnabled: { equals: true } }] },
+      pagination: false,
+      overrideAccess: true,
+    })
+    for (const site of admins.docs) {
+      await payload.update({
+        collection: 'sites',
+        id: site.id,
+        data: { twoFactorEnabled: false },
+        overrideAccess: true,
+      })
+    }
   })
 
   describe('Part 1 — secret storage never leaks to clients', () => {
@@ -477,6 +505,12 @@ describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
           password: STRONG_PW,
           status: 'active',
           roles: [superRole.id],
+          // Task 7D (P1): the reset-performing admin must itself be ENROLLED —
+          // under a 2FA-required back-office the server-side confinement now
+          // denies an un-enrolled admin every non-self collection op (which is
+          // exactly what a real operator performing this reset would be). Seeded
+          // via overrideAccess, which bypasses the field-access lock on this field.
+          totpConfirmed: true,
         },
         overrideAccess: true,
       })
@@ -706,6 +740,204 @@ describe('Google-OTP 2FA + session revocation (Task 2B)', () => {
       } as Parameters<typeof payload.login>[0])
       expect(ok.token).toBeTruthy()
       expect((await serverRead(user.id)).totpFailedAttempts).toBe(0)
+    })
+  })
+
+  /**
+   * Part 7 — server-side 2FA-enrolment confinement (Task 7D — P1; audit §3 P1).
+   *
+   * An un-enrolled `users` principal under a 2FA-required back-office must be
+   * DENIED every menu/tenant-gated collection operation at the ACCESS LAYER
+   * (REST + GraphQL, not just the admin UI), while the 2FA enrolment endpoints
+   * keep working and self-access + logout stay reachable. Members are never
+   * affected, and the confinement lifts the instant `totpConfirmed` flips true.
+   */
+  describe('Part 7 — server-side enrolment confinement (P1)', () => {
+    /** A minimal PayloadRequest for driving an `access` function directly. */
+    function accessReq(user: unknown): PayloadRequest {
+      return { payload, user, context: {}, headers: new Headers() } as unknown as PayloadRequest
+    }
+    /**
+     * Reads a user fresh WITH its roles populated (depth 1) plus the `collection`
+     * tag a real session carries, so `isSuperUser`/`hasMenuAccess` see real data.
+     */
+    async function sessionUser(id: number | string, overrides: Record<string, unknown> = {}) {
+      const doc = await payload.findByID({
+        collection: 'users',
+        id,
+        depth: 1,
+        overrideAccess: true,
+      })
+      return { ...(doc as unknown as Record<string, unknown>), collection: 'users', ...overrides }
+    }
+    async function createGranted(label: string, roleIds: (number | string)[]) {
+      return payload.create({
+        collection: 'users',
+        data: {
+          email: uniqueEmail(label),
+          password: STRONG_PW,
+          status: 'active',
+          roles: roleIds as number[],
+        },
+        overrideAccess: true,
+      })
+    }
+    async function createSuperAdmin(label: string) {
+      const role = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_7D_${unique(label).toUpperCase()}`,
+          name: label,
+          description: 'x',
+          isSuper: true,
+        },
+        overrideAccess: true,
+      })
+      return createGranted(label, [role.id])
+    }
+
+    it('hasMenuAccess confines an un-enrolled admin only while the site requires 2FA; enrolment lifts it', async () => {
+      const superUser = await createSuperAdmin('confSuper')
+
+      // Site does NOT require 2FA → not confined (super grants pass).
+      await setTwoFactor(false)
+      const notReq = accessReq(await sessionUser(superUser.id))
+      expect(await isTwoFactorEnrolmentConfined(notReq)).toBe(false)
+      expect(await hasMenuAccess(notReq, 'system.admins')).toBe(true)
+
+      // Site requires 2FA + NOT enrolled → confined (denied via hasMenuAccess).
+      await setTwoFactor(true)
+      const confined = accessReq(await sessionUser(superUser.id))
+      expect(await isTwoFactorEnrolmentConfined(confined)).toBe(true)
+      expect(await hasMenuAccess(confined, 'system.admins')).toBe(false)
+
+      // Enrolled (totpConfirmed true) → confinement lifts.
+      const enrolled = accessReq(await sessionUser(superUser.id, { totpConfirmed: true }))
+      expect(await isTwoFactorEnrolmentConfined(enrolled)).toBe(false)
+      expect(await hasMenuAccess(enrolled, 'system.admins')).toBe(true)
+    })
+
+    it('the isSuper-first helpers ALSO confine an un-enrolled super (boards/posts + attachments)', async () => {
+      await setTwoFactor(true)
+      const superUser = await createSuperAdmin('confSuperShort')
+      const confined = accessReq(await sessionUser(superUser.id))
+      const enrolled = accessReq(await sessionUser(superUser.id, { totpConfirmed: true }))
+
+      const posts = securityDocScopedAccess('content.posts')
+      const attachments = tenantMembershipAccess()
+
+      // Confined: both DENY even though the principal is super — the key regression,
+      // since these short-circuit on isSuper BEFORE hasMenuAccess would run.
+      expect(await posts({ req: confined } as never)).toBe(false)
+      expect(await attachments({ req: confined } as never)).toBe(false)
+      // Enrolled: the super bypass is restored.
+      expect(await posts({ req: enrolled } as never)).toBe(true)
+      expect(await attachments({ req: enrolled } as never)).toBe(true)
+    })
+
+    it('a granted NON-super admin is confined too (the hasMenuAccess path)', async () => {
+      await setTwoFactor(true)
+      const rolesMenu = await payload.find({
+        collection: 'adminMenus',
+        where: { menuKey: { equals: 'system.roles' } },
+        limit: 1,
+        pagination: false,
+        overrideAccess: true,
+      })
+      const menuId = rolesMenu.docs[0]!.id
+      const role = await payload.create({
+        collection: 'roles',
+        data: {
+          roleId: `ROLE_7D_G_${unique('g').toUpperCase()}`,
+          name: 'granted',
+          description: 'x',
+          isSuper: false,
+          menuGrants: [menuId],
+        },
+        overrideAccess: true,
+      })
+      const user = await createGranted('confGranted', [role.id])
+
+      const confined = accessReq(await sessionUser(user.id))
+      const enrolled = accessReq(await sessionUser(user.id, { totpConfirmed: true }))
+      expect(await hasMenuAccess(confined, 'system.roles')).toBe(false)
+      expect(await hasMenuAccess(enrolled, 'system.roles')).toBe(true)
+    })
+
+    it('the 2FA enrolment endpoints STILL succeed for a confined session (overrideAccess bypass)', async () => {
+      await setTwoFactor(true)
+      const user = await createActiveUser('confEnroll')
+      // Sanity: this un-enrolled admin IS confined at the access layer …
+      expect(await isTwoFactorEnrolmentConfined(accessReq(await sessionUser(user.id)))).toBe(true)
+      // … yet it can still drive the whole enrolment flow (the mandate stays completable).
+      const enroll = await callEnroll(user)
+      expect(enroll.status).toBe(200)
+      const secret = enroll.body.secret as string
+      const confirm = await callVerifyEnroll(user, authenticator.generate(secret))
+      expect(confirm.status).toBe(200)
+      // After enrolment the confinement lifts on the next request.
+      expect(await isTwoFactorEnrolmentConfined(accessReq(await sessionUser(user.id)))).toBe(false)
+    })
+
+    it('a real REST-style list is denied while confined and returns rows once enrolled', async () => {
+      await setTwoFactor(true)
+      const superUser = await createSuperAdmin('confFind')
+
+      const confinedU = await sessionUser(superUser.id)
+      let deniedCount = -1
+      try {
+        const denied = await payload.find({
+          collection: 'roles',
+          user: confinedU,
+          overrideAccess: false,
+          limit: 5,
+        })
+        deniedCount = denied.docs.length
+      } catch {
+        deniedCount = 0 // some ops throw Forbidden instead of returning empty — also "denied"
+      }
+      expect(deniedCount).toBe(0)
+
+      const enrolledU = await sessionUser(superUser.id, { totpConfirmed: true })
+      const allowed = await payload.find({
+        collection: 'roles',
+        user: enrolledU,
+        overrideAccess: false,
+        limit: 5,
+      })
+      expect(allowed.docs.length).toBeGreaterThan(0)
+    })
+
+    it('a member session is NEVER confined (unaffected by the admin 2FA mandate)', async () => {
+      await setTwoFactor(true)
+      const publicSite = await payload.create({
+        collection: 'sites',
+        data: {
+          siteId: uniqueSiteId('confpub'),
+          name: 'Conf Public',
+          url: 'https://c.example.com',
+          isAdminSite: false,
+        },
+        overrideAccess: true,
+      })
+      const member = await payload.create({
+        collection: 'members',
+        data: {
+          loginId: `cm${Date.now()}`.toLowerCase(),
+          email: uniqueEmail('confmember'),
+          name: 'Conf Member',
+          password: 'Member-Pass-99',
+          status: 'active',
+          tenant: publicSite.id,
+        } as never,
+        overrideAccess: true,
+      })
+      const memberReq = accessReq({ ...member, collection: 'members' })
+      expect(await isTwoFactorEnrolmentConfined(memberReq)).toBe(false)
+      // memberSelfOrManageAccess still returns the member's own-record scope.
+      const memberAccess = memberSelfOrManageAccess()
+      const result = await memberAccess({ req: memberReq } as never)
+      expect(result).toEqual({ id: { equals: member.id } })
     })
   })
 })

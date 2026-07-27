@@ -190,8 +190,52 @@ async function boardId(
 }
 
 /**
+ * Guarantees the back-office 2FA is OFF (and the seeded super's session
+ * unconfined) before provisioning. Normally a no-op — this setup leaves 2FA off.
+ * Recovers a crashed prior run that left 2FA on: once 2FA is required an
+ * un-enrolled admin session is confined server-side (Task 7D — P1), so the
+ * seeded super can no longer administer. We lift the confinement by enrolling it
+ * through the `/api/2fa/*` endpoints (which use `overrideAccess`, so they work
+ * even for a confined session), then disable 2FA. Idempotent: an already-enrolled
+ * seed super returns no secret and is simply used to flip 2FA off.
+ */
+async function ensureTwoFactorDisabled(
+  request: APIRequestContext,
+  superToken: string,
+  bosSiteId: number,
+): Promise<void> {
+  const res = await request.get(`/api/sites/${bosSiteId}?depth=0`, {
+    headers: authHeaders(superToken),
+  })
+  const site = (await res.json().catch(() => ({}))) as { twoFactorEnabled?: boolean }
+  if (!site.twoFactorEnabled) {
+    return
+  }
+  const enroll = await request.post('/api/2fa/enroll', { headers: authHeaders(superToken) })
+  const enrollBody = (await enroll.json().catch(() => ({}))) as { secret?: string }
+  if (enrollBody.secret) {
+    await request.post('/api/2fa/verify-enroll', {
+      headers: authHeaders(superToken),
+      data: { token: authenticator.generate(enrollBody.secret) },
+    })
+  }
+  const off = await request.patch(`/api/sites/${bosSiteId}`, {
+    headers: authHeaders(superToken),
+    data: { twoFactorEnabled: false },
+  })
+  expect(off.ok(), `[e2e-setup] 2FA-off recovery failed: ${off.status()}`).toBeTruthy()
+}
+
+/**
  * Provisions all authenticated e2e state and captures the fixtures. Returns the
  * fixtures (also written to FIXTURES_PATH for the spec files to read).
+ *
+ * Task 7D (P1) posture: everything is provisioned with the back-office 2FA OFF
+ * (the demo default), so the seeded super's session is unconfined. 2FA is turned
+ * on only for the brief window that enrols e2e-super, then turned back off. The
+ * bulk authenticated suites therefore run 2FA-OFF (password-only login,
+ * confinement inert, zero OTP); the `auth-2fa` suite re-enables 2FA itself for
+ * its OTP + confinement assertions and disables it again in its afterAll.
  */
 export async function provisionE2e(request: APIRequestContext): Promise<E2eFixtures> {
   // 1) Log in as the REAL seeded super-admin (left un-enrolled → no OTP needed).
@@ -201,12 +245,9 @@ export async function provisionE2e(request: APIRequestContext): Promise<E2eFixtu
   const demoSiteId = await siteId(request, superToken, 'demo')
   const bosSiteId = await siteId(request, superToken, 'bos')
 
-  // 3) Turn 2FA ON for the admin back-office.
-  const twoFa = await request.patch(`/api/sites/${bosSiteId}`, {
-    headers: authHeaders(superToken),
-    data: { twoFactorEnabled: true },
-  })
-  expect(twoFa.ok(), `enable 2FA on bos site: ${twoFa.status()}`).toBeTruthy()
+  // 3) Guarantee 2FA is OFF so all provisioning below runs unconfined (recovers
+  //    a crashed prior run; normally a no-op). See ensureTwoFactorDisabled.
+  await ensureTwoFactorDisabled(request, superToken, bosSiteId)
 
   // 4) Ensure the two non-super roles exist.
   const roleDbIdByRoleId = new Map<string, number>()
@@ -257,28 +298,13 @@ export async function provisionE2e(request: APIRequestContext): Promise<E2eFixtu
   )
   await ensureAdmin(request, superToken, E2E_STATS, roleDbIdByRoleId.get(E2E_STATS.roleId)!)
 
-  // 6) Enrol e2e-super with a fresh TOTP secret via the REAL enrolment flow.
-  //    Reset any prior enrolment first so this is idempotent across re-runs.
+  // 6) Reset any prior e2e-super 2FA enrolment (idempotent across re-runs). Done
+  //    while 2FA is OFF, so the seeded super's session is unconfined.
   const reset = await request.patch(`/api/users/${superAdminId}`, {
     headers: authHeaders(superToken),
     data: { resetTwoFactorDevice: true },
   })
   expect(reset.ok(), `reset e2e-super 2FA: ${reset.status()}`).toBeTruthy()
-
-  const e2eSuperToken = await apiLogin(request, E2E_SUPER.email, E2E_SUPER.password)
-  const enroll = await request.post('/api/2fa/enroll', { headers: authHeaders(e2eSuperToken) })
-  const enrollBody = (await enroll.json().catch(() => ({}))) as { secret?: string }
-  if (!enroll.ok() || !enrollBody.secret) {
-    throw new Error(
-      `[e2e-setup] 2FA enroll failed: ${enroll.status()} ${JSON.stringify(enrollBody)}`,
-    )
-  }
-  const superTotpSecret = enrollBody.secret
-  const verify = await request.post('/api/2fa/verify-enroll', {
-    headers: authHeaders(e2eSuperToken),
-    data: { token: authenticator.generate(superTotpSecret) },
-  })
-  expect(verify.ok(), `2FA verify-enroll: ${verify.status()} ${await verify.text()}`).toBeTruthy()
 
   // 7) Capture the seeded board ids the suites need (canonical names — the demo
   //    tenant is polluted by prior int-test runs, so match by exact name).
@@ -325,6 +351,43 @@ export async function provisionE2e(request: APIRequestContext): Promise<E2eFixtu
       '[e2e-setup] demo member (member@demo.example.com) not found — is the DB seeded?',
     )
   }
+
+  // 8) Enrol e2e-super under a brief 2FA-ON window, then turn 2FA back OFF.
+  //    Enabling 2FA is done with the seeded super while it is still unconfined
+  //    (2FA is off at the request instant). e2e-super then logs in un-enrolled
+  //    (require2FA lets the un-enrolled login through → a confined session), and
+  //    enrols via the `/api/2fa/*` endpoints (overrideAccess → they work while
+  //    confined). Once enrolled it is unconfined, so its own token flips 2FA back
+  //    off — leaving the demo-default posture for the bulk suites. `auth-2fa`
+  //    re-enables 2FA itself for its OTP + confinement assertions.
+  const enable2fa = await request.patch(`/api/sites/${bosSiteId}`, {
+    headers: authHeaders(superToken),
+    data: { twoFactorEnabled: true },
+  })
+  expect(enable2fa.ok(), `enable 2FA for enrolment: ${enable2fa.status()}`).toBeTruthy()
+
+  const e2eSuperToken = await apiLogin(request, E2E_SUPER.email, E2E_SUPER.password)
+  const enroll = await request.post('/api/2fa/enroll', { headers: authHeaders(e2eSuperToken) })
+  const enrollBody = (await enroll.json().catch(() => ({}))) as { secret?: string }
+  if (!enroll.ok() || !enrollBody.secret) {
+    throw new Error(
+      `[e2e-setup] 2FA enroll failed: ${enroll.status()} ${JSON.stringify(enrollBody)}`,
+    )
+  }
+  const superTotpSecret = enrollBody.secret
+  const verify = await request.post('/api/2fa/verify-enroll', {
+    headers: authHeaders(e2eSuperToken),
+    data: { token: authenticator.generate(superTotpSecret) },
+  })
+  expect(verify.ok(), `2FA verify-enroll: ${verify.status()} ${await verify.text()}`).toBeTruthy()
+
+  // Turn 2FA back OFF (demo-default). The e2e-super token is now enrolled →
+  // unconfined → allowed to flip the site back.
+  const disable2fa = await request.patch(`/api/sites/${bosSiteId}`, {
+    headers: authHeaders(e2eSuperToken),
+    data: { twoFactorEnabled: false },
+  })
+  expect(disable2fa.ok(), `disable 2FA after enrolment: ${disable2fa.status()}`).toBeTruthy()
 
   const fixtures: E2eFixtures = {
     demoSiteId,

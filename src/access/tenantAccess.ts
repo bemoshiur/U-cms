@@ -3,6 +3,7 @@ import { APIError } from 'payload'
 
 import { toRelationId } from '../collections/utils'
 import { hasMenuAccess, isSuperUser } from './hasMenuAccess'
+import { isTwoFactorEnrolmentConfined } from './twoFactorConfinement'
 
 /**
  * Per-user tenant access for tenant-scoped collections (Task 3A; plan §2.1;
@@ -88,8 +89,14 @@ export function tenantScopedMenuAccess(menuKey: string, tenantFieldName = 'tenan
  * `tenantScopedMenuAccess` applies (the plugin wrapper is a pass-through).
  */
 export function tenantMembershipAccess(tenantFieldName = 'tenant'): Access {
-  return ({ req }) => {
+  return async ({ req }) => {
     if (!req.user) {
+      return false
+    }
+    // Task 7D (P1): confine an un-enrolled admin under a 2FA-required back-office
+    // BEFORE the `isSuper` short-circuit below — otherwise the seeded super-admin
+    // would bypass confinement on this collection. See twoFactorConfinement.ts.
+    if (await isTwoFactorEnrolmentConfined(req)) {
       return false
     }
     if (isSuperUser(req.user)) {

@@ -88,8 +88,14 @@ function isLoginRequest(req: PayloadRequest | undefined): boolean {
  *
  * Decision table (only when the back-office requires 2FA):
  *  - user has NOT confirmed a TOTP  → allow login (first-login enrolment path,
- *    ref 1-6: the QR is shown once on first login; a Phase-4 frontend gate then
- *    forces enrolment before further use — documented in task-2B-report.md).
+ *    ref 1-6: the QR is shown once on first login). The login MUST be allowed so
+ *    the un-enrolled admin can obtain the authenticated session the enrolment
+ *    endpoints (`/api/2fa/*`) require. Enrolment is then enforced SERVER-SIDE
+ *    (Task 7D — P1): the minted session is CONFINED at the access layer
+ *    (`isTwoFactorEnrolmentConfined`, src/access/twoFactorConfinement.ts) so it
+ *    can reach ONLY the 2FA-enrolment surface + its own user record + logout
+ *    until `totpConfirmed` becomes true — closing the direct-REST/GraphQL bypass
+ *    that the previous frontend-only nudge left open (OWASP audit §3 P1).
  *  - user HAS confirmed a TOTP:
  *      - OTP step locked     → throw `TWO_FACTOR_LOCKED_MESSAGE` (429) even for
  *        a correct code (brute-force throttle — see `throttleTwoFactorFailure`).
