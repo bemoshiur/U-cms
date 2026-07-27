@@ -2,7 +2,7 @@ import { postgresAdapter } from '@payloadcms/db-postgres'
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant'
 import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
-import type { Plugin } from 'payload'
+import type { Payload, Plugin } from 'payload'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
@@ -87,6 +87,80 @@ const dirname = path.dirname(filename)
  * domain outside local development.
  */
 const serverURL = resolvePublicServerURL()
+
+/** Truthy env-flag check (mirrors scripts/seedOnDeploy.ts). */
+function isSeedOnDeployEnabled(): boolean {
+  const v = (process.env.SEED_ON_DEPLOY ?? '').trim().toLowerCase()
+  return v === 'true' || v === '1' || v === 'yes' || v === 'on'
+}
+
+/**
+ * Demo super-admin credential sync (serverless convenience). While
+ * `SEED_ON_DEPLOY` is truthy, this force-sets the super-admin's email +
+ * password to KNOWN values and clears any brute-force lock, so an operator who
+ * has lost track of the `SEED_ADMIN_*` values (or locked the account) always
+ * has a working login. It writes through Payload (`payload.update`), so the
+ * password is hashed correctly (pbkdf2). It targets the single account holding
+ * an `isSuper` role. Fast (one row) — safe to run in `onInit`.
+ *
+ * Values default to `owner@ucms.app` / `U-CMS-Admin-2026!` but can be
+ * overridden with `DEMO_ADMIN_EMAIL` / `DEMO_ADMIN_PASSWORD`. Turn
+ * `SEED_ON_DEPLOY=false` once you have logged in and set your own password, so
+ * this stops resetting it on every cold start. DEMO-ONLY — change the password
+ * after first login and rotate for anything beyond a demo.
+ */
+async function syncDemoSuperAdmin(payload: Payload): Promise<void> {
+  if (!isSeedOnDeployEnabled()) return
+  try {
+    const superRoles = await payload.find({
+      collection: 'roles',
+      where: { isSuper: { equals: true } },
+      limit: 50,
+      depth: 0,
+      pagination: false,
+      overrideAccess: true,
+    })
+    const superRoleIds = superRoles.docs.map((r) => r.id)
+    if (superRoleIds.length === 0) return
+
+    const admins = await payload.find({
+      collection: 'users',
+      where: { roles: { in: superRoleIds } },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const admin = admins.docs[0]
+    if (!admin) return
+
+    const email = process.env.DEMO_ADMIN_EMAIL || 'owner@ucms.app'
+    const password = process.env.DEMO_ADMIN_PASSWORD || 'U-CMS-Admin-2026!'
+    // Critical step: reset email + password (Payload re-hashes the password).
+    // Only guaranteed-valid fields, so nothing can block it.
+    await payload.update({
+      collection: 'users',
+      id: admin.id,
+      data: { email, password },
+      overrideAccess: true,
+    })
+    // Best-effort: clear the brute-force lock so the new password works
+    // immediately (it otherwise auto-expires within lockTime). Kept in its own
+    // try/catch so a field-name mismatch can never undo the password reset above.
+    try {
+      await payload.update({
+        collection: 'users',
+        id: admin.id,
+        data: { loginAttempts: 0, lockUntil: null },
+        overrideAccess: true,
+      })
+    } catch {
+      /* lock auto-expires within lockTime — non-critical */
+    }
+    payload.logger.info(`[demo-admin] super-admin credentials synced to ${email}.`)
+  } catch (err) {
+    payload.logger.error({ err }, '[demo-admin] super-admin sync failed (non-fatal).')
+  }
+}
 
 /**
  * Builds the S3-compatible storage plugin. Fails fast (throws) if
@@ -568,6 +642,7 @@ export default buildConfig({
    */
   onInit: async (payload) => {
     await warmAdminMenuKeyCache(payload)
+    await syncDemoSuperAdmin(payload)
   },
   db: postgresAdapter({
     pool: {
