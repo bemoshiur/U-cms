@@ -2,5 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "pnpm install",
-  "buildCommand": "pnpm ci:deploy || echo '[vercel-build] WARNING: ci:deploy (migrate+seed) failed — most likely DATABASE_URI is unset/wrong or the DB is unreachable from the build. Shipping the app anyway so the code deploys; set a correct DATABASE_URI (use the DIRECT non-pooler Neon endpoint) + SEED_ON_DEPLOY=true and redeploy to run migrations + seed.' ; pnpm build"
+  "buildCommand": "pnpm ci:deploy && pnpm build"
 }
