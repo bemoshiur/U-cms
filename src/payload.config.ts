@@ -47,6 +47,7 @@ import { PermissionChangeLogs } from './collections/PermissionChangeLogs'
 import { MenuPermissionLogs } from './collections/MenuPermissionLogs'
 import { PersonalInfoAccessLogs } from './collections/PersonalInfoAccessLogs'
 import { ErrorLogs } from './collections/ErrorLogs'
+import { AccessibilityScanResults } from './collections/AccessibilityScanResults'
 import { StandardDomains } from './collections/standardization/StandardDomains'
 import { StandardWords } from './collections/standardization/StandardWords'
 import { StandardTerms } from './collections/standardization/StandardTerms'
@@ -203,6 +204,11 @@ const plugins: Plugin[] = [
       // (incl. secret) files; `media` is left as the PUBLIC display-asset pool.
       // See src/collections/Attachments.ts.
       attachments: {},
+      // Web-accessibility auto-diagnosis results (Task 8.2; refs 2-21..2-23) —
+      // tenant-scoped like the other statistics collections (a scan targets one
+      // site's screens; the 2-21 list carries a 사이트 column). See
+      // src/collections/AccessibilityScanResults.ts.
+      accessibilityScanResults: {},
     },
     tenantsSlug: Sites.slug,
     /**
@@ -327,6 +333,24 @@ export default buildConfig({
         accessHistory: {
           Component: '/components/statistics/AccessHistoryView#AccessHistoryView',
           path: '/access-history',
+          exact: true,
+        },
+        // Task 8.2 (refs 2-21/2-22): the web-accessibility auto-diagnosis results
+        // list + per-screen stored-result detail pane, gated on
+        // statistics.accessibility + tenant-scoped. See AccessibilityDiagnosisView.tsx.
+        accessibilityDiagnosis: {
+          Component: '/components/statistics/AccessibilityDiagnosisView#AccessibilityDiagnosisView',
+          path: '/accessibility-diagnosis',
+          exact: true,
+        },
+        // Task 8.2 (ref 2-23): the monthly statistics + itemized inspection
+        // report (with the axe-core diagnosis-standard header + the honest
+        // automated-diagnosis disclaimer), gated on statistics.accessibility +
+        // tenant-scoped. See AccessibilityStatisticsView.tsx.
+        accessibilityStatistics: {
+          Component:
+            '/components/statistics/AccessibilityStatisticsView#AccessibilityStatisticsView',
+          path: '/accessibility-statistics',
           exact: true,
         },
         // Task 6C (TODO 6.5; ref 3-9): password-policy management — the current
@@ -462,6 +486,15 @@ export default buildConfig({
     // gated on system.errorLogs. Written by the global afterError capture path
     // (src/audit/recordError.ts) via overrideAccess.
     ErrorLogs,
+    // Web-accessibility auto-diagnosis results (Phase 8, Task 8.2; refs
+    // 2-21..2-23) — TENANT-SCOPED, gated on statistics.accessibility. One row per
+    // inspected screen per scan run, written by the ops/CI scan runner
+    // (scripts/accessibility-scan.ts) + the public validation-mode DB-store
+    // endpoint. The results list (2-21), per-screen detail (2-22) + monthly
+    // statistics / itemized report (2-23) are custom admin views registered
+    // below; the pragmatic axe-core substitute for the legacy KWCAG overlay
+    // engine (plan §2.7). See src/collections/AccessibilityScanResults.ts.
+    AccessibilityScanResults,
     // Public-data Standardization dictionaries (Phase 8, Task 8.1a; refs
     // 1-60..1-65) — GLOBAL (non-tenant), gated on the standardization.* menus
     // (the DBA role). The Code Specification report (ref 1-74) is NOT a

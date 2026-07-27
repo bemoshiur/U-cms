@@ -53,6 +53,8 @@ import { SelfCheckView as SelfCheckView_8b1b0003 } from '../../../components/sta
 import { SelfCheckStatisticsView as SelfCheckStatisticsView_8b1b0004 } from '../../../components/standardization/SelfCheckStatisticsView'
 import { RunCheckButton as RunCheckButton_8b1b0005 } from '../../../components/standardization/RunCheckButton'
 import { BatchApplyForm as BatchApplyForm_8b1b0006 } from '../../../components/standardization/BatchApplyForm'
+import { AccessibilityDiagnosisView as AccessibilityDiagnosisView_8c20001 } from '../../../components/statistics/AccessibilityDiagnosisView'
+import { AccessibilityStatisticsView as AccessibilityStatisticsView_8c20002 } from '../../../components/statistics/AccessibilityStatisticsView'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
@@ -157,5 +159,9 @@ export const importMap = {
     SelfCheckStatisticsView_8b1b0004,
   '/components/standardization/RunCheckButton#RunCheckButton': RunCheckButton_8b1b0005,
   '/components/standardization/BatchApplyForm#BatchApplyForm': BatchApplyForm_8b1b0006,
+  '/components/statistics/AccessibilityDiagnosisView#AccessibilityDiagnosisView':
+    AccessibilityDiagnosisView_8c20001,
+  '/components/statistics/AccessibilityStatisticsView#AccessibilityStatisticsView':
+    AccessibilityStatisticsView_8c20002,
   '@payloadcms/next/rsc#CollectionCards': CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
 }

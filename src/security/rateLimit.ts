@@ -64,6 +64,16 @@ export const DEFAULT_PUBLIC_RATE_LIMIT_WINDOW_MIN = 10
 export const DEFAULT_TRACK_RATE_LIMIT_MAX = 300
 export const DEFAULT_TRACK_RATE_LIMIT_WINDOW_MIN = 10
 
+/**
+ * The public accessibility-validation DB-store beacon (Task 8.2 / TODO 8.3) gets
+ * its OWN modest limit — a visitor's browser POSTs at most once per page in the
+ * DB/both validation mode, which is dev-only (legacy: "operates only in local/dev
+ * environments"), so a small cap suffices to back out gross flooding while the
+ * per-(session,route) dedup handles honest re-fires. Same per-instance caveat.
+ */
+export const DEFAULT_ACCESSIBILITY_RATE_LIMIT_MAX = 60
+export const DEFAULT_ACCESSIBILITY_RATE_LIMIT_WINDOW_MIN = 10
+
 /** Sentinel client key shared by all requests without a trustworthy IP. */
 export const UNTRUSTED_IP_KEY = 'untrusted'
 
@@ -88,6 +98,8 @@ export const PUBLIC_ENDPOINT_NAMES = {
   // Public satisfaction rating + traffic beacon (Task 4E).
   satisfactionRate: 'satisfaction-rate',
   trackView: 'track-view',
+  // Public accessibility-validation DB-store beacon (Task 8.2 / TODO 8.3).
+  accessibilityValidate: 'accessibility-validate',
 } as const
 
 export type RateLimitConfig = {
@@ -258,6 +270,63 @@ export function resetTrackRateLimiter(): void {
 export function enforceTrackRateLimit(req: { headers?: Headers } | undefined): Response | null {
   const decision = getTrackRateLimiter().check(
     resolveRateLimitKey(PUBLIC_ENDPOINT_NAMES.trackView, req?.headers),
+  )
+  if (decision.allowed) {
+    return null
+  }
+  return Response.json(
+    { ok: false, message: GENERIC_RATE_LIMITED_MESSAGE },
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(decision.retryAfterSeconds),
+        'X-RateLimit-Limit': String(decision.limit),
+        'X-RateLimit-Remaining': String(decision.remaining),
+        'X-RateLimit-Reset': String(Math.ceil(decision.resetAt / 1000)),
+      },
+    },
+  )
+}
+
+/** Resolves the dedicated accessibility-validation limiter config from env. */
+export function getAccessibilityRateLimitConfig(): RateLimitConfig {
+  const max = parsePositiveInt(
+    process.env.ACCESSIBILITY_RATE_LIMIT_MAX,
+    DEFAULT_ACCESSIBILITY_RATE_LIMIT_MAX,
+  )
+  const windowMin = parsePositiveInt(
+    process.env.ACCESSIBILITY_RATE_LIMIT_WINDOW_MIN,
+    DEFAULT_ACCESSIBILITY_RATE_LIMIT_WINDOW_MIN,
+  )
+  return { max, windowMs: windowMin * 60_000 }
+}
+
+let accessibilitySingleton: RateLimiter | null = null
+
+/** The process-wide limiter dedicated to the accessibility-validation beacon. */
+export function getAccessibilityRateLimiter(): RateLimiter {
+  if (!accessibilitySingleton) {
+    accessibilitySingleton = new RateLimiter(getAccessibilityRateLimitConfig())
+  }
+  return accessibilitySingleton
+}
+
+/** Rebuilds the accessibility limiter from the CURRENT env and drops all state (tests/ops). */
+export function resetAccessibilityRateLimiter(): void {
+  accessibilitySingleton = new RateLimiter(getAccessibilityRateLimitConfig())
+}
+
+/**
+ * Accessibility-validation gate: returns a ready 429 (or `null` to proceed)
+ * using the dedicated {@link getAccessibilityRateLimiter}, keyed the same
+ * spoof-proof way as the other public limiters. Separate from the abuse-flow
+ * {@link enforceRateLimit} so this beacon's cap never widens those limits.
+ */
+export function enforceAccessibilityRateLimit(
+  req: { headers?: Headers } | undefined,
+): Response | null {
+  const decision = getAccessibilityRateLimiter().check(
+    resolveRateLimitKey(PUBLIC_ENDPOINT_NAMES.accessibilityValidate, req?.headers),
   )
   if (decision.allowed) {
     return null

@@ -341,6 +341,17 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     parentMenuKey: 'statistics',
     order: 3,
   },
+  // Web-accessibility auto-diagnosis (Task 8.2; refs 2-21..2-23). Gates the
+  // accessibilityScanResults collection, the two custom views (results/detail +
+  // statistics/report), and the export endpoints. Legacy menu path
+  // 사이트 통계 > 웹접근성 자동진단.
+  {
+    menuKey: 'statistics.accessibility',
+    name: 'Web Accessibility Auto-Diagnosis',
+    parentMenuKey: 'statistics',
+    order: 4,
+    collectionSlug: 'accessibilityScanResults',
+  },
   // Public-data Standardization module (Phase 8, Task 8.1a; 공공데이터 표준화 관리,
   // refs 1-60..1-65, 1-74). GLOBAL (non-tenant) dictionaries + a read-only code
   // specification report, all gated behind the dedicated ROLE_DBA (see

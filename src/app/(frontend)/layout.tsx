@@ -1,9 +1,11 @@
 import React from 'react'
 
+import { isValidationActive, parseValidationMode } from '@/accessibility/validationMode'
 import { branding } from '@/branding'
 import { getCurrentMember } from '@/site/member'
 import { buildNav } from '@/site/nav'
 import { getActiveGuideMenus, getActiveSite, getActiveSiteMenus } from '@/site/rsc'
+import { AccessibilityValidator } from './_components/AccessibilityValidator'
 import { SiteFooter } from './_components/SiteFooter'
 import { SiteHeader } from './_components/SiteHeader'
 import { TrafficBeacon } from './_components/TrafficBeacon'
@@ -48,6 +50,13 @@ export default async function FrontendLayout({ children }: { children: React.Rea
 
   const navNodes = buildNav(menus, { member })
 
+  // Web-accessibility validation toggle (Task 8.2 / TODO 8.3, ACS_VLD_USE_CD).
+  // Only mount the client validator when the site's mode does something —
+  // `off` renders nothing at all (a true no-op; keeps the public site untouched).
+  const validationMode = parseValidationMode(
+    (site as { accessibilityValidation?: unknown } | null)?.accessibilityValidation,
+  )
+
   return (
     <html lang="en">
       <body>
@@ -63,6 +72,10 @@ export default async function FrontendLayout({ children }: { children: React.Rea
         </div>
         {/* Privacy-conscious traffic capture (feeds Phase-5 stats) — no PII. */}
         <TrafficBeacon />
+        {/* Accessibility auto-diagnosis toggle (dev/local only; no-op when off). */}
+        {isValidationActive(validationMode) ? (
+          <AccessibilityValidator mode={validationMode} />
+        ) : null}
       </body>
     </html>
   )

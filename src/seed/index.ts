@@ -28,6 +28,7 @@ import { privacyMenuGrantsStep } from './steps/privacyMenuGrants'
 import { standardizationRolesStep } from './steps/standardizationRoles'
 import { standardizationPreloadStep } from './steps/standardization'
 import { standardizationEngineStep } from './steps/standardizationEngine'
+import { accessibilityScanStep } from './steps/accessibility'
 import { richOrgTreeStep, richCodesStep, richAdminsStep } from './steps/rich/foundation'
 import { richBoardsAndPostsStep, richSecurityDocsStep } from './steps/rich/boards'
 import { richMembersStep, richSurveysStep } from './steps/rich/community'
@@ -127,6 +128,11 @@ export const seedSteps: SeedStep[] = [
   // (edit/discard proposals target seeded MOIS rows) — so it runs after the
   // preload. Idempotent.
   standardizationEngineStep,
+  // Task 8.2: web-accessibility auto-diagnosis demo — a couple dozen scan
+  // results across ~6 months on the demo site + the demo site's validation mode
+  // set to a non-off value (popup_db). Needs the demo site (`sitesStep`); runs
+  // after the standardization steps. Idempotent.
+  accessibilityScanStep,
   // ── RICH DEMO SEED (owner mandate: the CMS must not look empty) ───────────
   // Layered LAST, ON TOP of every minimal Phase 1-6 seed, so each rich step can
   // rely on the base data (sites, board types, roles, terms, departments) the

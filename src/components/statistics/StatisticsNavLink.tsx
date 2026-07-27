@@ -1,6 +1,7 @@
 import type { ServerProps } from 'payload'
 import React from 'react'
 
+import { ACCESSIBILITY_MENU_KEY } from '@/accessibility/constants'
 import { hasMenuAccessSync } from '@/access/hasMenuAccess'
 import { DOWNLOAD_STATS_MENU_KEY } from '@/endpoints/downloadStatsExport'
 import { ERROR_LOGS_MENU_KEY } from '@/endpoints/errorStatsExport'
@@ -44,6 +45,18 @@ const LINKS: { menuKey: string; href: string; label: string }[] = [
     menuKey: ACCESS_HISTORY_MENU_KEY,
     href: '/admin/access-history',
     label: 'Access History',
+  },
+  // Task 8.2: web-accessibility auto-diagnosis results (2-21/2-22) + statistics
+  // (2-23), both gated on statistics.accessibility.
+  {
+    menuKey: ACCESSIBILITY_MENU_KEY,
+    href: '/admin/accessibility-diagnosis',
+    label: 'Accessibility Diagnosis',
+  },
+  {
+    menuKey: ACCESSIBILITY_MENU_KEY,
+    href: '/admin/accessibility-statistics',
+    label: 'Accessibility Statistics',
   },
 ]
 

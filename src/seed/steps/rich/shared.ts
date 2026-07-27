@@ -206,12 +206,13 @@ export const RICH_ROLES: {
     roleId: 'ROLE_STATISTICS_ANALYST',
     name: 'Statistics Analyst',
     description:
-      'Read/manage access to the site statistics dashboards: traffic, satisfaction, and download statistics.',
+      'Read/manage access to the site statistics dashboards: traffic, satisfaction, download, and web-accessibility auto-diagnosis statistics.',
     menuKeys: [
       'statistics',
       'statistics.satisfaction',
       'statistics.traffic',
       'statistics.downloads',
+      'statistics.accessibility',
     ],
   },
 ]

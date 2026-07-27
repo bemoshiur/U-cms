@@ -108,6 +108,7 @@ export interface Config {
     menuPermissionLogs: MenuPermissionLog;
     personalInfoAccessLogs: PersonalInfoAccessLog;
     errorLogs: ErrorLog;
+    accessibilityScanResults: AccessibilityScanResult;
     standardDomains: StandardDomain;
     standardWords: StandardWord;
     standardTerms: StandardTerm;
@@ -165,6 +166,7 @@ export interface Config {
     menuPermissionLogs: MenuPermissionLogsSelect<false> | MenuPermissionLogsSelect<true>;
     personalInfoAccessLogs: PersonalInfoAccessLogsSelect<false> | PersonalInfoAccessLogsSelect<true>;
     errorLogs: ErrorLogsSelect<false> | ErrorLogsSelect<true>;
+    accessibilityScanResults: AccessibilityScanResultsSelect<false> | AccessibilityScanResultsSelect<true>;
     standardDomains: StandardDomainsSelect<false> | StandardDomainsSelect<true>;
     standardWords: StandardWordsSelect<false> | StandardWordsSelect<true>;
     standardTerms: StandardTermsSelect<false> | StandardTermsSelect<true>;
@@ -2139,6 +2141,70 @@ export interface ErrorLog {
   createdAt: string;
 }
 /**
+ * 웹접근성 자동진단 결과 (axe-core 기반). 자동 진단은 접근성 문제의 일부만 탐지합니다 — 전문가 수동 점검 병행 필요.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "accessibilityScanResults".
+ */
+export interface AccessibilityScanResult {
+  id: number;
+  tenant?: (number | null) | Site;
+  /**
+   * 화면명 (Inspected screen name), e.g. 공지사항목록.
+   */
+  screenName: string;
+  /**
+   * The inspected path, e.g. /board/notice.
+   */
+  route: string;
+  /**
+   * How this result was produced.
+   */
+  source: 'scan' | 'popup' | 'db';
+  /**
+   * 검사일시 (Inspection datetime) — the monthly-trend axis.
+   */
+  inspectedAt: string;
+  /**
+   * 전체건수 (Total checked rules: passes + violations + incomplete).
+   */
+  totalItems?: number | null;
+  /**
+   * 성공건수 (Passing rules).
+   */
+  successCount?: number | null;
+  /**
+   * 에러건수 (Violated rules = 심각+위험+경고).
+   */
+  errorCount?: number | null;
+  /**
+   * 심각 (Critical) — axe impact critical.
+   */
+  criticalCount?: number | null;
+  /**
+   * 위험 (Danger) — axe impact serious.
+   */
+  dangerCount?: number | null;
+  /**
+   * 경고 (Warning) — axe impact moderate/minor.
+   */
+  warningCount?: number | null;
+  /**
+   * 오류 상세 (Per-violation detail): [{ruleId, description, severity, impact, occurrenceCount, helpUrl, sampleHtml, failureSummary, tags}] — feeds the 2-22 detail pane.
+   */
+  violations?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * 공공데이터 표준 제정 내용은 수정·삭제 시 표준에 위배되므로, 제정 절차(수정/폐기 제안 → DBA 검토·승인)에 따라 처리하시기 바랍니다. Enacted public-data standard entries cannot be edited or deleted directly; changes go through the DBA-reviewed edit/discard proposal workflow (Task 8.1b).
  *
  * This interface was referenced by `Config`'s JSON-Schema
@@ -2745,6 +2811,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'errorLogs';
         value: number | ErrorLog;
+      } | null)
+    | ({
+        relationTo: 'accessibilityScanResults';
+        value: number | AccessibilityScanResult;
       } | null)
     | ({
         relationTo: 'standardDomains';
@@ -3666,6 +3736,26 @@ export interface ErrorLogsSelect<T extends boolean = true> {
   ipAddress?: T;
   stackDigest?: T;
   userAgentFamily?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "accessibilityScanResults_select".
+ */
+export interface AccessibilityScanResultsSelect<T extends boolean = true> {
+  tenant?: T;
+  screenName?: T;
+  route?: T;
+  source?: T;
+  inspectedAt?: T;
+  totalItems?: T;
+  successCount?: T;
+  errorCount?: T;
+  criticalCount?: T;
+  dangerCount?: T;
+  warningCount?: T;
+  violations?: T;
   updatedAt?: T;
   createdAt?: T;
 }

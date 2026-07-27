@@ -28,6 +28,7 @@ import * as migration_20260727_150000_task_7a_member_sessions from './20260727_1
 import * as migration_20260727_160000_task_7b_perf_indexes from './20260727_160000_task_7b_perf_indexes';
 import * as migration_20260727_170000_task_8_1a_standardization from './20260727_170000_task_8_1a_standardization';
 import * as migration_20260727_180000_task_8_1b_standardization_engine from './20260727_180000_task_8_1b_standardization_engine';
+import * as migration_20260727_190000_task_8_2_accessibility from './20260727_190000_task_8_2_accessibility';
 
 export const migrations = [
   {
@@ -143,7 +144,7 @@ export const migrations = [
   {
     up: migration_20260726_203134_task_6c_password_policy_created_by.up,
     down: migration_20260726_203134_task_6c_password_policy_created_by.down,
-    name: '20260726_203134_task_6c_password_policy_created_by'
+    name: '20260726_203134_task_6c_password_policy_created_by',
   },
   {
     up: migration_20260727_120000_task_6d_security_docs.up,
@@ -178,6 +179,11 @@ export const migrations = [
   {
     up: migration_20260727_180000_task_8_1b_standardization_engine.up,
     down: migration_20260727_180000_task_8_1b_standardization_engine.down,
-    name: '20260727_180000_task_8_1b_standardization_engine',
+    name: '20260727_180000_task_8_1b_standardization_engine'
+  },
+  {
+    up: migration_20260727_190000_task_8_2_accessibility.up,
+    down: migration_20260727_190000_task_8_2_accessibility.down,
+    name: '20260727_190000_task_8_2_accessibility',
   },
 ];

@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "aggregate:traffic": "tsx scripts/aggregate-traffic.ts",
+    "scan:accessibility": "tsx scripts/accessibility-scan.ts",
     "build": "cross-env NODE_OPTIONS=\"--no-deprecation --max-old-space-size=8000\" next build",
     "ci:migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
     "ci:seed": "cross-env NODE_OPTIONS=--no-deprecation tsx scripts/seedOnDeploy.ts",
@@ -52,11 +53,13 @@
     "sharp": "0.34.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
     "@playwright/test": "1.58.2",
     "@types/node": "22.19.9",
     "@types/qrcode": "^1.5.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "axe-core": "4.12.1",
     "eslint": "^9.16.0",
     "eslint-config-next": "16.2.6",
     "eslint-config-prettier": "^10.1.8",
