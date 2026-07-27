@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'crypto'
+
 import configPromise from '@payload-config'
 import { getPayload } from 'payload'
 
@@ -17,17 +19,20 @@ import { runSeed } from '@/seed'
  * ## Gated twice
  *   1. `SEED_ON_DEPLOY` must be truthy (the operator's kill switch — set it to
  *      `false` after seeding to disable this route entirely).
- *   2. `?key=` must equal `PAYLOAD_SECRET` (so it can't be triggered by a
- *      stranger during the SEED_ON_DEPLOY window).
+ *   2. The `x-seed-key` REQUEST HEADER must equal `SEED_TRIGGER_TOKEN` (or, if
+ *      that is unset, `PAYLOAD_SECRET`), compared in constant time. The token is
+ *      taken from a header — never the query string — so it is not written to
+ *      access logs, browser history, or `Referer`. Prefer setting a dedicated
+ *      `SEED_TRIGGER_TOKEN` so a leak of this token never compromises the JWT
+ *      signing secret.
  *
  * Idempotent: safe to hit more than once (find-before-create). If it times out
  * on a large seed, just call it again — completed steps are skipped and it
  * resumes.
  *
  * Usage after a deploy:
- *   curl "https://<host>/seed?key=$PAYLOAD_SECRET"
- * then set `SEED_ON_DEPLOY=false` and redeploy (or just leave it — the route
- * refuses once SEED_ON_DEPLOY is false).
+ *   curl -H "x-seed-key: $SEED_TRIGGER_TOKEN" https://<host>/seed
+ * then set `SEED_ON_DEPLOY=false` (this route refuses once it is false).
  */
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -35,6 +40,14 @@ export const maxDuration = 60
 function isTruthy(value: string | undefined): boolean {
   const v = (value ?? '').trim().toLowerCase()
   return v === 'true' || v === '1' || v === 'yes' || v === 'on'
+}
+
+/** Length-guarded constant-time string comparison (avoids timing side channels). */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, 'utf8')
+  const bb = Buffer.from(b, 'utf8')
+  if (ab.length !== bb.length) return false
+  return timingSafeEqual(ab, bb)
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -48,10 +61,13 @@ export async function GET(request: Request): Promise<Response> {
     )
   }
 
-  const key = new URL(request.url).searchParams.get('key')
-  const secret = process.env.PAYLOAD_SECRET
-  if (!secret || key !== secret) {
-    return Response.json({ ok: false, message: 'Invalid or missing key.' }, { status: 403 })
+  const provided = request.headers.get('x-seed-key') ?? ''
+  const expected = process.env.SEED_TRIGGER_TOKEN || process.env.PAYLOAD_SECRET || ''
+  if (!expected || !safeEqual(provided, expected)) {
+    return Response.json(
+      { ok: false, message: 'Invalid or missing x-seed-key header.' },
+      { status: 403 },
+    )
   }
 
   try {
@@ -62,8 +78,11 @@ export async function GET(request: Request): Promise<Response> {
       message: 'Seed complete (idempotent). Set SEED_ON_DEPLOY=false to disable this route.',
     })
   } catch (err) {
+    // Log the detail server-side (Vercel runtime logs); never reflect internal
+    // error text — incl. DB/connection strings — to the unauthenticated network.
+    console.error('[seed] seed run failed:', err)
     return Response.json(
-      { ok: false, message: err instanceof Error ? err.message : String(err) },
+      { ok: false, message: 'Seed failed. Check the server (deployment) logs for details.' },
       { status: 500 },
     )
   }
