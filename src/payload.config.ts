@@ -50,6 +50,9 @@ import { ErrorLogs } from './collections/ErrorLogs'
 import { StandardDomains } from './collections/standardization/StandardDomains'
 import { StandardWords } from './collections/standardization/StandardWords'
 import { StandardTerms } from './collections/standardization/StandardTerms'
+import { StandardizationProposals } from './collections/standardization/StandardizationProposals'
+import { TableStandardSettings } from './collections/standardization/TableStandardSettings'
+import { StandardizationSelfChecks } from './collections/standardization/StandardizationSelfChecks'
 import { recordGlobalError } from './audit/recordError'
 import { menuFieldAccess, warmAdminMenuKeyCache } from './access/hasMenuAccess'
 import { publicAccountEndpoints } from './endpoints/publicAccountEndpoints'
@@ -351,6 +354,31 @@ export default buildConfig({
           path: '/code-specification',
           exact: true,
         },
+        // Phase 8 (Task 8.1b): the standardization ENGINE views — meta-term
+        // inspection (1-66), table standard settings summary/batch (1-67), the
+        // self-check results + Run Check (1-75), and the self-check statistics
+        // (1-76). Each gates server-side on its own standardization.* grant.
+        metaInspection: {
+          Component: '/components/standardization/MetaInspectionView#MetaInspectionView',
+          path: '/meta-inspection',
+          exact: true,
+        },
+        tableStandardSettings: {
+          Component:
+            '/components/standardization/TableStandardSettingsView#TableStandardSettingsView',
+          path: '/table-standard-settings',
+          exact: true,
+        },
+        standardizationSelfCheck: {
+          Component: '/components/standardization/SelfCheckView#SelfCheckView',
+          path: '/standardization-self-check',
+          exact: true,
+        },
+        standardizationSelfCheckStatistics: {
+          Component: '/components/standardization/SelfCheckStatisticsView#SelfCheckStatisticsView',
+          path: '/standardization-self-check-statistics',
+          exact: true,
+        },
         // Task 2B: replace the built-in login view with a branded two-step
         // (password → Google-OTP) form that also shows the conditional
         // Account-Request / Find-ID / Find-PW links (ref 1-1). The actual 2FA
@@ -442,6 +470,16 @@ export default buildConfig({
     StandardDomains,
     StandardWords,
     StandardTerms,
+    // Public-data Standardization ENGINE (Phase 8, Task 8.1b; refs 1-66..1-76) —
+    // GLOBAL (non-tenant), DBA-only. The DBA proposal work-queue (apply-on-approve
+    // via the enacted-lock bypass seam), per-table standardization-source
+    // assignments (feeds the self-check scope), and the monthly self-check
+    // snapshots (8 error types) that back the inspection / statistics views. The
+    // meta-inspection (1-66) + statistics (1-76) are read-only views + endpoints,
+    // not collections.
+    StandardizationProposals,
+    TableStandardSettings,
+    StandardizationSelfChecks,
   ],
   // Public (unauthenticated) admin-account lifecycle endpoints (Task 1D):
   // /api/account-request, /api/find-id, /api/find-password. Plus the Task 2B

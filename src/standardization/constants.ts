@@ -31,12 +31,30 @@ export const STD_TERMS_MENU_KEY = 'standardization.terms'
 /** Menu-grant key gating the read-only Code Specification report + its CSV export. */
 export const STD_CODE_SPEC_MENU_KEY = 'standardization.codeSpec'
 
+/* ── Task 8.1b engine menu keys (all under the same `standardization` group) ── */
+
+/** Menu-grant key gating the DBA proposal workflow collection (refs 1-68..1-73). */
+export const STD_PROPOSALS_MENU_KEY = 'standardization.proposals'
+/** Menu-grant key gating the Table Standard Settings collection + view (ref 1-67). */
+export const STD_TABLE_SETTINGS_MENU_KEY = 'standardization.tableSettings'
+/** Menu-grant key gating the read-only Meta Term Inspection view + endpoints (ref 1-66). */
+export const STD_META_INSPECTION_MENU_KEY = 'standardization.metaInspection'
+/** Menu-grant key gating the Standardization Self-Check results collection + view (ref 1-75). */
+export const STD_SELF_CHECK_MENU_KEY = 'standardization.selfCheck'
+/** Menu-grant key gating the Self-Check Statistics view + endpoint (ref 1-76). */
+export const STD_SELF_CHECK_STATS_MENU_KEY = 'standardization.selfCheckStats'
+
 /** Every leaf menuKey the DBA role grants (the whole module surface). */
 export const STANDARDIZATION_MENU_KEYS: readonly string[] = [
   STD_DOMAINS_MENU_KEY,
   STD_WORDS_MENU_KEY,
   STD_TERMS_MENU_KEY,
   STD_CODE_SPEC_MENU_KEY,
+  STD_PROPOSALS_MENU_KEY,
+  STD_TABLE_SETTINGS_MENU_KEY,
+  STD_META_INSPECTION_MENU_KEY,
+  STD_SELF_CHECK_MENU_KEY,
+  STD_SELF_CHECK_STATS_MENU_KEY,
 ]
 
 /**
@@ -45,6 +63,15 @@ export const STANDARDIZATION_MENU_KEYS: readonly string[] = [
  * menu path (시스템 관리 > 공공데이터 표준화 관리).
  */
 export const STANDARDIZATION_NAV_GROUP = '공공데이터 표준화 관리 / Public Data Standardization'
+
+/**
+ * Nav group for the DBA proposal-management collections (제안 관리 sub-menu): the
+ * proposal workflow (1-68..1-73) + table standard settings (1-67). Kept separate
+ * from the dictionary group so the sidebar mirrors the legacy menu nesting
+ * (표준화 관리 > 공공데이터 표준화 제안관리).
+ */
+export const STANDARDIZATION_PROPOSAL_NAV_GROUP =
+  '공공데이터 표준화 제안관리 / Standardization Proposal Management'
 
 /**
  * Per-request `req.context` flag that lets a trusted caller (the seed, and —
@@ -89,3 +116,82 @@ export const DATA_TYPE_OPTIONS = [
   { label: 'VARCHAR', value: 'VARCHAR' },
   { label: 'TEXT', value: 'TEXT' },
 ] as const
+
+/* ── Task 8.1b engine option sets + contexts ─────────────────────────────── */
+
+/**
+ * Per-request `req.context` flag letting the seed write a self-check snapshot
+ * for a NON-current year-month (historical reference data, ref 1-75's rule that
+ * only the current YM is (re)writable). The Run-Check endpoint never needs it —
+ * it always writes the current YM, which the guard permits unconditionally.
+ */
+export const SELF_CHECK_HISTORICAL_BYPASS = 'standardizationSelfCheckHistoricalBypass'
+
+/** 제안구분 (Proposal Kind) — register / edit / discard·delete (refs 1-68/1-72). */
+export const PROPOSAL_KIND_OPTIONS = [
+  { label: '등록제안 (Register)', value: 'register' },
+  { label: '수정제안 (Edit)', value: 'edit' },
+  { label: '폐기제안 (Discard)', value: 'discard' },
+] as const
+
+/** Proposal target dictionary — domain / word / term (one polymorphic queue). */
+export const PROPOSAL_TARGET_OPTIONS = [
+  { label: '도메인 (Domain)', value: 'domain' },
+  { label: '단어 (Word)', value: 'word' },
+  { label: '용어 (Term)', value: 'term' },
+] as const
+
+/** The three dictionary collection slugs a proposal can target. */
+export type DictionaryCollectionSlug = 'standardDomains' | 'standardWords' | 'standardTerms'
+
+/** Maps a proposal `target` to the dictionary collection slug it applies to. */
+export const PROPOSAL_TARGET_COLLECTION: Record<string, DictionaryCollectionSlug> = {
+  domain: 'standardDomains',
+  word: 'standardWords',
+  term: 'standardTerms',
+}
+
+/**
+ * 표준출처 for a table's standardization assignment (ref 1-67): MOIS baseline,
+ * institution, excluded from checking, or unassigned. Extends the two-value
+ * dictionary source set with 제외/미지정.
+ */
+export const TABLE_SOURCE_OPTIONS = [
+  { label: '행정안전부 (MOIS)', value: 'mois' },
+  { label: '기관 (Institution)', value: 'institution' },
+  { label: '제외 (Excluded)', value: 'excluded' },
+  { label: '미지정 (Unassigned)', value: 'unassigned' },
+] as const
+
+/**
+ * The eight self-check error types (ref 1-75). Each `id` maps to a
+ * `standardizationSelfChecks.error<N>Count` column and a rule predicate in
+ * `src/standardization/rules.ts`. The meta-term inspection (ref 1-66) uses only
+ * the FIRST FOUR conceptually (physical/logical + column-token + no-domain — see
+ * `META_INSPECTION_RULE_IDS`).
+ */
+export const SELF_CHECK_ERROR_TYPES = [
+  {
+    id: 'error1',
+    label: '오류1',
+    description: '컬럼 물리명이 표준용어와 일치하나 논리명(주석)이 다름',
+  },
+  {
+    id: 'error2',
+    label: '오류2',
+    description: '논리명(주석)이 표준용어명과 일치하나 컬럼 물리명이 다름',
+  },
+  { id: 'error3', label: '오류3', description: '컬럼 물리명의 단어가 단어사전에 없음' },
+  { id: 'error4', label: '오류4', description: '테이블 물리명의 단어가 단어사전에 없음' },
+  { id: 'error5', label: '오류5', description: '표준용어와 일치하나 바인딩된 도메인이 없음' },
+  { id: 'error6', label: '오류6', description: '바인딩된 도메인이 도메인사전에 존재하지 않음' },
+  {
+    id: 'error7',
+    label: '오류7',
+    description: '컬럼은 표준용어와 일치하나 도메인 자료유형이 다름',
+  },
+  { id: 'error8', label: '오류8', description: '컬럼의 도메인 길이가 도메인 정의와 불일치' },
+] as const
+
+/** The four rule ids surfaced by the meta-term inspection grid (ref 1-66). */
+export const META_INSPECTION_RULE_IDS = ['error1', 'error2', 'error3', 'error5'] as const

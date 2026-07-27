@@ -374,6 +374,44 @@ export const SEED_ADMIN_MENUS: MenuNodeSeed[] = [
     parentMenuKey: 'standardization',
     order: 4,
   },
+  // Public-data Standardization ENGINE (Phase 8, Task 8.1b; refs 1-66..1-76).
+  // All DBA-only (the ROLE_DBA union-heals these grants — see
+  // standardizationRoles.ts). Proposal workflow + table settings gate their own
+  // collections; the inspection / self-check-statistics keys are VIEW grants
+  // (self-check has a backing collection).
+  {
+    menuKey: 'standardization.proposals',
+    name: 'Standardization Proposal',
+    parentMenuKey: 'standardization',
+    order: 5,
+    collectionSlug: 'standardizationProposals',
+  },
+  {
+    menuKey: 'standardization.tableSettings',
+    name: 'Table Standard Settings',
+    parentMenuKey: 'standardization',
+    order: 6,
+    collectionSlug: 'tableStandardSettings',
+  },
+  {
+    menuKey: 'standardization.metaInspection',
+    name: 'Meta Term Inspection',
+    parentMenuKey: 'standardization',
+    order: 7,
+  },
+  {
+    menuKey: 'standardization.selfCheck',
+    name: 'Standardization Self-Check',
+    parentMenuKey: 'standardization',
+    order: 8,
+    collectionSlug: 'standardizationSelfChecks',
+  },
+  {
+    menuKey: 'standardization.selfCheckStats',
+    name: 'Self-Check Statistics',
+    parentMenuKey: 'standardization',
+    order: 9,
+  },
 ]
 
 /**

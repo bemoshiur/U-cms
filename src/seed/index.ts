@@ -27,6 +27,7 @@ import { securityDocsStep } from './steps/securityDocs'
 import { privacyMenuGrantsStep } from './steps/privacyMenuGrants'
 import { standardizationRolesStep } from './steps/standardizationRoles'
 import { standardizationPreloadStep } from './steps/standardization'
+import { standardizationEngineStep } from './steps/standardizationEngine'
 import { richOrgTreeStep, richCodesStep, richAdminsStep } from './steps/rich/foundation'
 import { richBoardsAndPostsStep, richSecurityDocsStep } from './steps/rich/boards'
 import { richMembersStep, richSurveysStep } from './steps/rich/community'
@@ -120,6 +121,12 @@ export const seedSteps: SeedStep[] = [
   // non-empty like the manual.
   standardizationRolesStep,
   standardizationPreloadStep,
+  // Task 8.1b: the standardization ENGINE demo — table-standard assignments for
+  // the live tables, a couple of pending proposals, and 3 prior-month self-check
+  // snapshots per source (reference history). Needs the 8.1a dictionaries
+  // (edit/discard proposals target seeded MOIS rows) — so it runs after the
+  // preload. Idempotent.
+  standardizationEngineStep,
   // ── RICH DEMO SEED (owner mandate: the CMS must not look empty) ───────────
   // Layered LAST, ON TOP of every minimal Phase 1-6 seed, so each rich step can
   // rely on the base data (sites, board types, roles, terms, departments) the

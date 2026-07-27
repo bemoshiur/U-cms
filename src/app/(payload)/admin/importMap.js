@@ -47,6 +47,12 @@ import { PrivacyOrgChartView as PrivacyOrgChartView_e65f28e98792aa2420374271baa4
 import { LoginView as LoginView_7af18470411f801d2687404387d2db4e } from '../../../components/login/LoginView'
 import { StandardizationNavLink as StandardizationNavLink_8a1a0001 } from '../../../components/standardization/StandardizationNavLink'
 import { CodeSpecView as CodeSpecView_8a1a0002 } from '../../../components/standardization/CodeSpecView'
+import { MetaInspectionView as MetaInspectionView_8b1b0001 } from '../../../components/standardization/MetaInspectionView'
+import { TableStandardSettingsView as TableStandardSettingsView_8b1b0002 } from '../../../components/standardization/TableStandardSettingsView'
+import { SelfCheckView as SelfCheckView_8b1b0003 } from '../../../components/standardization/SelfCheckView'
+import { SelfCheckStatisticsView as SelfCheckStatisticsView_8b1b0004 } from '../../../components/standardization/SelfCheckStatisticsView'
+import { RunCheckButton as RunCheckButton_8b1b0005 } from '../../../components/standardization/RunCheckButton'
+import { BatchApplyForm as BatchApplyForm_8b1b0006 } from '../../../components/standardization/BatchApplyForm'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
 
 /** @type import('payload').ImportMap */
@@ -143,5 +149,13 @@ export const importMap = {
   '/components/standardization/StandardizationNavLink#StandardizationNavLink':
     StandardizationNavLink_8a1a0001,
   '/components/standardization/CodeSpecView#CodeSpecView': CodeSpecView_8a1a0002,
+  '/components/standardization/MetaInspectionView#MetaInspectionView': MetaInspectionView_8b1b0001,
+  '/components/standardization/TableStandardSettingsView#TableStandardSettingsView':
+    TableStandardSettingsView_8b1b0002,
+  '/components/standardization/SelfCheckView#SelfCheckView': SelfCheckView_8b1b0003,
+  '/components/standardization/SelfCheckStatisticsView#SelfCheckStatisticsView':
+    SelfCheckStatisticsView_8b1b0004,
+  '/components/standardization/RunCheckButton#RunCheckButton': RunCheckButton_8b1b0005,
+  '/components/standardization/BatchApplyForm#BatchApplyForm': BatchApplyForm_8b1b0006,
   '@payloadcms/next/rsc#CollectionCards': CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
 }

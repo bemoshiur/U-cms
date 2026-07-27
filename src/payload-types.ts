@@ -111,6 +111,9 @@ export interface Config {
     standardDomains: StandardDomain;
     standardWords: StandardWord;
     standardTerms: StandardTerm;
+    standardizationProposals: StandardizationProposal;
+    tableStandardSettings: TableStandardSetting;
+    standardizationSelfChecks: StandardizationSelfCheck;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -165,6 +168,9 @@ export interface Config {
     standardDomains: StandardDomainsSelect<false> | StandardDomainsSelect<true>;
     standardWords: StandardWordsSelect<false> | StandardWordsSelect<true>;
     standardTerms: StandardTermsSelect<false> | StandardTermsSelect<true>;
+    standardizationProposals: StandardizationProposalsSelect<false> | StandardizationProposalsSelect<true>;
+    tableStandardSettings: TableStandardSettingsSelect<false> | TableStandardSettingsSelect<true>;
+    standardizationSelfChecks: StandardizationSelfChecksSelect<false> | StandardizationSelfChecksSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -2378,6 +2384,185 @@ export interface StandardTerm {
   createdAt: string;
 }
 /**
+ * 공공데이터 표준 제정 내용은 수정·삭제 시 표준에 위배되므로, 제정 절차(수정/폐기 제안 → DBA 검토·승인)에 따라 처리하시기 바랍니다. Enacted public-data standard entries cannot be edited or deleted directly; changes go through the DBA-reviewed edit/discard proposal workflow (Task 8.1b). Set 승인여부 (approvalStatus) to 승인 (approved) and save to apply this proposal to the dictionary.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardizationProposals".
+ */
+export interface StandardizationProposal {
+  id: number;
+  /**
+   * 제안 대상 사전 (Target dictionary): domain / word / term.
+   */
+  target: 'domain' | 'word' | 'term';
+  /**
+   * 제안구분 (Proposal Kind): register / edit / discard.
+   */
+  proposalKind: 'register' | 'edit' | 'discard';
+  /**
+   * 표준출처 (Standard Source).
+   */
+  standardSource?: ('mois' | 'institution') | null;
+  /**
+   * 개정차수 (Revision). e.g. 기관생성.
+   */
+  revision?: string | null;
+  /**
+   * 제안 대상명 (Proposed name) — the domain name / word abbreviation / term abbreviation, denormalized for the work-queue list.
+   */
+  proposedName: string;
+  /**
+   * 기존 사전 항목 ID (Existing dictionary entry id) — for edit/discard; empty for register.
+   */
+  targetEntryId?: number | null;
+  /**
+   * 제안 속성 (Proposed attribute set) — the full dictionary field snapshot applied on approval.
+   */
+  proposedPayload?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * 제안자 (Proposer).
+   */
+  proposer?: (number | null) | User;
+  /**
+   * 제안일시 (Proposal datetime).
+   */
+  proposedAt?: string | null;
+  /**
+   * 승인상태 (Approval status): 승인대기 → 승인 / 미승인. Setting to 승인 (approved) + saving APPLIES the proposal.
+   */
+  approvalStatus: 'approved' | 'pending' | 'rejected';
+  /**
+   * 승인자 (Approver). Stamped on approval.
+   */
+  approver?: (number | null) | User;
+  /**
+   * 승인일시 (Approval datetime). Stamped on approval.
+   */
+  approvedAt?: string | null;
+  /**
+   * 처리 메모 (Processing / rejection memo).
+   */
+  processingMemo?: string | null;
+  /**
+   * 적용된 사전 항목 ID (Applied dictionary entry id) — set once the approval lands; the idempotency guard.
+   */
+  appliedEntryId?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tableStandardSettings".
+ */
+export interface TableStandardSetting {
+  id: number;
+  /**
+   * 테이블명 (Physical table name). Unique.
+   */
+  tableName: string;
+  /**
+   * 테이블구분 (Table category). e.g. 기본 (basic).
+   */
+  tableCategory?: string | null;
+  /**
+   * 테이블설명 (Table description / logical name).
+   */
+  tableDescription?: string | null;
+  /**
+   * 표준출처 (Standard Source): MOIS / institution / excluded / unassigned.
+   */
+  standardSource: 'mois' | 'institution' | 'excluded' | 'unassigned';
+  /**
+   * 테이블 생성일 (Physical table creation date, informational).
+   */
+  physicalCreatedAt?: string | null;
+  /**
+   * 메모 (Memo).
+   */
+  memo?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * 표준화 자가점검 결과 (Self-Check Results). Only the current check year-month is (re)writable; earlier months are reference-only.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardizationSelfChecks".
+ */
+export interface StandardizationSelfCheck {
+  id: number;
+  /**
+   * 점검연월 (Check year-month) as YYYYMM. e.g. 202607.
+   */
+  checkYearMonth: string;
+  /**
+   * 표준출처 (Standard Source).
+   */
+  standardSource: 'mois' | 'institution';
+  /**
+   * 오류1 — 컬럼 물리명이 표준용어와 일치하나 논리명(주석)이 다름
+   */
+  error1Count?: number | null;
+  /**
+   * 오류2 — 논리명(주석)이 표준용어명과 일치하나 컬럼 물리명이 다름
+   */
+  error2Count?: number | null;
+  /**
+   * 오류3 — 컬럼 물리명의 단어가 단어사전에 없음
+   */
+  error3Count?: number | null;
+  /**
+   * 오류4 — 테이블 물리명의 단어가 단어사전에 없음
+   */
+  error4Count?: number | null;
+  /**
+   * 오류5 — 표준용어와 일치하나 바인딩된 도메인이 없음
+   */
+  error5Count?: number | null;
+  /**
+   * 오류6 — 바인딩된 도메인이 도메인사전에 존재하지 않음
+   */
+  error6Count?: number | null;
+  /**
+   * 오류7 — 컬럼은 표준용어와 일치하나 도메인 자료유형이 다름
+   */
+  error7Count?: number | null;
+  /**
+   * 오류8 — 컬럼의 도메인 길이가 도메인 정의와 불일치
+   */
+  error8Count?: number | null;
+  /**
+   * 점검일 (Check timestamp).
+   */
+  checkedAt?: string | null;
+  /**
+   * 오류 상세 (Violating table/column rows) — [{tableName, columnName, logicalName, dataType, domain, errorType}] for the detail popup.
+   */
+  details?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * 비고 (Note).
+   */
+  note?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
@@ -2572,6 +2757,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'standardTerms';
         value: number | StandardTerm;
+      } | null)
+    | ({
+        relationTo: 'standardizationProposals';
+        value: number | StandardizationProposal;
+      } | null)
+    | ({
+        relationTo: 'tableStandardSettings';
+        value: number | TableStandardSetting;
+      } | null)
+    | ({
+        relationTo: 'standardizationSelfChecks';
+        value: number | StandardizationSelfCheck;
       } | null);
   globalSlug?: string | null;
   user:
@@ -3546,6 +3743,63 @@ export interface StandardTermsSelect<T extends boolean = true> {
   approvedAt?: T;
   approverId?: T;
   enacted?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardizationProposals_select".
+ */
+export interface StandardizationProposalsSelect<T extends boolean = true> {
+  target?: T;
+  proposalKind?: T;
+  standardSource?: T;
+  revision?: T;
+  proposedName?: T;
+  targetEntryId?: T;
+  proposedPayload?: T;
+  proposer?: T;
+  proposedAt?: T;
+  approvalStatus?: T;
+  approver?: T;
+  approvedAt?: T;
+  processingMemo?: T;
+  appliedEntryId?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tableStandardSettings_select".
+ */
+export interface TableStandardSettingsSelect<T extends boolean = true> {
+  tableName?: T;
+  tableCategory?: T;
+  tableDescription?: T;
+  standardSource?: T;
+  physicalCreatedAt?: T;
+  memo?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "standardizationSelfChecks_select".
+ */
+export interface StandardizationSelfChecksSelect<T extends boolean = true> {
+  checkYearMonth?: T;
+  standardSource?: T;
+  error1Count?: T;
+  error2Count?: T;
+  error3Count?: T;
+  error4Count?: T;
+  error5Count?: T;
+  error6Count?: T;
+  error7Count?: T;
+  error8Count?: T;
+  checkedAt?: T;
+  details?: T;
+  note?: T;
   updatedAt?: T;
   createdAt?: T;
 }
