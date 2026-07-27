@@ -2,7 +2,7 @@ import { postgresAdapter } from '@payloadcms/db-postgres'
 import { multiTenantPlugin } from '@payloadcms/plugin-multi-tenant'
 import { s3Storage } from '@payloadcms/storage-s3'
 import path from 'path'
-import type { Payload, Plugin } from 'payload'
+import type { Plugin } from 'payload'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
 import sharp from 'sharp'
@@ -87,48 +87,6 @@ const dirname = path.dirname(filename)
  * domain outside local development.
  */
 const serverURL = resolvePublicServerURL()
-
-/** Truthy env-flag check (mirrors scripts/seedOnDeploy.ts). */
-function isSeedOnDeployEnabled(): boolean {
-  const v = (process.env.SEED_ON_DEPLOY ?? '').trim().toLowerCase()
-  return v === 'true' || v === '1' || v === 'yes' || v === 'on'
-}
-
-/**
- * Serverless seed-on-boot. Replaces the `ci:seed` build step (tsx can't load
- * the config under the CJS root scope on Vercel — see the `prodMigrations`
- * note below). Runs the idempotent seed registry from Payload's `onInit`,
- * AFTER `prodMigrations` have created the schema, but ONLY when
- * `SEED_ON_DEPLOY` is truthy. A Postgres advisory lock serializes it across
- * concurrent serverless cold starts; any failure is logged, never thrown, so a
- * seed hiccup can never take the app down. Set SEED_ON_DEPLOY back to false
- * after the first successful deploy so later cold starts skip it.
- */
-async function maybeSeedOnBoot(payload: Payload): Promise<void> {
-  if (!isSeedOnDeployEnabled()) return
-  const LOCK_KEY = 728931
-  const pool = (
-    payload.db as unknown as {
-      pool?: { query: (q: string, p?: unknown[]) => Promise<unknown> }
-    }
-  ).pool
-  try {
-    if (pool) await pool.query('SELECT pg_advisory_lock($1)', [LOCK_KEY])
-    const { runSeed } = await import('./seed')
-    await runSeed(payload)
-    payload.logger.info('[seed-on-boot] SEED_ON_DEPLOY set — seed complete (idempotent).')
-  } catch (err) {
-    payload.logger.error({ err }, '[seed-on-boot] seed failed (non-fatal); app continues.')
-  } finally {
-    if (pool) {
-      try {
-        await pool.query('SELECT pg_advisory_unlock($1)', [LOCK_KEY])
-      } catch {
-        /* ignore unlock errors */
-      }
-    }
-  }
-}
 
 /**
  * Builds the S3-compatible storage plugin. Fails fast (throws) if
@@ -610,7 +568,6 @@ export default buildConfig({
    */
   onInit: async (payload) => {
     await warmAdminMenuKeyCache(payload)
-    await maybeSeedOnBoot(payload)
   },
   db: postgresAdapter({
     pool: {
