@@ -126,6 +126,21 @@ describe('summarizeAxeResults — per-screen summary + severity partition', () =
     expect(() => summarizeAxeResults({ violations: 'nope' as never })).not.toThrow()
   })
 
+  it('clamps client-controlled pass/incomplete counts (successCount/totalItems bounded)', () => {
+    const forged = summarizeAxeResults({
+      // A forged public DB-store body claiming an absurd number of passes +
+      // incomplete rules must NOT be able to inflate the stored counts.
+      passes: new Array(1_000_000).fill(0),
+      incomplete: new Array(1_000_000).fill(0),
+      violations: [{ id: 'image-alt', impact: 'critical', nodes: [{ html: '<img>' }] }],
+    })
+    expect(forged.successCount).toBe(10_000) // MAX_COUNTED_ITEMS
+    expect(forged.errorCount).toBe(1)
+    // totalItems = clamped passes(10000) + violations(1) + clamped incomplete(10000)
+    expect(forged.totalItems).toBe(20_001)
+    expect(forged.totalItems).toBeLessThan(1_000_000)
+  })
+
   it('clamps violation count + truncates oversized strings (client-input safety)', () => {
     const many = summarizeAxeResults({
       violations: new Array(500).fill({

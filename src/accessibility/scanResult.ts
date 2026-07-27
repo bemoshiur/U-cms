@@ -19,6 +19,16 @@ import { type AxeImpact, mapImpactToSeverity } from './severity'
 /** Hard caps that bound what a single scan result can store (client-safety). */
 export const MAX_STORED_VIOLATIONS = 200
 export const MAX_NODES_PER_VIOLATION = 20
+/**
+ * Upper bound on the pass/incomplete counts a single summary can report. Because
+ * `summarizeAxeResults` also normalizes UNTRUSTED client input (the public
+ * validation DB-store endpoint), `successCount`/`totalItems` are derived from
+ * array LENGTHS that a forged body could otherwise inflate. Capping the counted
+ * lengths here bounds those two fields the same way `MAX_STORED_VIOLATIONS`
+ * bounds the detail — a real axe run never approaches this ceiling, so the
+ * trusted scan-runner path is unaffected in practice.
+ */
+export const MAX_COUNTED_ITEMS = 10_000
 const MAX_TEXT_LEN = 2000
 const MAX_HTML_LEN = 1000
 
@@ -133,9 +143,13 @@ export function summarizeAxeResults(axe: LooseAxeResults): ScanSummary {
     else warningCount += 1
   }
 
-  const successCount = passes.length
+  // Clamp the client-controllable array lengths so a forged public DB-store body
+  // can't inflate successCount/totalItems (mirrors MAX_STORED_VIOLATIONS). A real
+  // axe run never approaches this ceiling, so the trusted scan path is unaffected.
+  const successCount = Math.min(passes.length, MAX_COUNTED_ITEMS)
   const errorCount = violations.length
-  const totalItems = successCount + rawViolations.length + incomplete.length
+  const totalItems =
+    successCount + violations.length + Math.min(incomplete.length, MAX_COUNTED_ITEMS)
 
   return {
     totalItems,
