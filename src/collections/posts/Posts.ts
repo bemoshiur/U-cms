@@ -569,6 +569,24 @@ export const Posts: CollectionConfig = {
   // Gated on `statistics.downloads` + an explicit site-assignment check inside
   // the handler (NOT the posts `content.posts` access above). See downloadStatsExport.ts.
   endpoints: downloadStatsEndpoints,
+  // Performance composite indexes (Task 7B; TODO 7.2). `posts` is the largest
+  // content table and its two hottest read paths both FILTER on one column and
+  // SORT on `createdAt`, so a supporting composite turns "filter then in-memory
+  // sort of the whole subset" into a single index range scan:
+  //  - (board, createdAt): the PUBLIC board list/gallery/notice reads
+  //    (src/site/board.ts) — every board page load is `where board=X ... sort
+  //    -createdAt` paginated. `board` is high-cardinality (selective); the
+  //    isSecret/securityDoc/isNotice booleans are non-selective EXCLUSIONS, so
+  //    they are deliberately left out of the index (heap-filtered).
+  //  - (tenant, createdAt): the admin dashboard's tenant-scoped post reads +
+  //    counts (src/site/dashboardData.ts — recent/most-viewed/questions + the
+  //    postsTotal/postsToday tallies). `securityDoc` is again a non-selective
+  //    exclusion, so `(tenant, createdAt)` (not `(tenant, securityDoc, createdAt)`)
+  //    is the right shape.
+  // Both field-pair names are unique across the schema, so Payload's auto-namer
+  // yields the stable `board_createdAt_idx` / `tenant_createdAt_idx` (no
+  // collision-suffix); the T7B migration creates the same names IF NOT EXISTS.
+  indexes: [{ fields: ['board', 'createdAt'] }, { fields: ['tenant', 'createdAt'] }],
   fields: [
     {
       name: 'board',

@@ -1,3 +1,4 @@
+import { sql } from '@payloadcms/db-postgres'
 import type {
   CollectionAfterChangeHook,
   CollectionAfterErrorHook,
@@ -215,23 +216,34 @@ export const throttleTwoFactorFailure: CollectionAfterErrorHook = async ({
       return undefined
     }
 
-    const current = typeof target.totpFailedAttempts === 'number' ? target.totpFailedAttempts : 0
-    const next = current + 1
-    const locking = next >= TWO_FACTOR_MAX_ATTEMPTS
-
-    // Isolated write (no `req`): the login tx is already rolled back, and the
-    // counter must persist independently of it.
-    await req.payload.db.updateOne({
-      collection: 'users',
-      id: target.id,
-      data: {
-        totpFailedAttempts: next,
-        ...(locking
-          ? { totpLockUntil: new Date(Date.now() + TWO_FACTOR_LOCK_MS).toISOString() }
-          : {}),
-      },
-      returning: false,
-    })
+    // ATOMIC increment (Task 7B — TODO 7.2). Previously this READ
+    // `totpFailedAttempts` and then WROTE `current + 1`: a lost-update race under
+    // concurrent wrong-OTP attempts on the SAME account (two misses both read N
+    // and both write N+1, so the counter advances by one instead of two —
+    // silently widening the brute-force allowance). The fix mirrors the D5
+    // `downloadCount` pattern: ONE atomic SQL UPDATE increments the counter and
+    // sets the lock in the SAME statement (a CASE keyed off the post-increment
+    // value), RETURNING the authoritative new count so the audit decision uses
+    // it — no read-modify-write window. The counter lives in Postgres (shared
+    // across app instances), so it is already correct on a horizontally-scaled
+    // deployment; only same-row concurrency was at issue. Isolated (pooled
+    // `drizzle`, no `req`): the login tx is already rolled back, so this write
+    // persists independently of it. `totp_failed_attempts` is numeric (pg
+    // returns it as a string) — `Number()` normalizes it.
+    const lockUntilIso = new Date(Date.now() + TWO_FACTOR_LOCK_MS).toISOString()
+    const res = (await req.payload.db.drizzle.execute(sql`
+      UPDATE "users"
+      SET "totp_failed_attempts" = COALESCE("totp_failed_attempts", 0) + 1,
+          "totp_lock_until" = CASE
+            WHEN COALESCE("totp_failed_attempts", 0) + 1 >= ${TWO_FACTOR_MAX_ATTEMPTS}
+            THEN ${lockUntilIso}::timestamptz
+            ELSE "totp_lock_until"
+          END
+      WHERE "id" = ${Number(target.id)}
+      RETURNING "totp_failed_attempts" AS "attempts"
+    `)) as { rows?: { attempts?: number | string }[] }
+    const attempts = Number(res.rows?.[0]?.attempts ?? 0)
+    const locking = attempts >= TWO_FACTOR_MAX_ATTEMPTS
 
     if (locking) {
       await recordAccess(req.payload, {
