@@ -17,14 +17,19 @@ import 'dotenv/config'
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  /* Only pick up e2e specs — vitest owns tests/unit and tests/int. */
-  testMatch: '**/*.e2e.spec.ts',
   /* Fail the build on CI if you accidentally left test.only in the source code. */
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /*
+   * SERIAL (Task 7C). The authenticated suites share a small set of e2e admin
+   * accounts and the 2FA OTP throttle is per-account, so concurrent logins to
+   * the SAME account race (a login can land back on the form) and parallel OTP
+   * attempts contend on the shared 30s code + failure counter. One worker keeps
+   * every authenticated flow deterministic; the suite is small enough that the
+   * wall-clock cost is minor.
+   */
+  workers: 1,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -36,9 +41,24 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
+    /*
+     * Task 7C: an API-driven SETUP project runs first (against the live
+     * webServer) to provision the authenticated e2e state the DB seed can't:
+     * dedicated e2e admins across roles, 2FA turned ON for the back-office, a
+     * real in-test OTP enrolment for the e2e super-admin (secret captured to
+     * tests/e2e/helpers/.fixtures.json), and the seeded ids the suites need.
+     * It's a test project (not globalSetup) precisely because it needs the
+     * server up — see tests/e2e/e2e.setup.ts. The chromium project depends on it.
+     */
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts$/,
+    },
     {
       name: 'chromium',
+      testMatch: '**/*.e2e.spec.ts',
       use: { ...devices['Desktop Chrome'], channel: 'chromium' },
+      dependencies: ['setup'],
     },
   ],
   webServer: {
