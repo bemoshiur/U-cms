@@ -103,11 +103,13 @@ function isSeedOnDeployEnabled(): boolean {
  * password is hashed correctly (pbkdf2). It targets the single account holding
  * an `isSuper` role. Fast (one row) — safe to run in `onInit`.
  *
- * Values default to `owner@ucms.app` / `U-CMS-Admin-2026!` but can be
- * overridden with `DEMO_ADMIN_EMAIL` / `DEMO_ADMIN_PASSWORD`. Turn
- * `SEED_ON_DEPLOY=false` once you have logged in and set your own password, so
- * this stops resetting it on every cold start. DEMO-ONLY — change the password
- * after first login and rotate for anything beyond a demo.
+ * The password is taken from `DEMO_ADMIN_PASSWORD` or, failing that, the
+ * `SEED_ADMIN_PASSWORD` you already set — there is deliberately NO hardcoded
+ * default (a committed admin password would be a credential leak). If neither
+ * is set, the sync is skipped. The email defaults to `SEED_ADMIN_EMAIL` (or the
+ * standard seed default). Turn `SEED_ON_DEPLOY=false` once you have logged in
+ * and changed your password, so this stops resetting it on every cold start.
+ * DEMO-ONLY convenience — change the password after first login.
  */
 async function syncDemoSuperAdmin(payload: Payload): Promise<void> {
   if (!isSeedOnDeployEnabled()) return
@@ -133,8 +135,17 @@ async function syncDemoSuperAdmin(payload: Payload): Promise<void> {
     const admin = admins.docs[0]
     if (!admin) return
 
-    const email = process.env.DEMO_ADMIN_EMAIL || 'owner@ucms.app'
-    const password = process.env.DEMO_ADMIN_PASSWORD || 'U-CMS-Admin-2026!'
+    // No hardcoded default password — reuse SEED_ADMIN_PASSWORD (already set for
+    // the seed). Skip entirely if there is no password to apply.
+    const password = process.env.DEMO_ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD
+    if (!password) {
+      payload.logger.warn(
+        '[demo-admin] DEMO_ADMIN_PASSWORD / SEED_ADMIN_PASSWORD not set — skipping super-admin sync.',
+      )
+      return
+    }
+    const email =
+      process.env.DEMO_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL || 'admin@publicpulse.com.bd'
     // Critical step: reset email + password (Payload re-hashes the password).
     // Only guaranteed-valid fields, so nothing can block it.
     await payload.update({
