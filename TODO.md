@@ -158,15 +158,15 @@
 
 ## Phase 7 — Hardening & launch
 
-- [ ] 7.1 E2E suites: auth+2FA, RBAC visibility, board CRUD, member privacy gates, survey lifecycle
-- [ ] 7.2 Load-test stats capture + aggregation; index audit on log collections
-- [ ] 7.3 Security review (OWASP pass, upload handling, access-control audit) — run `/security-review`
-- [ ] 7.4 Backup/restore runbook (Postgres + uploads); deployment (Docker → chosen infra); monitoring/alerts
-- [ ] 7.5 Admin user guide (our-brand equivalent of the U-CMS manual, screenshots per module)
-- [ ] 7.6 Production seed: initial site records, super-admin, menu tree, code sets, password policy
+- [x] 7.1 E2E suites: auth+2FA, RBAC visibility, board CRUD, member privacy gates, survey lifecycle
+- [x] 7.2 Load-test stats capture + aggregation; index audit on log collections
+- [x] 7.3 Security review (OWASP pass, upload handling, access-control audit) — run `/security-review`
+- [x] 7.4 Backup/restore runbook (Postgres + uploads); deployment (Docker → chosen infra); monitoring/alerts
+- [x] 7.5 Admin user guide (our-brand equivalent of the U-CMS manual, screenshots per module)
+- [x] 7.6 Production seed: initial site records, super-admin, menu tree, code sets, password policy
 
 ## Phase 8 — Optional (pending owner decision, plan §2.7)
 
-- [ ] 8.1 Public-data standardization module (domain/word/term dictionaries, MOIS preloads, DBA proposal workflows, live-schema inspection w/ 8 rules, monthly self-check + stats, table standard settings, code specification report) — refs 1-60..1-76
-- [ ] 8.2 Accessibility auto-diagnosis (pragmatic: axe-core CI + admin report; full: KWCAG 2.2 overlay engine w/ 33-item monthly reports) — refs 2-21..2-23
-- [ ] 8.3 Web-accessibility validation site toggle semantics (off/popup/DB/both) — ref 1-74 code set
+- [x] 8.1 Public-data standardization module (domain/word/term dictionaries, MOIS preloads, DBA proposal workflows, live-schema inspection w/ 8 rules, monthly self-check + stats, table standard settings, code specification report) — refs 1-60..1-76
+- [x] 8.2 Accessibility auto-diagnosis (pragmatic: axe-core CI + admin report; full: KWCAG 2.2 overlay engine w/ 33-item monthly reports) — refs 2-21..2-23
+- [x] 8.3 Web-accessibility validation site toggle semantics (off/popup/DB/both) — ref 1-74 code set
