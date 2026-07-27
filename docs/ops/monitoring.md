@@ -36,11 +36,21 @@ redacted before storage), the `url`, `httpMethod`, `statusCode`, acting admin
   gated on `system.errorLogs`:
 
   ```text
-  GET /api/errorLogs/stats?from=<ISO>&to=<ISO>&granularity=<day|week|month>
+  GET /api/errorLogs/stats?from=<YYYY-MM-DD>&to=<YYYY-MM-DD>&granularity=<daily|monthly>
       → JSON with three tabs: by period, by exceptionClass (type), by url
   GET /api/errorLogs/stats/export?from&to&granularity&tab=<period|type|url>
       → the same, one tab, as CSV
   ```
+
+  Parameter notes (from `errorStatsExport.ts`):
+
+  - `from`/`to` must be `YYYY-MM-DD` (a non-date value returns HTTP 400); both
+    are optional and default to the last 30 days.
+  - `granularity` accepts **only `daily` (the default) or `monthly`**. Any other
+    value — including `week`/`day`/`month` — is **silently treated as `daily`**
+    (no error), so a typo returns daily-bucketed data rather than failing. Pass
+    exactly `monthly` for month buckets.
+  - `tab` (export only) must be one of `period` / `type` / `url` (else HTTP 400).
 
   A monitor can poll `…/stats` for a recent window and **alert when the period
   count jumps** over a baseline, and use the `type` tab to see _which_
