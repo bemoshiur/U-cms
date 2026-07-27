@@ -93,6 +93,28 @@ describe('Task 6C — privacy organization chart', () => {
     expect(tiers[3].members.every((m) => m.duty.length > 0)).toBe(true)
   })
 
+  /**
+   * Task 7A D1 — the four seeded EXAMPLE privacy-org admins must be `pending`,
+   * not `active`. They now hold real §3 privacy-menu grants (Task 6D), so an
+   * inert-but-active demo account is no longer acceptable: `pending` blocks
+   * authentication (defense-in-depth beyond the unrecoverable random password).
+   * The chart still renders them (it derives from role assignment, not status).
+   */
+  it('seeds the example privacy-org admins as pending (D1)', async () => {
+    const examples = await payload.find({
+      collection: 'users',
+      where: {
+        loginId: { in: ['privacy-deputy', 'privacy-team', 'privacy-staff-1', 'privacy-staff-2'] },
+      },
+      pagination: false,
+      overrideAccess: true,
+    })
+    expect(examples.docs.length).toBe(4)
+    for (const admin of examples.docs) {
+      expect(admin.status, `${admin.loginId} must be pending`).toBe('pending')
+    }
+  })
+
   it('RE-DERIVES as role assignments change (staff → deputy moves tiers)', async () => {
     const staffRole = await roleDbId(PRIVACY_ROLE_STAFF)
     const deputyRole = await roleDbId(PRIVACY_ROLE_DEPUTY)

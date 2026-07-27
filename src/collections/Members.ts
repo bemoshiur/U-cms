@@ -6,7 +6,11 @@ import {
   memberManageAccess,
   memberSelfOrManageAccess,
 } from '../access/memberAccess'
-import { blockInactiveMemberLogin, enforceMemberPasswordPolicy } from '../auth/memberHooks'
+import {
+  blockInactiveMemberLogin,
+  enforceMemberPasswordPolicy,
+  revokeMemberSessionsOnStatusChange,
+} from '../auth/memberHooks'
 import { tenantMembershipGuard } from '../access/tenantAccess'
 import { branding } from '../branding'
 import { renderMemberForgotPasswordEmail } from '../email/memberEmails'
@@ -42,12 +46,18 @@ import { memberExportEndpoints } from '../endpoints/memberExport'
  * (`status`), move sites (`tenant`), change their handle (`loginId`), or rewrite
  * their consent evidence. Server-side sign-up sets those with `overrideAccess`.
  *
- * ## Sessions (documented, deliberate)
+ * ## Sessions — revocable member session store (Task 7A #1b)
  *
- * `useSessions: false` — member tokens are stateless JWTs. Members don't need
- * server-side session revocation this phase (that admin-only machinery — 2FA,
- * status-flip revocation — stays on `users`); logout clears the cookie. A
- * revocable member session store is a later refinement.
+ * `useSessions: true` — member tokens now carry a server-side session `sid`
+ * (Payload's `members_sessions` store), exactly like admin `users`. This is the
+ * "revocable member session store" the earlier phases deferred (Phase-4 L1 /
+ * D7): a member whose `status` leaves `active` has their sessions emptied in the
+ * same write (`revokeMemberSessionsOnStatusChange`), so the JWT strategy rejects
+ * their token on the very next request — a banned/suspended member cannot keep a
+ * live session (or download) for the stateless token's ~2h life. Login/logout
+ * are unchanged from the caller's view (login returns a token, logout clears the
+ * cookie); the store only ADDS revocability. The download endpoint also re-reads
+ * status as a backstop (see `canDownloadPost`).
  */
 
 /** Member login-ID format (mirrors `users.loginId`): lowercase alnum + . _ - , 4+ chars. */
@@ -97,8 +107,9 @@ export const Members: CollectionConfig = {
     delete: memberManageAccess(),
   },
   auth: {
-    // Stateless member tokens — see the collection doc comment.
-    useSessions: false,
+    // Revocable member session store (Task 7A #1b) — see the collection doc
+    // comment. Empowers `revokeMemberSessionsOnStatusChange` to kill live JWTs.
+    useSessions: true,
     depth: 0,
     // Native transient brute-force lock (parity with admin `users`); distinct
     // from the `status` lifecycle gate in `blockInactiveMemberLogin`.
@@ -220,9 +231,13 @@ export const Members: CollectionConfig = {
     // Task 6A Part 2: NON-BYPASSABLE personal-info capture — a single-doc admin
     // read logs a `view`, an admin update logs an `edit`, to personalInfoAccessLogs.
     // (List renders, system reads, and member self-service are skipped — see the hook.)
-    // `markPersonalInfoWrite` runs first so the create/update read-tail is not
+    // `markPersonalInfoWrite` runs so the create/update read-tail is not
     // mis-logged as a `view` (see the hook doc comment).
-    beforeChange: [markPersonalInfoWrite],
+    // Task 7A #1b: `revokeMemberSessionsOnStatusChange` empties `sessions` when
+    // status leaves `active` so live member JWTs are revoked immediately (mirrors
+    // admin `revokeSessionsOnStatusChange`); it only touches `data.sessions`, so
+    // its order relative to `markPersonalInfoWrite` is independent.
+    beforeChange: [revokeMemberSessionsOnStatusChange, markPersonalInfoWrite],
     // `capturePersonalInfoView` LOGS on the single-doc (`!findMany`) audited read;
     // `maskMemberPiiForList` MASKS on every multi-doc (`findMany`) list/populate
     // read — together they partition every member read so full PII is NEVER

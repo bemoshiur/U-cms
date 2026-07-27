@@ -119,7 +119,13 @@ export async function activePasswordPolicyText(
   const found = await payload.find({
     collection: 'passwordPolicies',
     where: { isActive: { equals: true } },
-    sort: '-createdAt',
+    // Tie-break parity (Task 7A #3): `resolveActivePasswordPolicy`
+    // (src/privacy/passwordPolicyData.ts) breaks an exact-`createdAt` tie by
+    // HIGHEST id, so this DB query MUST carry the same secondary `-id` sort or
+    // the LIVE badge (computed in memory by that resolver) and the displayed
+    // notice (this text) could disagree when two active versions share a
+    // millisecond-identical `createdAt`. Keep both tie-breaks identical.
+    sort: ['-createdAt', '-id'],
     limit: 1,
     pagination: false,
     overrideAccess: true,

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import React from 'react'
 
 import { getCurrentMember } from '@/site/member'
+import { PasswordPolicyPublicNotice } from '@/components/public/PasswordPolicyPublicNotice'
 import { signupAction } from './actions'
 
 export const metadata = { title: 'Sign up' }
@@ -105,6 +106,9 @@ export default async function SignupPage({
             required
           />
         </div>
+
+        {/* Task 7A #4: surface the published password policy on this set-password flow. */}
+        <PasswordPolicyPublicNotice />
 
         <div className="field field--check">
           <input id="agreeService" name="agreeService" type="checkbox" value="on" required />

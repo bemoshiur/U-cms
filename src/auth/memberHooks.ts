@@ -1,4 +1,8 @@
-import type { CollectionBeforeLoginHook, CollectionBeforeValidateHook } from 'payload'
+import type {
+  CollectionBeforeChangeHook,
+  CollectionBeforeLoginHook,
+  CollectionBeforeValidateHook,
+} from 'payload'
 import { APIError } from 'payload'
 
 import { validateMemberPassword } from './validateMemberPassword'
@@ -83,4 +87,36 @@ export const blockInactiveMemberLogin: CollectionBeforeLoginHook = ({ user }) =>
       // Unknown/undefined status → fail closed (only `active` authenticates).
       throw new APIError('This account is not active.', 403)
   }
+}
+
+/**
+ * Member session revocation on status change (Task 7A #1b — the member analogue
+ * of the admin `revokeSessionsOnStatusChange`, Phase 2 T2B). Members now use
+ * server-side sessions (`useSessions: true`), so when `status` transitions AWAY
+ * from `active` (→ `pending`/`dormant`/`withdrawn`) we empty the `sessions`
+ * array in the SAME write. Payload's JWT strategy rejects any member token whose
+ * `sid` is no longer in `user.sessions` (verified in
+ * `node_modules/payload/dist/auth/strategies/jwt.js`), so every live member
+ * session is invalidated IMMEDIATELY and the member cannot authenticate on the
+ * next request — closing the stateless-token window where a banned/suspended
+ * member kept a working session (and could download) until natural expiry.
+ *
+ * Only fires on a genuine transition (`nextStatus !== previousStatus`) and never
+ * on a re-activation (`active` sessions are cleared by the member's own logout,
+ * not by this hook). A no-op on create and on any non-status update.
+ */
+export const revokeMemberSessionsOnStatusChange: CollectionBeforeChangeHook = ({
+  data,
+  operation,
+  originalDoc,
+}) => {
+  if (!data || operation !== 'update') {
+    return data
+  }
+  const previousStatus = (originalDoc as { status?: string } | undefined)?.status
+  const nextStatus = typeof data.status === 'string' ? data.status : previousStatus
+  if (nextStatus !== 'active' && nextStatus !== previousStatus) {
+    data.sessions = []
+  }
+  return data
 }

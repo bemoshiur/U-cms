@@ -1,6 +1,7 @@
 import type { PayloadRequest } from 'payload'
 
 import { toRelationId } from '../collections/utils'
+import { getTrustedProxyHops, normalizeIp, resolveClientIp } from '../security/clientIp'
 
 /**
  * Shared, mostly-pure resolvers used by every audit writer (Task 2A). Kept
@@ -9,38 +10,33 @@ import { toRelationId } from '../collections/utils'
  * the permission-change journals without a dependency cycle.
  */
 
-/**
- * Normalizes a raw IP string for **wildcard-free** storage (ref 1-55 business
- * rule: "IP examples show both LAN (192.168.0.1) and localhost (127.0.0.1)
- * captured as-is" — the concrete request address, never a wildcard/CIDR range
- * like the IP *access-control* collection stores). Trims whitespace, unwraps a
- * bracketed IPv6 literal (`[::1]` → `::1`), and collapses an IPv4-mapped IPv6
- * address (`::ffff:192.168.0.1` → `192.168.0.1`, which Node commonly produces
- * on a dual-stack socket) so IPv4 clients read as plain IPv4. Both plain IPv4
- * and genuine IPv6 addresses are otherwise preserved verbatim.
- */
-export function normalizeIp(raw: string): string {
-  let ip = raw.trim()
-  if (ip.startsWith('[')) {
-    const close = ip.indexOf(']')
-    if (close !== -1) {
-      ip = ip.slice(1, close)
-    }
-  }
-  const mapped = ip.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i)
-  if (mapped && mapped[1]) {
-    ip = mapped[1]
-  }
-  return ip
-}
+// `normalizeIp` now lives in the shared, dependency-free `clientIp` module so a
+// SINGLE implementation backs both the admin IP enforcement layer and this
+// audit-log capture (Task 7A #5). Re-exported here for the existing importers.
+export { normalizeIp }
 
 /**
- * Resolves the client IP from the request. Payload's `PayloadRequest` is a Web
- * `Request` (not an Express request), so there is no built-in `req.ip`; the
- * authoritative source is the proxy headers. Prefers the first hop of
- * `x-forwarded-for` (the original client), then `x-real-ip`, then a `req.ip`
- * if some adapter happens to have attached one. Returns `undefined` when
- * nothing is available (e.g. a Local-API call in a test with no HTTP layer).
+ * Resolves the client IP for an AUDIT-LOG row from the request. Payload's
+ * `PayloadRequest` is a Web `Request` (not an Express request), so there is no
+ * built-in `req.ip`; the authoritative source is the proxy headers.
+ *
+ * ## Trusted-proxy convergence (Task 7A #5)
+ *
+ * Historically this trusted the LEFTMOST `x-forwarded-for` hop, which a client
+ * can spoof by prepending entries — so a forged "192.168.0.1" would be written
+ * verbatim into the audit trail. It now routes through the SAME hardened
+ * `resolveClientIp` the admin IP-enforcement layer uses: when
+ * `TRUSTED_PROXY_HOPS` is set (>0) the audit row records the trusted-proxy-
+ * correct client IP (the Nth-from-the-right XFF entry / X-Real-IP), NOT the
+ * spoofable leftmost hop.
+ *
+ * When `TRUSTED_PROXY_HOPS` is UNSET (the default, hops=0) behavior is IDENTICAL
+ * to before: `resolveClientIp` cannot trust a header, so we fall back to the
+ * observed leftmost XFF → X-Real-IP → `req.ip`. This is deliberate and safe for
+ * a LOG LABEL (a diagnostic field, not an access decision — the enforcement
+ * layer, which DOES make decisions, treats an untrusted IP as unusable). So the
+ * audit trail keeps recording the best-observed client address in dev/unset
+ * deployments while gaining spoof-resistance the moment a proxy is declared.
  */
 export function resolveIpAddress(req: PayloadRequest | undefined): string | undefined {
   const get = (header: string): string | undefined => {
@@ -51,6 +47,22 @@ export function resolveIpAddress(req: PayloadRequest | undefined): string | unde
     }
   }
 
+  // Prefer a TRUSTED client IP when a proxy is declared (TRUSTED_PROXY_HOPS>0).
+  // `resolveClientIp` only ever calls `.get(header)`, so any Headers-like object
+  // (a real `Headers` or a test mock exposing `.get`) works.
+  const headers = (req as { headers?: { get?: unknown } } | undefined)?.headers
+  if (headers && typeof headers.get === 'function' && getTrustedProxyHops() > 0) {
+    const trusted = resolveClientIp(headers as Headers)
+    if (trusted.trusted && trusted.ip) {
+      return trusted.ip
+    }
+    // Trusted proxy declared but the chain didn't yield a trustworthy hop → do
+    // NOT fall back to a spoofable header (that would defeat the hardening);
+    // leave the field unresolved.
+    return undefined
+  }
+
+  // No trusted proxy declared → preserve the original best-observed behavior.
   const forwardedFor = get('x-forwarded-for')
   if (forwardedFor) {
     const first = forwardedFor.split(',')[0]?.trim()

@@ -202,4 +202,44 @@ describe('Task 6C — password-policy management surfacing', () => {
     const pure = resolveActivePasswordPolicy(all.docs as never)
     expect(history.active?.id ?? null).toBe(pure?.id ?? null)
   })
+
+  /**
+   * Task 7A #3 — tie-break parity. On an EXACT `createdAt` tie the pure resolver
+   * (`resolveActivePasswordPolicy`) breaks it by HIGHEST id; the DB-backed
+   * `activePasswordPolicyText` now carries the same secondary `-id` sort. Both
+   * must therefore pick the SAME policy so the LIVE badge and the displayed
+   * notice never disagree. Fails WITHOUT the secondary sort (Postgres could
+   * return either row first on a `-createdAt`-only order).
+   */
+  it('breaks a createdAt tie identically in both the pure resolver and the DB query', async () => {
+    await deactivateAll()
+    const sharedCreatedAt = new Date('2026-03-03T03:03:03.003Z').toISOString()
+    const a = await payload.create({
+      collection: 'passwordPolicies',
+      data: { ruleText: unique('tie-A '), isActive: true, createdAt: sharedCreatedAt } as never,
+      overrideAccess: true,
+    })
+    const b = await payload.create({
+      collection: 'passwordPolicies',
+      data: { ruleText: unique('tie-B '), isActive: true, createdAt: sharedCreatedAt } as never,
+      overrideAccess: true,
+    })
+    // Same millisecond createdAt on both; the higher-id row must win in BOTH.
+    const higherIdRuleText = Number(a.id) > Number(b.id) ? a.ruleText : b.ruleText
+
+    const dbText = await activePasswordPolicyText(payload)
+    expect(dbText).toBe(higherIdRuleText)
+
+    const all = await payload.find({
+      collection: 'passwordPolicies',
+      where: { isActive: { equals: true } },
+      pagination: false,
+      limit: 0,
+      overrideAccess: true,
+    })
+    const pure = resolveActivePasswordPolicy(all.docs as never)
+    expect(pure?.ruleText).toBe(higherIdRuleText)
+    // And they agree with each other (the actual invariant).
+    expect(dbText).toBe(pure?.ruleText)
+  })
 })

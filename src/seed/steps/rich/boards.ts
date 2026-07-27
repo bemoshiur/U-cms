@@ -40,8 +40,23 @@ async function boardTypeIdByCode(payload: Payload, code: string): Promise<number
   return id
 }
 
-/** Finds a board by (tenant, name), or creates it; returns its id. Idempotent. */
-async function ensureBoard(
+/**
+ * Finds a board by (tenant, name), or creates it; returns its id. Idempotent.
+ *
+ * ## Override-collision merge (Task 7A #6)
+ *
+ * FOUR rich-seed board names — `Notice`, `Gallery`, `Q&A`, `Attachment Board` —
+ * collide with boards the BASE seed (`src/seed/steps/boards.ts`) already created.
+ * Previously this helper returned the existing board's id and SILENTLY DROPPED
+ * the rich-seed config overrides (`boardForm`, `attachmentsEnabled`,
+ * `attachmentMaxCount`, `headerNotice`, `boardType`, `isIntegrated`), so on a
+ * base-then-rich run those boards kept the plainer base config and the demo
+ * looked less complete than intended. It now MERGES the overrides onto the
+ * existing board via an idempotent `update` (re-running writes the same values,
+ * so it stays idempotent). `bbsId`/`code` are never in `data`, so the immutable
+ * server IDs (e.g. the fixed `B0000009` attachment board) are untouched.
+ */
+export async function ensureBoard(
   payload: Payload,
   tenantId: number,
   name: string,
@@ -55,6 +70,14 @@ async function ensureBoard(
     overrideAccess: true,
   })
   if (existing.docs[0]) {
+    // Merge the rich-seed config onto the base-seed board (idempotent update).
+    await payload.update({
+      collection: 'boards',
+      id: existing.docs[0].id,
+      data: data as never,
+      overrideAccess: true,
+    })
+    payload.logger.info(`[seed:rich-boards] merged config onto existing board "${name}".`)
     return existing.docs[0].id
   }
   const created = await payload.create({

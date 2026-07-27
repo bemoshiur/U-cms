@@ -26,9 +26,13 @@ import { DEFAULT_SEED_ADMIN_EMAIL } from './superAdmin'
  *  3. Creates four example privacy-org admins (deputy / team / two staff) with a
  *     department + duty so the full four-tier chart renders. These are DEMO
  *     accounts: each is created with a RANDOM, unknown, unrecoverable password
- *     (so it is NOT login-capable — safer than the known-password demo member)
- *     and holds ONLY its single privacy role (which grants only the read-only
- *     org-chart view). Operators may delete them.
+ *     (so it is NOT login-capable) AND with `status: 'pending'` so they cannot
+ *     authenticate even if a password were somehow recovered — defense-in-depth
+ *     (Task 7A D1 / Phase-6-final review). They now hold REAL §3 privacy-menu
+ *     grants (Task 6D extended these roles beyond the read-only org-chart view),
+ *     so an inert-but-active demo account is no longer acceptable. Operators who
+ *     want a working privacy-org admin approve one (status → active) and set a
+ *     known password. Operators may delete them.
  *
  * Must run AFTER `adminMenusStep` (needs the `privacy.orgChart` menu),
  * `rolesStep`/`superAdminStep` (the super-admin must exist to be assigned), and
@@ -213,9 +217,28 @@ export const privacyRolesStep: SeedStep = {
         overrideAccess: true,
       })
       if (existing.docs.length > 0) {
-        payload.logger.info(
-          `[seed:privacy-roles] admin "${admin.loginId}" already exists — skipping.`,
-        )
+        // D1 heal (Task 7A): an example admin seeded ACTIVE by an earlier run
+        // (Phase 6) must be reconciled to `pending` — otherwise the hardening
+        // never reaches an already-seeded install (incl. the live demo, which
+        // re-runs this step on deploy). Idempotent: once pending, this no-ops.
+        // These are throwaway demo accounts (unrecoverable password, .invalid
+        // email, documented as deletable), so reconciling status is safe.
+        const current = existing.docs[0]
+        if (current && current.status !== 'pending') {
+          await payload.update({
+            collection: 'users',
+            id: current.id,
+            data: { status: 'pending' },
+            overrideAccess: true,
+          })
+          payload.logger.info(
+            `[seed:privacy-roles] healed admin "${admin.loginId}" status → pending (D1).`,
+          )
+        } else {
+          payload.logger.info(
+            `[seed:privacy-roles] admin "${admin.loginId}" already exists (pending) — skipping.`,
+          )
+        }
         continue
       }
 
@@ -240,7 +263,11 @@ export const privacyRolesStep: SeedStep = {
           loginId: admin.loginId,
           name: admin.name,
           password: generateCompliantPassword(admin.loginId),
-          status: 'active',
+          // Non-login-capable demo accounts (Task 7A D1): `pending` blocks
+          // authentication (blockInactiveLogin) even though the random password
+          // already prevents it — defense-in-depth now that these roles carry
+          // real §3 grants. Operators approve (→ active) + set a password to use one.
+          status: 'pending',
           roles: [roleDbId],
           duties: admin.duties,
           ...(departmentId !== undefined ? { department: departmentId } : {}),

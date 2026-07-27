@@ -385,4 +385,101 @@ describe('Task 4B seams: D4 answer attribution + member download branch', () => 
       expect(classifyAdminPath('/api/attachments/file/x.png')).toBe('guard')
     })
   })
+
+  /**
+   * Task 7A #1 (D7) — a member whose `status` leaves `active` after login can no
+   * longer download (status is RE-READ, not token-trusted), and their live
+   * session is revoked so they cannot authenticate on the next request. Uses a
+   * DEDICATED member so it never mutates the shared `member` fixture.
+   */
+  describe('D7 — member status recheck + session revocation (Task 7A)', () => {
+    const D7_PW = 'D7-Member-Pass-42'
+    let d7MemberId: number
+    let d7Token: string
+
+    function authHeaders(token: string): Headers {
+      return new Headers({
+        cookie: `payload-token=${token}`,
+        'Sec-Fetch-Site': 'same-origin',
+      })
+    }
+
+    beforeAll(async () => {
+      const created = await payload.create({
+        collection: 'members',
+        data: {
+          loginId: `mp-d7-${Date.now()}`.toLowerCase(),
+          email: `mp-d7-${Date.now()}@example.com`,
+          name: 'D7 Member',
+          password: D7_PW,
+          status: 'active',
+          tenant: siteId,
+        } as never,
+        overrideAccess: true,
+      })
+      d7MemberId = created.id
+      const login = await payload.login({
+        collection: 'members',
+        data: { email: created.email as string, password: D7_PW },
+      })
+      d7Token = login.token as string
+    })
+
+    it('while ACTIVE: session authenticates AND download is allowed', async () => {
+      const { user } = await payload.auth({ headers: authHeaders(d7Token) })
+      expect(user?.id).toBe(d7MemberId)
+      expect(user?.collection).toBe('members')
+
+      const fresh = await payload.findByID({
+        collection: 'members',
+        id: d7MemberId,
+        overrideAccess: true,
+      })
+      expect(
+        await canDownloadPost({
+          payload,
+          user: fresh,
+          post: { id: nonSecretPostId, isSecret: false, tenant: siteId },
+        }),
+      ).toBe(true)
+    })
+
+    it('after status → withdrawn: download DENIED (status re-read) AND session REVOKED', async () => {
+      await payload.update({
+        collection: 'members',
+        id: d7MemberId,
+        data: { status: 'withdrawn' } as never,
+        overrideAccess: true,
+      })
+
+      // (a) Download branch re-reads the CURRENT status and denies — fails
+      // WITHOUT the recheck (a withdrawn member would still pass isSecret+tenant).
+      // Pass a STALE `active` user object to prove the token is not trusted.
+      const staleActiveUser = {
+        id: d7MemberId,
+        collection: 'members',
+        status: 'active',
+        tenant: siteId,
+      }
+      expect(
+        await canDownloadPost({
+          payload,
+          user: staleActiveUser,
+          post: { id: nonSecretPostId, isSecret: false, tenant: siteId },
+        }),
+      ).toBe(false)
+      const res = await handleFileDownload({
+        payload,
+        user: staleActiveUser,
+        postId: String(nonSecretPostId),
+        fileSn: 1,
+      })
+      expect(res.status).toBe(404)
+
+      // (b) The live session is revoked: the previously-valid token no longer
+      // authenticates (sessions were emptied in the status-change write).
+      const { user } = await payload.auth({ headers: authHeaders(d7Token) })
+      expect(user).toBeNull()
+    })
+  })
 })

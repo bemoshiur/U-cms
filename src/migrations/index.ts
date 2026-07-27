@@ -24,6 +24,7 @@ import * as migration_20260726_203134_task_6c_password_policy_created_by from '.
 import * as migration_20260727_120000_task_6d_security_docs from './20260727_120000_task_6d_security_docs';
 import * as migration_20260727_130000_task_6d_attachment_security_doc from './20260727_130000_task_6d_attachment_security_doc';
 import * as migration_20260727_140000_task_6d_richtext_attachment_backfill from './20260727_140000_task_6d_richtext_attachment_backfill';
+import * as migration_20260727_150000_task_7a_member_sessions from './20260727_150000_task_7a_member_sessions';
 
 export const migrations = [
   {
@@ -155,5 +156,10 @@ export const migrations = [
     up: migration_20260727_140000_task_6d_richtext_attachment_backfill.up,
     down: migration_20260727_140000_task_6d_richtext_attachment_backfill.down,
     name: '20260727_140000_task_6d_richtext_attachment_backfill',
+  },
+  {
+    up: migration_20260727_150000_task_7a_member_sessions.up,
+    down: migration_20260727_150000_task_7a_member_sessions.down,
+    name: '20260727_150000_task_7a_member_sessions',
   },
 ];

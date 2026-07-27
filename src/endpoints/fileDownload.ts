@@ -201,7 +201,32 @@ export async function canDownloadPost(args: {
   if (post.isSecret === true) {
     return false
   }
-  const memberTenantId = toRelationId((user as { tenant?: unknown }).tenant)
+
+  // D7 status recheck (Task 7A #1a). A member JWT is a STATELESS ~2h token, so a
+  // member who is banned (`withdrawn`) or suspended (`dormant`/`pending`) AFTER
+  // login would otherwise keep downloading until the token expires. RE-READ the
+  // member's CURRENT status from the DB — do NOT trust the (possibly stale)
+  // token-derived `user` — and allow only an `active` member. This is the
+  // application-level backstop to the session revocation now enabled on the
+  // members collection (see revokeMemberSessionsOnStatusChange): even if a token
+  // reached this far, a non-active member is denied. Re-reading also gives the
+  // member's authoritative current `tenant` for the boundary check below.
+  const memberId = (user as { id?: unknown }).id
+  if (memberId === undefined || memberId === null) {
+    return false
+  }
+  const freshMember = (await payload.findByID({
+    collection: 'members',
+    id: memberId as string | number,
+    depth: 0,
+    overrideAccess: true,
+    disableErrors: true,
+  })) as { status?: unknown; tenant?: unknown } | null
+  if (!freshMember || freshMember.status !== 'active') {
+    return false
+  }
+
+  const memberTenantId = toRelationId(freshMember.tenant)
   const postTenantId = toRelationId(post.tenant)
   if (memberTenantId === undefined || postTenantId === undefined) {
     return false

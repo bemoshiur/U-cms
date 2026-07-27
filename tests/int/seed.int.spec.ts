@@ -18,6 +18,13 @@ describe('seed: super-admin', () => {
   beforeAll(async () => {
     const payloadConfig = await config
     payload = await getPayload({ config: payloadConfig })
+    // Self-seed the step's dependencies (Task 7A #7 — test isolation).
+    // `superAdminStep` requires ROLE_ADMIN (from `rolesStep`, whose menu grants
+    // in turn require `adminMenusStep`). Previously this block relied on those
+    // rows already existing in the shared dev DB from an earlier spec, so it
+    // passed or failed by test-file ORDER. Seeding them here (idempotent) makes
+    // the block order-independent without weakening any assertion.
+    await runSeed(payload, [adminMenusStep, rolesStep])
   })
 
   it('creates the super-admin user idempotently and allows login with the seeded credentials', async () => {

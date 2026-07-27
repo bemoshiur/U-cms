@@ -1,5 +1,5 @@
 import type { PayloadRequest } from 'payload'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { geoLookup } from '@/audit/geo'
 import {
@@ -59,6 +59,44 @@ describe('resolveIpAddress', () => {
 
   it('returns undefined when no source is present', () => {
     expect(resolveIpAddress(fakeReq())).toBeUndefined()
+  })
+})
+
+/**
+ * Task 7A #5 — audit IP capture converges on the hardened, TRUSTED_PROXY_HOPS-
+ * aware resolver. When a proxy is declared the audit row records the trusted
+ * (Nth-from-the-right) hop, not the spoofable leftmost XFF; when unset the
+ * original best-observed behavior is preserved.
+ */
+describe('resolveIpAddress — TRUSTED_PROXY_HOPS convergence', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('unset (default): keeps the original leftmost-XFF behavior', () => {
+    // No stub → hops=0 → fall back to observed leftmost hop (unchanged).
+    const req = fakeReq({ 'x-forwarded-for': '203.0.113.7, 70.41.3.18, 150.172.238.178' })
+    expect(resolveIpAddress(req)).toBe('203.0.113.7')
+  })
+
+  it('hops=2: returns the trusted 2nd-from-right hop, NOT the spoofable leftmost', () => {
+    vi.stubEnv('TRUSTED_PROXY_HOPS', '2')
+    // Attacker prepends "1.1.1.1"; the app has 2 trusted hops, so the client is
+    // the 2nd-from-right entry (2.2.2.2), never the forged leftmost.
+    const req = fakeReq({ 'x-forwarded-for': '1.1.1.1, 2.2.2.2, 3.3.3.3' })
+    expect(resolveIpAddress(req)).toBe('2.2.2.2')
+  })
+
+  it('hops=1: trusts x-real-ip when there is no XFF', () => {
+    vi.stubEnv('TRUSTED_PROXY_HOPS', '1')
+    const req = fakeReq({ 'x-real-ip': '198.51.100.9' })
+    expect(resolveIpAddress(req)).toBe('198.51.100.9')
+  })
+
+  it('hops declared but chain shorter than declared: refuses to fall back (undefined)', () => {
+    vi.stubEnv('TRUSTED_PROXY_HOPS', '3')
+    const req = fakeReq({ 'x-forwarded-for': '9.9.9.9' })
+    expect(resolveIpAddress(req)).toBeUndefined()
   })
 })
 

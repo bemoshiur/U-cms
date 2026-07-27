@@ -4,6 +4,7 @@ import React from 'react'
 
 import type { Member } from '@/payload-types'
 import { getPayloadClient } from '@/site/rsc'
+import { PasswordPolicyPublicNotice } from '@/components/public/PasswordPolicyPublicNotice'
 import { changePasswordAction, updateProfileAction } from './actions'
 
 export const metadata = { title: 'My profile' }
@@ -136,6 +137,8 @@ export default async function ProfilePage({
               At least 8 characters, using at least two of: letters, numbers, symbols.
             </span>
           </div>
+          {/* Task 7A #4: surface the published password policy on this change-password flow. */}
+          <PasswordPolicyPublicNotice payload={payload} />
           <div className="auth__actions">
             <button className="button auth__submit" type="submit">
               Update password

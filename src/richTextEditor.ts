@@ -24,6 +24,29 @@ import { lexicalEditor, UploadFeature } from '@payloadcms/richtext-lexical'
  * If a field ever genuinely needs to embed a PUBLIC image, that is a deliberate
  * per-field editor override decision — the default for everything is the gated
  * pool.
+ *
+ * ## SECURITY-DOC WALK INVARIANT (Task 7A — do not regress)
+ *
+ * The §3 security-document confidentiality model (Task 6D) is a `securityDoc`
+ * FLAG denormalized across shared collections, kept correct by a walk of every
+ * way a post references an attachment — `postAttachmentRefIds`
+ * (src/content/attachmentRefs.ts). That walk understands `upload` and
+ * `relationship` Lexical nodes (both of which store their target in `value`) and
+ * recurses `children`. It does NOT understand nodes that stash an attachment ref
+ * anywhere else — most importantly a `block` node's `fields` (BlocksFeature) or a
+ * `table` cell (TableFeature), neither of which is in the default feature set
+ * kept here.
+ *
+ * THEREFORE: enabling `BlocksFeature`, `TableFeature`, or any feature that can
+ * carry an attachment reference OUTSIDE an `upload`/`relationship` node is a
+ * SECURITY change, not a cosmetic one. If you add one you MUST extend
+ * `extractLexicalAttachmentIds` to walk the new node's ref location, or a
+ * security-doc attachment embedded there would escape the flag sync and the
+ * ordinary-post cross-reference rejection. A guard test
+ * (tests/unit/richTextEditorGuard.spec.ts) FAILS if this file gains such a
+ * feature, to force that decision. A future rearchitecture to a dedicated
+ * privacy-gated attachment collection would make gating structural and retire
+ * this invariant (see task-7A-report.md).
  */
 export const RICHTEXT_UPLOAD_COLLECTIONS = ['attachments'] as const
 
