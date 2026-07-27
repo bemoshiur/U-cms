@@ -25,6 +25,11 @@ import { personalInfoAccessLogsStep } from './steps/personalInfoAccessLogs'
 import { privacyRolesStep } from './steps/privacyRoles'
 import { securityDocsStep } from './steps/securityDocs'
 import { privacyMenuGrantsStep } from './steps/privacyMenuGrants'
+import { richOrgTreeStep, richCodesStep, richAdminsStep } from './steps/rich/foundation'
+import { richBoardsAndPostsStep, richSecurityDocsStep } from './steps/rich/boards'
+import { richMembersStep, richSurveysStep } from './steps/rich/community'
+import { richSiteStructureStep, richDisplayStep } from './steps/rich/siteContent'
+import { richStatisticsStep, richPrivacyHistoryStep } from './steps/rich/analytics'
 import type { SeedStep } from './types'
 
 export type { SeedStep } from './types'
@@ -106,6 +111,30 @@ export const seedSteps: SeedStep[] = [
   // rest of the Privacy Protection System (needs the roles + all §3 adminMenus).
   securityDocsStep,
   privacyMenuGrantsStep,
+  // ── RICH DEMO SEED (owner mandate: the CMS must not look empty) ───────────
+  // Layered LAST, ON TOP of every minimal Phase 1-6 seed, so each rich step can
+  // rely on the base data (sites, board types, roles, terms, departments) the
+  // earlier steps created. Every rich step is additive + idempotent (stable
+  // natural keys / find-or-create). Ordered by dependency:
+  //  - org tree + codes have no rich dependency; admins need the org tree
+  //    (department assignment) + roles/adminMenus (grants).
+  //  - boards+posts need board types; security-doc extras need the §3 boards.
+  //  - members need terms; surveys attribute some responses to those members.
+  //  - site structure (menus/web content/short URLs/help/guide menus) needs the
+  //    rich boards (board menus bind to them).
+  //  - statistics attribute traffic/ratings to the rich content menus; privacy
+  //    history references the rich admin accounts.
+  richOrgTreeStep,
+  richCodesStep,
+  richAdminsStep,
+  richBoardsAndPostsStep,
+  richSecurityDocsStep,
+  richMembersStep,
+  richSurveysStep,
+  richSiteStructureStep,
+  richDisplayStep,
+  richStatisticsStep,
+  richPrivacyHistoryStep,
 ]
 
 /**
