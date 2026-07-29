@@ -17,13 +17,19 @@ export const metadata = {
 }
 
 /**
- * Force dynamic (per-request) rendering for the whole public site. Every page
- * reads live site/menu/footer data from the DB and will become member-aware in
- * T4B, so it must never be statically prerendered at build time — otherwise a
- * CI build (which runs before the DB is seeded) would bake in empty chrome.
- * Applies to all nested `(frontend)` routes via route-segment-config inheritance.
+ * The public chrome is MEMBER-AWARE: this layout reads the visitor's session via
+ * `getCurrentMember` → `headers()`, which is a dynamic API. That alone opts every
+ * nested `(frontend)` route into per-request dynamic rendering, so a CI build
+ * (before the DB is seeded) never statically prerenders empty chrome — the reason
+ * the old explicit `force-dynamic` existed. It is dropped here so page-level
+ * `revalidate` is honoured for the Data Cache rather than being forced to 0.
+ *
+ * The performance win lives one layer down: the global, non-user-specific shell
+ * resolvers (active site, menus, guide bars, footer) are wrapped in
+ * `unstable_cache` (see `src/site/rsc.ts`), so a warm data cache serves them
+ * without re-querying Payload/DB per request. The session read stays uncached
+ * (correctness).
  */
-export const dynamic = 'force-dynamic'
 
 /**
  * Root layout for the PUBLIC site (Task 4A). Resolves the active site (see
@@ -59,6 +65,15 @@ export default async function FrontendLayout({ children }: { children: React.Rea
 
   return (
     <html lang="en">
+      <head>
+        {/* Pretendard (KRDS primary face) via CDN; a Korean-capable fallback
+            stack in styles.css keeps the site correct if the CDN is blocked. */}
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/static/pretendard.min.css"
+        />
+      </head>
       <body>
         <a href="#main-content" className="skip-link">
           Skip to content

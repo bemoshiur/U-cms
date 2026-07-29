@@ -25,8 +25,17 @@ export function Breadcrumb({
     <nav aria-label="Breadcrumb" className="breadcrumb">
       <ol className="breadcrumb__list" role="list">
         <li className="breadcrumb__item">
-          <Link href="/" className="breadcrumb__link">
-            Home
+          <Link href="/" className="breadcrumb__link breadcrumb__home">
+            <svg
+              className="breadcrumb__home-icon"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M10 2.5 2 9h2v8h4v-5h4v5h4V9h2L10 2.5Z" />
+            </svg>
+            <span className="breadcrumb__home-label">Home</span>
           </Link>
         </li>
         {trail.map((item, index) => {

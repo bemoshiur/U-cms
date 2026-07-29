@@ -52,69 +52,81 @@ export function SiteHeader({
 
   return (
     <header className="site-header">
-      <div className="site-header__bar">
-        <Link href="/" className="site-brand" aria-label={`${siteName} home`}>
-          {logo?.url ? (
-            // eslint-disable-next-line @next/next/no-img-element -- same-origin CMS asset; avoids next/image remote-loader config
-            <img
-              className="site-brand__logo"
-              src={logo.url}
-              alt={logo.alt || siteName}
-              width={logo.width ?? undefined}
-              height={logo.height ?? undefined}
-            />
-          ) : (
-            <span className="site-brand__name">{siteName}</span>
-          )}
-        </Link>
-
-        <ul className="guide-bar" role="list">
-          {GUIDE_DEFAULTS.filter((item) => !(item.loggedOutOnly && member != null)).map((item) => (
-            <li key={item.key} className="guide-bar__item">
-              <Link href={item.href} className="guide-bar__link">
-                {item.label}
-              </Link>
-            </li>
-          ))}
-          {member != null && (
-            <li className="guide-bar__item">
-              <span className="member-bar">
-                <Link href="/profile" className="guide-bar__link">
-                  {member.name ? `My profile (${member.name})` : 'My profile'}
-                </Link>
-                {/* No-JS logout: POST clears the member cookie (see /logout route). */}
-                <form className="member-bar__logout" action="/logout" method="post">
-                  <button type="submit" className="member-bar__logout-btn">
-                    Log out
-                  </button>
-                </form>
-              </span>
-            </li>
-          )}
-          {guides.map((guide) => {
-            const link: ResolvedLink = resolveGuideLink(guide)
-            return (
-              <li key={String(guide.id)} className="guide-bar__item">
-                <NavLink link={link} className="guide-bar__link">
-                  {guide.name}
-                </NavLink>
+      {/* Top utility bar (KRDS): right-aligned login/sign-up or member links,
+          sitemap, and any configured guide extras — on a light strip. */}
+      <div className="utility-bar">
+        <div className="utility-bar__inner">
+          <ul className="guide-bar" role="list">
+            {GUIDE_DEFAULTS.filter((item) => !(item.loggedOutOnly && member != null)).map(
+              (item) => (
+                <li key={item.key} className="guide-bar__item">
+                  <Link href={item.href} className="guide-bar__link">
+                    {item.label}
+                  </Link>
+                </li>
+              ),
+            )}
+            {member != null && (
+              <li className="guide-bar__item">
+                <span className="member-bar">
+                  <Link href="/profile" className="guide-bar__link">
+                    {member.name ? `My profile (${member.name})` : 'My profile'}
+                  </Link>
+                  {/* No-JS logout: POST clears the member cookie (see /logout route). */}
+                  <form className="member-bar__logout" action="/logout" method="post">
+                    <button type="submit" className="member-bar__logout-btn">
+                      Log out
+                    </button>
+                  </form>
+                </span>
               </li>
-            )
-          })}
-        </ul>
+            )}
+            {guides.map((guide) => {
+              const link: ResolvedLink = resolveGuideLink(guide)
+              return (
+                <li key={String(guide.id)} className="guide-bar__item">
+                  <NavLink link={link} className="guide-bar__link">
+                    {guide.name}
+                  </NavLink>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       </div>
 
-      <details className="site-nav">
-        <summary className="site-nav__toggle" aria-label="Toggle navigation menu">
-          <span className="site-nav__toggle-bar" aria-hidden="true" />
-          <span className="site-nav__toggle-bar" aria-hidden="true" />
-          <span className="site-nav__toggle-bar" aria-hidden="true" />
-          <span className="site-nav__toggle-label">Menu</span>
-        </summary>
-        <nav aria-label="Primary" className="site-nav__panel">
-          <PrimaryNav nodes={navNodes} />
-        </nav>
-      </details>
+      {/* Main header row (KRDS): logo/org name (left) + horizontal GNB (right).
+          On mobile the GNB collapses into a native <details> hamburger (no JS). */}
+      <div className="site-header__main">
+        <div className="site-header__inner">
+          <Link href="/" className="site-brand" aria-label={`${siteName} home`}>
+            {logo?.url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- same-origin CMS asset; avoids next/image remote-loader config
+              <img
+                className="site-brand__logo"
+                src={logo.url}
+                alt={logo.alt || siteName}
+                width={logo.width ?? undefined}
+                height={logo.height ?? undefined}
+              />
+            ) : (
+              <span className="site-brand__name">{siteName}</span>
+            )}
+          </Link>
+
+          <details className="site-nav">
+            <summary className="site-nav__toggle" aria-label="Toggle navigation menu">
+              <span className="site-nav__toggle-bar" aria-hidden="true" />
+              <span className="site-nav__toggle-bar" aria-hidden="true" />
+              <span className="site-nav__toggle-bar" aria-hidden="true" />
+              <span className="site-nav__toggle-label">Menu</span>
+            </summary>
+            <nav aria-label="Primary" className="site-nav__panel">
+              <PrimaryNav nodes={navNodes} />
+            </nav>
+          </details>
+        </div>
+      </div>
     </header>
   )
 }
