@@ -169,11 +169,14 @@ test.describe('Admin auth + 2FA', () => {
       'enrol returns a secret',
     ).toBeTruthy()
 
-    // Browser flavor: the confined admin still gets a real session (lands in
-    // /admin with no OTP step) — proving P1 is server-side DATA gating, not a
-    // login block that would make enrolment impossible.
-    await loginAsAdmin(page, { email, password: E2E_ADMIN_PASSWORD })
-    await expect(page).toHaveURL(/\/admin(\/|$|\?)/)
+    // Browser flavor: the confined admin still gets a real session — not a
+    // login BLOCK — proving P1 is server-side DATA gating. Since Audit Fix 1
+    // (the browser enrolment UI, tested below), the browser correctly shows
+    // the enrolment screen for this exact scenario (password-only login,
+    // 2FA-required, not yet enrolled) instead of silently landing on a
+    // confined `/admin` — so assert THAT, not a bare `/admin` navigation.
+    const secret = await loginAsAdminUntilEnrollStep(page, { email, password: E2E_ADMIN_PASSWORD })
+    expect(secret, 'confined admin reaches the enrolment screen, not a login block').toBeTruthy()
   })
 
   test('Audit Fix 1: an un-enrolled admin completes Google-OTP enrolment through the browser UI (ref 1-6)', async ({

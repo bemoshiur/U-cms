@@ -27,8 +27,18 @@ export type PopupItem = {
 const DISMISS_KEY_PREFIX = 'ucms-popup-dismissed-'
 /** "Close for a day" (하루닫기) suppression window. */
 const DISMISS_TTL_MS = 24 * 60 * 60 * 1000
-/** Per-popup cascade so simultaneous popups don't stack illegibly on top of each other. */
-const CASCADE_OFFSET_PX = 28
+/**
+ * Per-popup cascade so simultaneous popups don't visually overlap. Larger
+ * than the collection's default stored geometry (`Popups.ts`'s
+ * `geometryField` defaults width/height to 400/300px, top/left to 100px), so
+ * two popups left at their defaults — the common case, since most operators
+ * never reposition a popup expecting only one to show at a time — land in
+ * genuinely disjoint screen regions. A small offset (e.g. 28px) is not enough
+ * to prevent overlap between two ~400x300 boxes started at nearly the same
+ * position, which previously let one popup's image intercept clicks meant for
+ * another popup's close button underneath.
+ */
+const CASCADE_OFFSET_PX = 440
 
 /**
  * Ids closed THIS SESSION (button click without necessarily persisting a
@@ -159,6 +169,10 @@ export function PopupLayer({ popups }: { popups: PopupItem[] }) {
   return (
     <div className="popup-layer">
       {visible.map((popup, index) => {
+        // The FIRST popup keeps its admin-configured position (the common,
+        // legacy-matching single-popup case). Every subsequent popup cascades
+        // by a fixed, generously-sized offset (see CASCADE_OFFSET_PX) so it
+        // lands clear of the popups before it.
         const style: React.CSSProperties = {
           top: popup.top + index * CASCADE_OFFSET_PX,
           left: popup.left + index * CASCADE_OFFSET_PX,

@@ -827,7 +827,12 @@ export const richBoardsAndPostsStep: SeedStep = {
       isIntegrated: true,
       boardForm: 'list',
       attachmentsEnabled: true,
-      headerNotice: 'Official notices and announcements.',
+      // Deliberately NOT setting `headerNotice` here: `publicSiteStep` (runs
+      // earlier) sets this board's header notice to a string containing an XSS
+      // probe that `board-browse.e2e.spec.ts` asserts gets sanitized on render.
+      // `ensureBoard`'s merge is an unconditional overwrite, so setting a plain
+      // value here would clobber that probe on every seed run — a recurring
+      // e2e flake fixed by simply not owning this field for this ONE board.
     })
     const pressBoardId = await ensureBoard(payload, tenantId, 'Press Releases', {
       boardType: await boardTypeIdByCode(payload, 'PG0010'),
