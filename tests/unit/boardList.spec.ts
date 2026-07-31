@@ -67,8 +67,8 @@ describe('formatPostCell', () => {
   it('renders the row number, dates, attachment count, relationship label, and content', () => {
     expect(formatPostCell(post, 'number', 7)).toBe('7')
     expect(formatPostCell(post, 'title', 1)).toBe('Hello')
-    expect(formatPostCell(post, 'registrationDate', 1)).toBe('2026-07-01T00:00:00.000Z')
-    expect(formatPostCell(post, 'modificationDate', 1)).toBe('2026-07-02T00:00:00.000Z')
+    expect(formatPostCell(post, 'registrationDate', 1)).toBe('2026-07-01')
+    expect(formatPostCell(post, 'modificationDate', 1)).toBe('2026-07-02')
     expect(formatPostCell(post, 'department', 1)).toBe('Records')
     expect(formatPostCell(post, 'attachment', 1)).toBe('2')
     expect(formatPostCell(post, 'content', 1)).toContain('body text')

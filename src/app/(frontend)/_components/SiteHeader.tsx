@@ -6,6 +6,7 @@ import type { Media, Site } from '@/payload-types'
 import type { CurrentMember } from '@/site/member'
 import type { GuideMenu, NavNode, ResolvedLink } from '@/site/nav'
 import { orderedGuideMenus, resolveGuideLink } from '@/site/nav'
+import { BrandLogo } from './BrandLogo'
 import { NavLink } from './NavLink'
 import { PrimaryNav } from './PrimaryNav'
 
@@ -100,18 +101,13 @@ export function SiteHeader({
       <div className="site-header__main">
         <div className="site-header__inner">
           <Link href="/" className="site-brand" aria-label={`${siteName} home`}>
-            {logo?.url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- same-origin CMS asset; avoids next/image remote-loader config
-              <img
-                className="site-brand__logo"
-                src={logo.url}
-                alt={logo.alt || siteName}
-                width={logo.width ?? undefined}
-                height={logo.height ?? undefined}
-              />
-            ) : (
-              <span className="site-brand__name">{siteName}</span>
-            )}
+            <BrandLogo
+              logoUrl={logo?.url}
+              alt={logo?.alt || siteName}
+              width={logo?.width ?? undefined}
+              height={logo?.height ?? undefined}
+              name={siteName}
+            />
           </Link>
 
           <details className="site-nav">

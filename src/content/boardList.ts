@@ -95,9 +95,11 @@ export function formatPostCell(
     case 'number':
       return String(rowNumber)
     case 'registrationDate':
-      return typeof post.createdAt === 'string' ? post.createdAt : ''
+      // eGov board tables show the date only (YYYY-MM-DD), not the raw ISO
+      // timestamp. createdAt is an ISO string (YYYY-MM-DDTHH:mm:ss.sssZ).
+      return typeof post.createdAt === 'string' ? post.createdAt.slice(0, 10) : ''
     case 'modificationDate':
-      return typeof post.updatedAt === 'string' ? post.updatedAt : ''
+      return typeof post.updatedAt === 'string' ? post.updatedAt.slice(0, 10) : ''
     case 'attachment':
       return String(Array.isArray(post.attachments) ? post.attachments.length : 0)
     case 'content':
