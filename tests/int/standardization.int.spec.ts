@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import config from '@/payload.config'
 import { runSeed } from '@/seed'
 import { adminMenusStep } from '@/seed/steps/adminMenus'
+import { codesStep } from '@/seed/steps/codes'
 import { rolesStep } from '@/seed/steps/roles'
 import { superAdminStep } from '@/seed/steps/superAdmin'
 import { standardizationRolesStep } from '@/seed/steps/standardizationRoles'
@@ -117,6 +118,7 @@ describe('Task 8.1a — standardization dictionaries + code-spec report + DBA ro
       adminMenusStep,
       rolesStep,
       superAdminStep,
+      codesStep,
       standardizationRolesStep,
       standardizationPreloadStep,
     ])
