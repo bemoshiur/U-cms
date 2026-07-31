@@ -524,9 +524,88 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
     })
   })
 
-  // ── Part 1 — the log-of-logs CSV export (privacy officer) ──────────────────
-  describe('personal-info log CSV export (log-of-logs)', () => {
-    it('gates on privacy.personalInfoLogs and masks viewer/subject/IP', async () => {
+  // ── Part 1 — the log-of-logs CSV export (purpose-gated; Audit Fix 4) ───────
+  describe('personal-info log CSV export (log-of-logs) — purpose-gated (Audit Fix 4, ref 3-8 callout 5-6)', () => {
+    async function auditOfAuditsCount(): Promise<number> {
+      return (
+        await payload.find({
+          collection: 'personalInfoAccessLogs',
+          where: {
+            and: [
+              { action: { equals: 'export' } },
+              { screen: { equals: 'personal-info-log-export' } },
+            ],
+          },
+          pagination: false,
+          overrideAccess: true,
+        })
+      ).totalDocs
+    }
+
+    it('(a) REJECTS an export with no/blank purpose (400, server-enforced) and writes NO audit row', async () => {
+      const officer = await makeAdmin(['privacy.personalInfoLogs'], [])
+      const before = await auditOfAuditsCount()
+
+      const resp = await handlePersonalInfoLogsExport({
+        payload,
+        req: fakeReq({
+          pathname: '/api/personalInfoAccessLogs/history/export',
+          user: officer,
+          body: {},
+        }),
+      })
+      expect(resp.status).toBe(400)
+      const body = (await resp.json()) as { ok: boolean }
+      expect(body.ok).toBe(false)
+      // Not a CSV: no attachment header on the rejection.
+      expect(resp.headers.get('Content-Disposition')).toBeNull()
+
+      // A blank (whitespace-only) purpose is rejected the same way.
+      const blankResp = await handlePersonalInfoLogsExport({
+        payload,
+        req: fakeReq({
+          pathname: '/api/personalInfoAccessLogs/history/export',
+          user: officer,
+          body: { purpose: '   ' },
+        }),
+      })
+      expect(blankResp.status).toBe(400)
+
+      expect(await auditOfAuditsCount()).toBe(before)
+    })
+
+    it('(c) rejects a caller WITHOUT privacy.personalInfoLogs — 403 whether or not a purpose is supplied', async () => {
+      const roleless = await makeAdmin([], [])
+
+      // Purpose present: passes the purpose gate, then is rejected by the
+      // access check (403) — this is the case the order-of-operations
+      // (purpose gate BEFORE access check, matching memberExport.ts) allows
+      // to actually reach the 403 branch.
+      const deniedWithPurpose = await handlePersonalInfoLogsExport({
+        payload,
+        req: fakeReq({
+          pathname: '/api/personalInfoAccessLogs/history/export',
+          user: roleless,
+          body: { purpose: unique('reason') },
+        }),
+      })
+      expect(deniedWithPurpose.status).toBe(403)
+
+      // Purpose absent: the purpose gate (step 1) fires first per the mandated
+      // order, so this is rejected 400 rather than 403 — still rejected either
+      // way, and the grant is never consulted (no audit row is written).
+      const deniedNoPurpose = await handlePersonalInfoLogsExport({
+        payload,
+        req: fakeReq({
+          pathname: '/api/personalInfoAccessLogs/history/export',
+          user: roleless,
+          body: {},
+        }),
+      })
+      expect(deniedNoPurpose.status).toBe(400)
+    })
+
+    it('(b) EXPORTS with a valid purpose + grant: 200, masks viewer/subject/IP, and writes exactly one new audit-of-audits row carrying that purpose', async () => {
       const member = await makeMember(siteA)
       await recordPersonalInfoAccess(payload, {
         subjectMember: member as never,
@@ -537,26 +616,48 @@ describe('Task 6A — personal-info access logging + purpose-gated export', () =
         ipAddress: '203.0.113.55',
       })
 
-      // Roleless → 403.
-      const roleless = await makeAdmin([], [])
-      const denied = await handlePersonalInfoLogsExport({
-        payload,
-        req: fakeReq({ user: roleless }),
-      })
-      expect(denied.status).toBe(403)
-
-      // Privacy officer → 200, masked.
       const officer = await makeAdmin(['privacy.personalInfoLogs'], [])
+      const before = await auditOfAuditsCount()
+      const purpose = unique('audit-of-audits-reason')
+
       const ok = await handlePersonalInfoLogsExport({
         payload,
-        req: fakeReq({ user: officer }),
-        searchParams: new URLSearchParams(`keyword=${member.id}`),
+        req: fakeReq({
+          pathname: '/api/personalInfoAccessLogs/history/export',
+          user: officer,
+          body: { purpose, purposeCategory: 'export', keyword: String(member.id) },
+        }),
       })
       expect(ok.status).toBe(200)
       const csv = await ok.text()
       expect(csv).toContain('203.0.113.*')
       expect(csv).not.toContain('203.0.113.55')
       expect(csv).not.toContain('secretadmin')
+
+      // Exactly one NEW audit-of-audits row, carrying the purpose as evidence.
+      expect(await auditOfAuditsCount()).toBe(before + 1)
+      const evidence = (
+        await payload.find({
+          collection: 'personalInfoAccessLogs',
+          where: {
+            and: [{ action: { equals: 'export' } }, { purposeDetail: { equals: purpose } }],
+          },
+          overrideAccess: true,
+        })
+      ).docs[0]!
+      expect(evidence).toBeDefined()
+      expect(evidence.screen).toBe('personal-info-log-export')
+      expect(evidence.purposeCategory).toBe('export')
+      expect(evidence.subjectLabel).toBe('(access-history export)')
+      // Immutable, like every other personalInfoAccessLogs row.
+      await expect(
+        payload.update({
+          collection: 'personalInfoAccessLogs',
+          id: evidence.id,
+          data: { purposeDetail: 'tampered' },
+          overrideAccess: true,
+        }),
+      ).rejects.toThrow()
     })
   })
 })

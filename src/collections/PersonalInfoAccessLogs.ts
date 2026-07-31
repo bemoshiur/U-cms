@@ -72,6 +72,15 @@ export const PersonalInfoAccessLogs: CollectionConfig = {
       'viewerLabel',
     ],
     hidden: ({ user }) => !hasMenuAccessSync(user, PERSONAL_INFO_LOGS_MENU_KEY),
+    components: {
+      // Audit Fix 4 (ref 3-8 callout 5-6): the log-of-logs LIST screen surfaces
+      // the purpose-gated CSV export via a modal that collects the 열람목적 and
+      // POSTs it to the `POST /history/export` endpoint above (same
+      // beforeListTable wiring pattern as `MemberExportButton` on `Members`).
+      beforeListTable: [
+        '/components/privacy/PersonalInfoLogsExportButton#PersonalInfoLogsExportButton',
+      ],
+    },
   },
   // Newest first (ref 3-8 list is most-recent-first).
   defaultSort: '-occurredAt',
