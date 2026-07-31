@@ -4,7 +4,21 @@ import React from 'react'
 import { TERMS_CATEGORIES, isTermsCategory, termsCategoryDef } from '@/content/terms'
 import { loadActiveTerms, loadTermsHistory } from '@/site/terms'
 import { getActiveSite, getPayloadClient } from '@/site/rsc'
+import { Breadcrumb } from '../../_components/Breadcrumb'
 import { RichTextContent } from '../../_components/RichTextContent'
+
+/**
+ * ISR: pure public content — this route makes no member/session read at all
+ * (unlike the board/content routes, which gate on `getCurrentMember`). The
+ * shared root layout still reads the session for the header's login/profile
+ * link, which forces the whole `(frontend)` tree to render dynamically per
+ * request in Next's model — so, like the other routes, the cache win here is
+ * the `unstable_cache`-wrapped shell resolvers rather than a fully static
+ * page. `revalidate` is kept for Data Cache defaults + consistency, and so
+ * this segment is ready to serve from the full route cache without changes
+ * if the layout's session read is ever narrowed to a client island.
+ */
+export const revalidate = 300
 
 /** Formats an ISO date to `YYYY-MM-DD`, or `—` when absent. */
 function fmtDate(value: string | null | undefined): string {
@@ -40,6 +54,7 @@ export default async function TermsPage({ params }: { params: Promise<{ category
 
   return (
     <div className="page page--terms">
+      <Breadcrumb trail={[]} currentLabel={active?.title || def.label} />
       <p className="page__eyebrow">Privacy &amp; Terms</p>
       <h1 className="page__title">{active?.title || def.label}</h1>
 

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import React from 'react'
 
@@ -5,11 +6,20 @@ import { detailColumns } from '@/content/boardList'
 import { resolveVisiblePost } from '@/site/access'
 import { boardKind, incrementViewCount, loadBoardDetail, loadPostForRender } from '@/site/board'
 import { getCurrentMember } from '@/site/member'
-import { buildBreadcrumb } from '@/site/nav'
+import { buildBreadcrumb, buildNav } from '@/site/nav'
 import { getActiveSite, getActiveSiteMenus, getPayloadClient } from '@/site/rsc'
 import { Breadcrumb } from '../../../_components/Breadcrumb'
+import { hasLeftNav, LeftNav } from '../../../_components/LeftNav'
 import { menuIdForBoard } from '../../../_components/resolveBreadcrumbMenu'
 import { PostDetail } from '../../../_components/board/PostDetail'
+
+/**
+ * ISR: public board read. As with the list page, `getCurrentMember()` (needed
+ * for the visibility gate below) forces per-request dynamic rendering, so this
+ * doesn't statically cache the HTML — the cache win is the shared shell
+ * resolvers. Kept consistent with the other public content routes.
+ */
+export const revalidate = 300
 
 /**
  * Post detail route (`/board/[bbsId]/[postId]`, Task 4C — ref 2-5). Resolves the
@@ -58,13 +68,33 @@ export default async function PostDetailPage({
 
   const menuId = menuIdForBoard(menus, bbsId)
   const trail = menuId !== undefined ? buildBreadcrumb(menus, menuId) : []
+  const navNodes = buildNav(menus, { member })
+  const showLnb = hasLeftNav(navNodes, menuId)
+
+  const content = (
+    <>
+      <h1 className="page__title">{post.title}</h1>
+      <p className="page__meta">In {board.name}</p>
+      <PostDetail post={post} columns={detailColumns(board)} isQna={boardKind(board) === 'qna'} />
+      <div className="post-detail__actions">
+        <Link href={`/board/${bbsId}`} className="button button--ghost">
+          목록 (List)
+        </Link>
+      </div>
+    </>
+  )
 
   return (
     <div className="page page--post">
       <Breadcrumb trail={trail} currentLabel={post.title} />
-      <h1 className="page__title">{post.title}</h1>
-      <p className="page__meta">In {board.name}</p>
-      <PostDetail post={post} columns={detailColumns(board)} isQna={boardKind(board) === 'qna'} />
+      {showLnb ? (
+        <div className="page-shell">
+          <LeftNav nodes={navNodes} activeMenuId={menuId} />
+          <div className="page-shell__main">{content}</div>
+        </div>
+      ) : (
+        content
+      )}
     </div>
   )
 }

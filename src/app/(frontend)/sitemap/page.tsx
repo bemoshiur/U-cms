@@ -13,6 +13,13 @@ export const metadata: Metadata = {
   description: 'Full navigation map of the site.',
 }
 
+/**
+ * ISR: pure public content (the menu tree, filtered for the visitor). Same
+ * dynamic-rendering tradeoff as the other routes — see the note on the board
+ * list page — the real cache win is the shell resolvers in `src/site/rsc.ts`.
+ */
+export const revalidate = 300
+
 /** Recursively renders a nav subtree as a nested list (accessible, semantic). */
 function SitemapNode({ node }: { node: NavNode }) {
   return (

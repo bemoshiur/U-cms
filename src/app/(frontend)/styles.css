@@ -1379,7 +1379,8 @@ h3 {
   text-decoration: none;
   color: var(--ink);
 }
-.gallery__thumb {
+.gallery__thumb,
+.gallery__thumb--empty {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
@@ -1878,4 +1879,3 @@ h3 {
     width: 100%;
   }
 }
-</content>

@@ -4,13 +4,21 @@ import React from 'react'
 import { resolveVisibleContentPage } from '@/site/access'
 import { dataManagerEnabled, resolveDataManager } from '@/site/board'
 import { getCurrentMember } from '@/site/member'
-import { buildBreadcrumb, visibleMenuIds } from '@/site/nav'
+import { buildBreadcrumb, buildNav, visibleMenuIds } from '@/site/nav'
 import { loadSatisfactionSummary, memberHasRated } from '@/site/satisfaction'
 import { getActiveSite, getActiveSiteMenus, getPayloadClient } from '@/site/rsc'
 import { Breadcrumb } from '../../_components/Breadcrumb'
+import { hasLeftNav, LeftNav } from '../../_components/LeftNav'
 import { RichTextContent } from '../../_components/RichTextContent'
 import { PersonInCharge } from '../../_components/PersonInCharge'
 import { SatisfactionWidget } from '../../_components/SatisfactionWidget'
+
+/**
+ * ISR: pure public web-content page. `getCurrentMember()` (menu visibility +
+ * satisfaction "already rated" check) still forces per-request dynamic
+ * rendering, same tradeoff as the board routes — see the note there.
+ */
+export const revalidate = 300
 
 type RawSearch = Record<string, string | string[] | undefined>
 
@@ -64,6 +72,8 @@ export default async function ContentPage({
   const trail = buildBreadcrumb(menus, resolved.menu.id).filter(
     (item) => item.menu.id === resolved.menu.id || visibleIds.has(String(item.menu.id)),
   )
+  const navNodes = buildNav(menus, { member })
+  const showLnb = hasLeftNav(navNodes, resolved.menu.id)
 
   // Person-in-charge (담당자, ref 2-3) — ONLY when the site toggle is on.
   const person = dataManagerEnabled(site)
@@ -79,9 +89,8 @@ export default async function ContentPage({
       ? await memberHasRated(payload, site.id, pageKey, member.id)
       : false
 
-  return (
-    <div className="page page--content">
-      <Breadcrumb trail={trail} />
+  const content = (
+    <>
       <h1 className="page__title">{resolved.content.title || resolved.menu.name}</h1>
       <RichTextContent className="rich-text" data={resolved.content.content} />
       {person && <PersonInCharge person={person} />}
@@ -95,6 +104,20 @@ export default async function ContentPage({
           error={firstParam(raw, 'rateError')}
         />
       ) : null}
+    </>
+  )
+
+  return (
+    <div className="page page--content">
+      <Breadcrumb trail={trail} />
+      {showLnb ? (
+        <div className="page-shell">
+          <LeftNav nodes={navNodes} activeMenuId={resolved.menu.id} />
+          <div className="page-shell__main">{content}</div>
+        </div>
+      ) : (
+        content
+      )}
     </div>
   )
 }

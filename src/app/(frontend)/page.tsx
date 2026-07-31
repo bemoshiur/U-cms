@@ -4,7 +4,6 @@ import React from 'react'
 
 import { branding } from '@/branding'
 import type { Post } from '@/payload-types'
-import { isActiveNotice } from '@/content/boardList'
 import { loadBoardDetail, loadBoardListPage } from '@/site/board'
 import { getCurrentMember } from '@/site/member'
 import { buildNav, isBoardMenuAccessible, type NavNode } from '@/site/nav'

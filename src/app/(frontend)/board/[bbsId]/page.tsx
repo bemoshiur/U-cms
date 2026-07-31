@@ -13,10 +13,11 @@ import {
   loadGalleryPosts,
 } from '@/site/board'
 import { getCurrentMember } from '@/site/member'
-import { buildBreadcrumb, isBoardMenuAccessible } from '@/site/nav'
+import { buildBreadcrumb, buildNav, isBoardMenuAccessible } from '@/site/nav'
 import { getActiveSite, getActiveSiteMenus, getPayloadClient } from '@/site/rsc'
 import { Breadcrumb } from '../../_components/Breadcrumb'
 import { AdminHtml } from '../../_components/AdminHtml'
+import { hasLeftNav, LeftNav } from '../../_components/LeftNav'
 import { menuIdForBoard } from '../../_components/resolveBreadcrumbMenu'
 import { FaqAccordion } from '../../_components/board/FaqAccordion'
 import { GalleryGrid } from '../../_components/board/GalleryGrid'
@@ -25,6 +26,18 @@ import { PostListTable } from '../../_components/board/PostListTable'
 import { QnaList } from '../../_components/board/QnaList'
 import { SearchForm } from '../../_components/board/SearchForm'
 import type { SearchValues } from '../../_components/board/SearchForm'
+
+/**
+ * ISR: the board list is public content. The route still renders dynamically
+ * per request because `getCurrentMember()` reads `headers()` (needed for the
+ * member-gating check below and the Q&A ask form) — Next forces dynamic
+ * rendering wherever a dynamic API is read, so this doesn't statically cache
+ * the HTML. It DOES set the segment's Data Cache default, and keeps this page
+ * consistent with the ISR'd content routes; the real cache win is the
+ * `unstable_cache`-wrapped shell resolvers in `src/site/rsc.ts`, which still
+ * serve the menus/site without re-querying Payload on a warm cache.
+ */
+export const revalidate = 300
 
 type RawSearch = Record<string, string | string[] | undefined>
 
@@ -100,6 +113,8 @@ export default async function BoardListPage({
 
   const menuId = menuIdForBoard(menus, bbsId)
   const trail = menuId !== undefined ? buildBreadcrumb(menus, menuId) : []
+  const navNodes = buildNav(menus, { member })
+  const showLnb = hasLeftNav(navNodes, menuId)
   const kind = boardKind(board)
   const basePath = `/board/${bbsId}`
 
@@ -175,11 +190,24 @@ export default async function BoardListPage({
     )
   }
 
+  const heading = (
+    <>
+      <h1 className="page__title">{board.name}</h1>
+      {body}
+    </>
+  )
+
   return (
     <div className="page page--board">
       <Breadcrumb trail={trail} currentLabel={board.name} />
-      <h1 className="page__title">{board.name}</h1>
-      {body}
+      {showLnb ? (
+        <div className="page-shell">
+          <LeftNav nodes={navNodes} activeMenuId={menuId} />
+          <div className="page-shell__main">{heading}</div>
+        </div>
+      ) : (
+        heading
+      )}
     </div>
   )
 }
