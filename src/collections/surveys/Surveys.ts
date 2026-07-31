@@ -5,6 +5,7 @@ import { tenantMembershipGuard, tenantScopedMenuAccess } from '../../access/tena
 import { auditCollection } from '../../audit/auditCollection'
 import { surveyStatus, windowHasOpened } from '../../content/survey'
 import { surveyExportEndpoints } from '../../endpoints/surveyExport'
+import { surveyResultsEndpoints } from '../../endpoints/surveyResults'
 import { SURVEYS_MENU_KEY } from './defaults'
 
 /** Access-history audit hooks (Task 2A) for this collection's mutations. */
@@ -66,6 +67,18 @@ export const Surveys: CollectionConfig = {
     useAsTitle: 'title',
     defaultColumns: ['title', 'audience', 'openFrom', 'openTo', 'isActive'],
     hidden: ({ user }) => !hasMenuAccessSync(user, SURVEYS_MENU_KEY),
+    components: {
+      edit: {
+        // Audit Fix 5 (ref 2-12): `resultsVisible(survey, 'admin')` is
+        // unconditionally true, but until now nothing called it — there was no
+        // admin UI for a survey's aggregate results at all (only the raw CSV
+        // exports). This mounts a "View results" panel on the survey EDIT
+        // screen, gated identically to those exports (GET
+        // /api/surveys/:id/results, `src/endpoints/surveyResults.ts`) — see
+        // `src/components/surveys/SurveyResultsPanel.tsx`.
+        beforeDocumentControls: ['/components/surveys/SurveyResultsPanel#SurveyResultsPanel'],
+      },
+    },
   },
   access: {
     create: tenantScopedMenuAccess(SURVEYS_MENU_KEY),
@@ -191,8 +204,9 @@ export const Surveys: CollectionConfig = {
     },
   ],
   // Access-gated, tenant-scoped CSV exports (ref 2-12): summary aggregate +
-  // raw per-respondent. GET /api/surveys/:id/export/summary|responses.
-  endpoints: surveyExportEndpoints,
+  // raw per-respondent. GET /api/surveys/:id/export/summary|responses. Plus
+  // the JSON results endpoint (Audit Fix 5) the admin results panel fetches.
+  endpoints: [...surveyExportEndpoints, ...surveyResultsEndpoints],
   hooks: {
     beforeValidate: [tenantMembershipGuard('tenant')],
     beforeChange: [latchStartedAt],
