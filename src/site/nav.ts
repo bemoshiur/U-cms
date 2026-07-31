@@ -344,22 +344,57 @@ export type GuideMenu = {
 }
 
 /**
- * Resolves a guide menu's link from its `linkType` (ref 1-46/1-52/1-53),
- * re-validating exactly like {@link resolveMenuLink}: `external` must be an
- * http(s) URL, `internal` must be a safe site-relative path; anything else is
- * non-clickable.
+ * The internal/external link fields shared by guide menus AND the Task-3C
+ * display collections (banners, notification areas, popups — see
+ * `src/collections/display/shared.ts`'s `linkFields()`). Popups have no
+ * `newWindow` (they open in their own geometry-controlled box), so it is
+ * optional here too.
  */
-export function resolveGuideLink(guide: GuideMenu): ResolvedLink {
-  if (guide.linkType === 'external') {
-    const url = typeof guide.linkExternal === 'string' ? guide.linkExternal.trim() : ''
+export type DisplayLinkFields = {
+  linkType?: 'internal' | 'external' | string | null
+  linkInternal?: string | null
+  linkExternal?: string | null
+  newWindow?: boolean | null
+}
+
+/**
+ * Resolves a `linkType`/`linkInternal`/`linkExternal`/`newWindow` field-set to
+ * a {@link ResolvedLink}, re-validating exactly like {@link resolveMenuLink}:
+ * `external` must be an http(s) URL, `internal` must be a safe site-relative
+ * path (defense in depth — the collections already validate on write, this is
+ * the render-time belt-and-suspenders check); anything else is non-clickable.
+ * The shared implementation behind both {@link resolveGuideLink} (top/bottom
+ * utility bars) and {@link resolveDisplayLink} (banners / notification areas /
+ * popups) — same field shape, same rule.
+ */
+function resolveLinkFields(fields: DisplayLinkFields): ResolvedLink {
+  if (fields.linkType === 'external') {
+    const url = typeof fields.linkExternal === 'string' ? fields.linkExternal.trim() : ''
     return isHttpUrl(url)
-      ? { kind: 'link', href: url, external: true, newWindow: Boolean(guide.newWindow) }
+      ? { kind: 'link', href: url, external: true, newWindow: Boolean(fields.newWindow) }
       : { kind: 'none' }
   }
-  const url = typeof guide.linkInternal === 'string' ? guide.linkInternal.trim() : ''
+  const url = typeof fields.linkInternal === 'string' ? fields.linkInternal.trim() : ''
   return isSafeInternalLink(url)
-    ? { kind: 'link', href: url, external: false, newWindow: Boolean(guide.newWindow) }
+    ? { kind: 'link', href: url, external: false, newWindow: Boolean(fields.newWindow) }
     : { kind: 'none' }
+}
+
+/**
+ * Resolves a guide menu's link from its `linkType` (ref 1-46/1-52/1-53). See
+ * {@link resolveLinkFields}.
+ */
+export function resolveGuideLink(guide: GuideMenu): ResolvedLink {
+  return resolveLinkFields(guide)
+}
+
+/**
+ * Resolves a banner / notification-area / popup link from its `linkType`
+ * (ref 1-45/1-46/1-48/1-51/1-52 — the shared display-collection field-set).
+ * See {@link resolveLinkFields}.
+ */
+export function resolveDisplayLink(item: DisplayLinkFields): ResolvedLink {
+  return resolveLinkFields(item)
 }
 
 /**

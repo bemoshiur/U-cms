@@ -114,6 +114,26 @@ export function isSafeInternalLink(value: unknown): boolean {
   }
 }
 
+/** The shape `sortByDisplayOrder` needs (banners / notification areas). */
+export type DisplayOrderItem = { displayOrder?: number | null }
+
+/**
+ * Stable ascending sort by `displayOrder` (lower first; ties keep original
+ * order) — the READ-side counterpart to the admin `reorder` move, shared by
+ * the Phase-4 banner/notification-area renderers (popups have no
+ * `displayOrder`, so they skip this). Pure and non-mutating.
+ */
+export function sortByDisplayOrder<T extends DisplayOrderItem>(items: readonly T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const ao = a.item.displayOrder ?? 0
+      const bo = b.item.displayOrder ?? 0
+      return ao !== bo ? ao - bo : a.index - b.index
+    })
+    .map(({ item }) => item)
+}
+
 /** The four exposure-order moves (노출순서 최상위/상위/하위/최하위). */
 export type OrderMove = 'top' | 'up' | 'down' | 'bottom'
 

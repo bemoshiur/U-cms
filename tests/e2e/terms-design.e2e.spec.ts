@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+import { dismissPopups } from './helpers/popup'
+
 /**
  * Task 4E e2e — the versioned terms pages, the satisfaction widget, and the
  * cohesive design pass (screenshots at mobile + desktop + basic accessibility:
@@ -41,6 +43,9 @@ test.describe('Task 4E — terms, satisfaction, design', () => {
   test('content page shows the satisfaction widget and accepts a rating', async ({ page }) => {
     // Reach a content page via the sitemap (robust to the seeded menu number).
     await page.goto('/sitemap')
+    // The demo site's seeded popup (Task 4E) is site-wide — close it first so
+    // it doesn't obscure the sitemap link.
+    await dismissPopups(page)
     await page.getByRole('link', { name: 'Introduction' }).first().click()
     await expect(page).toHaveURL(/\/page\/\d+/)
 

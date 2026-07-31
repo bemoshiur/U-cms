@@ -20,9 +20,13 @@ import { unstable_cache } from 'next/cache'
 import { getPayload } from 'payload'
 import { cache } from 'react'
 
-import type { GuideMenu, Menu, Site } from '../payload-types'
+import { isLive, sortByDisplayOrder } from '../content/display'
+import type { Banner, GuideMenu, Menu, NotificationArea, Popup, Site } from '../payload-types'
 import {
+  getBanners as getBannersRaw,
   getGuideMenus as getGuideMenusRaw,
+  getNotificationAreas as getNotificationAreasRaw,
+  getPopups as getPopupsRaw,
   getSiteMenus as getSiteMenusRaw,
   resolveSiteRecord,
 } from './data'
@@ -59,6 +63,33 @@ const cachedGuideMenus = unstable_cache(
   { revalidate: SHELL_REVALIDATE, tags: SHELL_TAGS },
 )
 
+/**
+ * Banners / notification areas / popups (Task 4E; refs 1-45..1-53, 2-1). The
+ * cache holds EVERY row for the site (live + not-yet-live + expired) — the
+ * exposure window is time-sensitive, so `isLive` filtering happens per-request
+ * in the `getActive*` loaders below, never baked into the cross-request cache.
+ */
+const cachedBanners = unstable_cache(
+  async (siteId: number | string): Promise<Banner[]> =>
+    getBannersRaw(await getPayloadClient(), siteId),
+  ['public-banners'],
+  { revalidate: SHELL_REVALIDATE, tags: SHELL_TAGS },
+)
+
+const cachedNotificationAreas = unstable_cache(
+  async (siteId: number | string): Promise<NotificationArea[]> =>
+    getNotificationAreasRaw(await getPayloadClient(), siteId),
+  ['public-notification-areas'],
+  { revalidate: SHELL_REVALIDATE, tags: SHELL_TAGS },
+)
+
+const cachedPopups = unstable_cache(
+  async (siteId: number | string): Promise<Popup[]> =>
+    getPopupsRaw(await getPayloadClient(), siteId),
+  ['public-popups'],
+  { revalidate: SHELL_REVALIDATE, tags: SHELL_TAGS },
+)
+
 /** The active public site for this request, or `null` when none is resolvable. */
 export const getActiveSite = cache(async (): Promise<Site | null> => cachedActiveSite())
 
@@ -75,3 +106,42 @@ export const getActiveGuideMenus = cache(
     return site ? cachedGuideMenus(site.id, position) : []
   },
 )
+
+/**
+ * The active site's LIVE banners, ordered by `displayOrder` (Task 4E). Reads
+ * the cached (possibly stale-by-up-to-5-min) full row set, then applies
+ * `isLive` against `new Date()` for THIS request — so a banner's exposure
+ * window is always correct even between cache revalidations, at the cost of
+ * never bypassing Payload for the live-ness check itself (cheap, in-memory).
+ */
+export const getActiveBanners = cache(async (): Promise<Banner[]> => {
+  const site = await getActiveSite()
+  if (!site) {
+    return []
+  }
+  const all = await cachedBanners(site.id)
+  return sortByDisplayOrder(all.filter((banner) => isLive(banner)))
+})
+
+/** The active site's LIVE notification areas, ordered by `displayOrder`. See {@link getActiveBanners}. */
+export const getActiveNotificationAreas = cache(async (): Promise<NotificationArea[]> => {
+  const site = await getActiveSite()
+  if (!site) {
+    return []
+  }
+  const all = await cachedNotificationAreas(site.id)
+  return sortByDisplayOrder(all.filter((area) => isLive(area)))
+})
+
+/**
+ * The active site's LIVE popups (no `displayOrder` — the collection has none;
+ * render order follows the DB's natural order). See {@link getActiveBanners}.
+ */
+export const getActivePopups = cache(async (): Promise<Popup[]> => {
+  const site = await getActiveSite()
+  if (!site) {
+    return []
+  }
+  const all = await cachedPopups(site.id)
+  return all.filter((popup) => isLive(popup))
+})

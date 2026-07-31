@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+import { dismissPopups } from './helpers/popup'
+
 /**
  * Public survey flow (Task 4D). Assumes the DB was seeded (`pnpm seed` →
  * `surveysStep`: one OPEN, `duringAndAfter`, audience-`anyone` survey with a
@@ -9,6 +11,9 @@ import { expect, test } from '@playwright/test'
 test.describe('Public survey frontend', () => {
   test('open survey → answer → submit → see results', async ({ page }) => {
     await page.goto('/survey')
+    // The demo site's seeded popup (Task 4E) is site-wide — close it first so
+    // it doesn't obscure the survey link/form below it.
+    await dismissPopups(page)
 
     const link = page.getByRole('link', { name: 'Demo satisfaction survey' })
     await expect(link).toBeVisible()

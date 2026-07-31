@@ -7,8 +7,16 @@ import type { Post } from '@/payload-types'
 import { loadBoardDetail, loadBoardListPage } from '@/site/board'
 import { getCurrentMember } from '@/site/member'
 import { buildNav, isBoardMenuAccessible, type NavNode } from '@/site/nav'
-import { getActiveSite, getActiveSiteMenus, getPayloadClient } from '@/site/rsc'
+import {
+  getActiveBanners,
+  getActiveNotificationAreas,
+  getActiveSite,
+  getActiveSiteMenus,
+  getPayloadClient,
+} from '@/site/rsc'
+import { BannerStrip } from './_components/BannerStrip'
 import { NavLink } from './_components/NavLink'
+import { NotificationTiles } from './_components/NotificationTiles'
 
 /** ISR: pure public content, no per-visitor state in the cached HTML. */
 export const revalidate = 300
@@ -53,10 +61,12 @@ function firstBoardBbsId(nodes: NavNode[]): string | undefined {
  * read (page-cached via `revalidate`).
  */
 export default async function HomePage() {
-  const [site, menus, member] = await Promise.all([
+  const [site, menus, member, banners, notificationAreas] = await Promise.all([
     getActiveSite(),
     getActiveSiteMenus(),
     getCurrentMember(),
+    getActiveBanners(),
+    getActiveNotificationAreas(),
   ])
   const nodes = buildNav(menus, { member })
   const siteName = site?.name ?? branding.productName
@@ -112,6 +122,8 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <BannerStrip banners={banners} />
+
       <div className="home__grid">
         {notices.length > 0 && (
           <section className="home-panel" aria-labelledby="notices-heading">
@@ -162,6 +174,8 @@ export default async function HomePage() {
           </section>
         )}
       </div>
+
+      <NotificationTiles areas={notificationAreas} />
     </div>
   )
 }

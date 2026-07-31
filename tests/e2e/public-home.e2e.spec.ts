@@ -32,6 +32,35 @@ test.describe('Public site', () => {
     await expect(footer).toContainText(/rights reserved/i)
   })
 
+  test('home renders the seeded live banner, notification tile, and site-wide popup', async ({
+    page,
+  }) => {
+    const response = await page.goto('/')
+    expect(response?.ok()).toBeTruthy()
+
+    // Banner strip (Task 4E, ref 2-1: the demo site seeds one active banner).
+    const bannerStrip = page.locator('section.banner-strip')
+    await expect(bannerStrip).toBeVisible()
+    await expect(bannerStrip.locator('img.banner-strip__img').first()).toBeVisible()
+
+    // Notification tiles (a third home-page section alongside Notices / Quick menu).
+    const notificationTiles = page.locator('section.notification-tiles')
+    await expect(notificationTiles).toBeVisible()
+    await expect(notificationTiles.locator('img.notification-tiles__img').first()).toBeVisible()
+
+    // Site-wide popup — client-rendered after hydration (useSyncExternalStore).
+    const popup = page.locator('.popup-window').first()
+    await expect(popup).toBeVisible()
+    await expect(popup.getByRole('button', { name: /close/i })).toBeVisible()
+
+    // Closing persists a "close for a day" suppression in localStorage — a
+    // reload should NOT bring the popup back.
+    await popup.getByRole('button', { name: /close/i }).click()
+    await expect(popup).toBeHidden()
+    await page.reload()
+    await expect(page.locator('.popup-window')).toHaveCount(0)
+  })
+
   test('sitemap route renders the menu tree', async ({ page }) => {
     const response = await page.goto('/sitemap')
     expect(response?.ok()).toBeTruthy()
