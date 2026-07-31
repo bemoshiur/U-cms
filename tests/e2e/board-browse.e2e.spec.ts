@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test'
 
+import { dismissPopups } from './helpers/popup'
+
 /**
  * Public board browse flow (Task 4C). Assumes the DB was seeded (`pnpm seed`,
  * which runs `publicSiteStep` → a Notices board menu + a notice post with an
@@ -23,6 +25,9 @@ test.describe('Public board frontend', () => {
     // Board list renders with the board name heading and the seeded post row.
     const listResponse = await page.goto(boardHref!)
     expect(listResponse?.ok()).toBeTruthy()
+    // The demo site's seeded popup (Task 4E) is site-wide and can overlay the
+    // top of the viewport — close it before clicking anything below it.
+    await dismissPopups(page)
     await expect(page.getByRole('heading', { level: 1, name: 'Notice' })).toBeVisible()
 
     // The admin HTML header notice is sanitized: the safe text renders, the

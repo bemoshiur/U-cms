@@ -8,6 +8,7 @@ import {
   isBoardMenuAccessible,
   isMenuVisible,
   orderedGuideMenus,
+  resolveDisplayLink,
   resolveGuideLink,
   resolveMenuLink,
   visibleFooterItems,
@@ -303,6 +304,46 @@ describe('site nav helpers (Task 4A)', () => {
         { id: 3, name: 'Off', displayOrder: 0, active: false },
       ]
       expect(orderedGuideMenus(guides).map((g) => g.name)).toEqual(['First', 'Second'])
+    })
+  })
+
+  describe('resolveDisplayLink (banners / notification areas / popups, Task 4E)', () => {
+    it('resolves external and internal links, skipping unsafe values', () => {
+      expect(resolveDisplayLink({ linkType: 'external', linkExternal: 'https://x.io' })).toEqual({
+        kind: 'link',
+        href: 'https://x.io',
+        external: true,
+        newWindow: false,
+      })
+      expect(resolveDisplayLink({ linkType: 'internal', linkInternal: '/promo' })).toEqual({
+        kind: 'link',
+        href: '/promo',
+        external: false,
+        newWindow: false,
+      })
+      expect(
+        resolveDisplayLink({ linkType: 'internal', linkInternal: 'javascript:alert(1)' }),
+      ).toEqual({ kind: 'none' })
+      expect(resolveDisplayLink({ linkType: 'external', linkExternal: '/relative' })).toEqual({
+        kind: 'none',
+      })
+    })
+
+    it('honors newWindow when present, defaults false when absent (popups)', () => {
+      expect(
+        resolveDisplayLink({
+          linkType: 'external',
+          linkExternal: 'https://x.io',
+          newWindow: true,
+        }),
+      ).toEqual({ kind: 'link', href: 'https://x.io', external: true, newWindow: true })
+      // Popups have no `newWindow` field at all — must not throw, defaults false.
+      expect(resolveDisplayLink({ linkType: 'internal', linkInternal: '/x' })).toEqual({
+        kind: 'link',
+        href: '/x',
+        external: false,
+        newWindow: false,
+      })
     })
   })
 })

@@ -22,7 +22,17 @@
 
 import type { Payload } from 'payload'
 
-import type { Board, GuideMenu, Menu, Post, Site, WebContent } from '../payload-types'
+import type {
+  Banner,
+  Board,
+  GuideMenu,
+  Menu,
+  NotificationArea,
+  Popup,
+  Post,
+  Site,
+  WebContent,
+} from '../payload-types'
 import { getPublicSiteId } from './config'
 
 /**
@@ -78,6 +88,54 @@ export async function getGuideMenus(
     collection: 'guideMenus',
     where: { and: [{ tenant: { equals: tenantId } }, { position: { equals: position } }] },
     depth: 0,
+    limit: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+  return found.docs
+}
+
+/**
+ * All banners for a site (tenant), populated one level deep so `image`
+ * carries its Media doc (url/alt). Returned unfiltered/unsorted — the RSC
+ * loader (`./rsc.ts`) live-filters (`isLive`) and orders (`displayOrder`)
+ * per-request, since exposure windows are time-sensitive and must not be
+ * baked into the cross-request cache.
+ */
+export async function getBanners(payload: Payload, tenantId: number | string): Promise<Banner[]> {
+  const found = await payload.find({
+    collection: 'banners',
+    where: { tenant: { equals: tenantId } },
+    depth: 1,
+    limit: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+  return found.docs
+}
+
+/** All notification areas for a site (tenant), populated one level deep. See {@link getBanners}. */
+export async function getNotificationAreas(
+  payload: Payload,
+  tenantId: number | string,
+): Promise<NotificationArea[]> {
+  const found = await payload.find({
+    collection: 'notificationAreas',
+    where: { tenant: { equals: tenantId } },
+    depth: 1,
+    limit: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+  return found.docs
+}
+
+/** All popups for a site (tenant), populated one level deep. See {@link getBanners}. */
+export async function getPopups(payload: Payload, tenantId: number | string): Promise<Popup[]> {
+  const found = await payload.find({
+    collection: 'popups',
+    where: { tenant: { equals: tenantId } },
+    depth: 1,
     limit: 0,
     pagination: false,
     overrideAccess: true,

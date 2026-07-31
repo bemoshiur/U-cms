@@ -4,6 +4,7 @@ import { getAdminToken, jsonAuth } from './helpers/api'
 import { loginAsAdmin } from './helpers/auth'
 import { E2E_SUPER } from './helpers/credentials'
 import { readFixtures } from './helpers/fixtures'
+import { dismissPopups } from './helpers/popup'
 
 /**
  * Suite 5 — Survey lifecycle, end-to-end (Task 7C, TODO 7.1).
@@ -57,6 +58,9 @@ test.describe('Survey lifecycle', () => {
     const anonPage = await anon.newPage()
     try {
       await anonPage.goto(`/survey/${surveyId}`)
+      // The demo site's seeded popup (Task 4E) is site-wide — close it first
+      // so it doesn't obscure the form below it.
+      await dismissPopups(anonPage)
       await expect(anonPage.getByRole('heading', { level: 1, name: title })).toBeVisible()
       await expect(anonPage.locator('legend.survey-question__text').first()).toContainText(
         questionText,

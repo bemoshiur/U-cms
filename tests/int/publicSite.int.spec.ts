@@ -5,7 +5,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import config from '@/payload.config'
 import { getPublicSiteId } from '@/site/config'
 import {
+  getBanners,
   getGuideMenus,
+  getNotificationAreas,
+  getPopups,
   getSiteMenus,
   resolveBoardByBbsId,
   resolveContentPage,
@@ -18,8 +21,23 @@ import { boardTypesStep } from '@/seed/steps/boardTypes'
 
 let payload: Payload
 
+const PNG_1x1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+  'base64',
+)
+
 function uniqueSiteId(label: string): string {
   return `t${label}${Date.now()}${Math.floor(Math.random() * 10000)}`.toLowerCase()
+}
+
+async function createMedia(payload: Payload, name: string): Promise<number> {
+  const doc = await payload.create({
+    collection: 'media',
+    data: { alt: name },
+    file: { data: PNG_1x1, name, mimetype: 'image/png', size: PNG_1x1.length },
+    overrideAccess: true,
+  })
+  return doc.id
 }
 
 function lexical(text: string) {
@@ -134,6 +152,51 @@ describe('public site data resolvers (Task 4A)', () => {
       expect(aTop.some((g) => g.name === 'A Guide')).toBe(true)
       const aBottom = await getGuideMenus(payload, siteAId, 'bottom')
       expect(aBottom.some((g) => g.name === 'A Guide')).toBe(false)
+    })
+  })
+
+  describe('getBanners + getNotificationAreas + getPopups (tenant-scoped, Task 4E)', () => {
+    it('returns only the queried site’s rows, with `image` populated to a Media doc', async () => {
+      const imageId = await createMedia(payload, `${uniqueSiteId('img')}.png`)
+
+      await payload.create({
+        collection: 'banners',
+        data: { tenant: siteAId, image: imageId, title: 'A Banner' },
+        overrideAccess: true,
+      })
+      await payload.create({
+        collection: 'banners',
+        data: { tenant: siteBId, image: imageId, title: 'B Banner' },
+        overrideAccess: true,
+      })
+      await payload.create({
+        collection: 'notificationAreas',
+        data: { tenant: siteAId, image: imageId, title: 'A Notification' },
+        overrideAccess: true,
+      })
+      await payload.create({
+        collection: 'popups',
+        data: { tenant: siteAId, image: imageId, title: 'A Popup' },
+        overrideAccess: true,
+      })
+
+      const aBanners = await getBanners(payload, siteAId)
+      expect(aBanners.some((b) => b.title === 'A Banner')).toBe(true)
+      expect(aBanners.some((b) => b.title === 'B Banner')).toBe(false)
+      const populatedImage = aBanners.find((b) => b.title === 'A Banner')?.image
+      expect(typeof populatedImage === 'object' && populatedImage?.url).toBeTruthy()
+
+      const aAreas = await getNotificationAreas(payload, siteAId)
+      expect(aAreas.some((a) => a.title === 'A Notification')).toBe(true)
+
+      const aPopups = await getPopups(payload, siteAId)
+      expect(aPopups.some((p) => p.title === 'A Popup')).toBe(true)
+
+      // Cross-tenant isolation on the other two collections too.
+      expect(
+        (await getNotificationAreas(payload, siteBId)).some((a) => a.title === 'A Notification'),
+      ).toBe(false)
+      expect((await getPopups(payload, siteBId)).some((p) => p.title === 'A Popup')).toBe(false)
     })
   })
 

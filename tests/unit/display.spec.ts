@@ -6,6 +6,7 @@ import {
   isLive,
   isSafeInternalLink,
   reorder,
+  sortByDisplayOrder,
 } from '@/content/display'
 
 describe('display helpers (Task 3C)', () => {
@@ -141,6 +142,35 @@ describe('display helpers (Task 3C)', () => {
       const input = ['x', 'y', 'z']
       reorder(input, 0, 'bottom')
       expect(input).toEqual(['x', 'y', 'z'])
+    })
+  })
+
+  describe('sortByDisplayOrder (Task 4E: banners / notification areas)', () => {
+    it('sorts ascending by displayOrder', () => {
+      const items = [
+        { id: 'c', displayOrder: 2 },
+        { id: 'a', displayOrder: 0 },
+        { id: 'b', displayOrder: 1 },
+      ]
+      expect(sortByDisplayOrder(items).map((i) => i.id)).toEqual(['a', 'b', 'c'])
+    })
+
+    it('treats a missing displayOrder as 0 and keeps ties in original order', () => {
+      const items = [
+        { id: 'first', displayOrder: undefined },
+        { id: 'second', displayOrder: 0 },
+        { id: 'third', displayOrder: null },
+      ]
+      expect(sortByDisplayOrder(items).map((i) => i.id)).toEqual(['first', 'second', 'third'])
+    })
+
+    it('does not mutate the input', () => {
+      const items = [
+        { id: 'b', displayOrder: 1 },
+        { id: 'a', displayOrder: 0 },
+      ]
+      sortByDisplayOrder(items)
+      expect(items.map((i) => i.id)).toEqual(['b', 'a'])
     })
   })
 

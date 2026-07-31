@@ -2,14 +2,44 @@ import React from 'react'
 
 import { isValidationActive, parseValidationMode } from '@/accessibility/validationMode'
 import { branding } from '@/branding'
+import type { Popup } from '@/payload-types'
 import { getCurrentMember } from '@/site/member'
-import { buildNav } from '@/site/nav'
-import { getActiveGuideMenus, getActiveSite, getActiveSiteMenus } from '@/site/rsc'
+import { buildNav, resolveDisplayLink } from '@/site/nav'
+import { getActiveGuideMenus, getActivePopups, getActiveSite, getActiveSiteMenus } from '@/site/rsc'
 import { AccessibilityValidator } from './_components/AccessibilityValidator'
+import type { PopupItem } from './_components/PopupLayer'
+import { PopupLayer } from './_components/PopupLayer'
 import { SiteFooter } from './_components/SiteFooter'
 import { SiteHeader } from './_components/SiteHeader'
 import { TrafficBeacon } from './_components/TrafficBeacon'
 import './styles.css'
+
+/**
+ * Maps a live `popups` doc (Payload shape) to the plain-data props the client
+ * `PopupLayer` needs — `null` when the image did not populate to a Media doc
+ * with a `url` (defensive; the collection requires `image`). Defaults mirror
+ * the collection's own field defaults (`Popups.ts`) for a doc created before
+ * those defaults existed.
+ */
+function toPopupItem(popup: Popup): PopupItem | null {
+  const image = typeof popup.image === 'object' ? popup.image : null
+  if (!image?.url) {
+    return null
+  }
+  return {
+    id: popup.id,
+    title: popup.title,
+    imageUrl: image.url,
+    imageAlt: image.alt || popup.title,
+    link: resolveDisplayLink(popup),
+    width: popup.width ?? 400,
+    height: popup.height ?? 300,
+    top: popup.top ?? 100,
+    left: popup.left ?? 100,
+    showScrollbar: Boolean(popup.showScrollbar),
+    closeForDay: popup.closeForDay !== false,
+  }
+}
 
 export const metadata = {
   title: branding.productName,
@@ -46,15 +76,17 @@ export const metadata = {
  * this layout wraps reuses the same fetch for its LNB/breadcrumb.
  */
 export default async function FrontendLayout({ children }: { children: React.ReactNode }) {
-  const [site, menus, topGuides, bottomGuides, member] = await Promise.all([
+  const [site, menus, topGuides, bottomGuides, member, popups] = await Promise.all([
     getActiveSite(),
     getActiveSiteMenus(),
     getActiveGuideMenus('top'),
     getActiveGuideMenus('bottom'),
     getCurrentMember(),
+    getActivePopups(),
   ])
 
   const navNodes = buildNav(menus, { member })
+  const popupItems = popups.map(toPopupItem).filter((item): item is PopupItem => item !== null)
 
   // Web-accessibility validation toggle (Task 8.2 / TODO 8.3, ACS_VLD_USE_CD).
   // Only mount the client validator when the site's mode does something —
@@ -87,6 +119,8 @@ export default async function FrontendLayout({ children }: { children: React.Rea
         </div>
         {/* Privacy-conscious traffic capture (feeds Phase-5 stats) — no PII. */}
         <TrafficBeacon />
+        {/* Site-wide popups (팝업) — live for the active site, dismiss-for-a-day handled client-side. */}
+        <PopupLayer popups={popupItems} />
         {/* Accessibility auto-diagnosis toggle (dev/local only; no-op when off). */}
         {isValidationActive(validationMode) ? (
           <AccessibilityValidator mode={validationMode} />
