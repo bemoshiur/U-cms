@@ -45,6 +45,7 @@ import { AccessHistoryView as AccessHistoryView_3f0107abfc9bd423772cbfd67cacdc36
 import { PasswordPolicyView as PasswordPolicyView_601e5eb41c46d6ca0e3eb6fee704377c } from '../../../components/privacy/PasswordPolicyView'
 import { PrivacyOrgChartView as PrivacyOrgChartView_e65f28e98792aa2420374271baa4b802 } from '../../../components/privacy/PrivacyOrgChartView'
 import { LoginView as LoginView_7af18470411f801d2687404387d2db4e } from '../../../components/login/LoginView'
+import { ViewAllMenusNavLink as ViewAllMenusNavLink_2c3e0f1a9b7d4468 } from '../../../components/admin/ViewAllMenusNavLink'
 import { StandardizationNavLink as StandardizationNavLink_8a1a0001 } from '../../../components/standardization/StandardizationNavLink'
 import { CodeSpecView as CodeSpecView_8a1a0002 } from '../../../components/standardization/CodeSpecView'
 import { MetaInspectionView as MetaInspectionView_8b1b0001 } from '../../../components/standardization/MetaInspectionView'
@@ -148,6 +149,7 @@ export const importMap = {
   '/components/privacy/PrivacyOrgChartView#PrivacyOrgChartView':
     PrivacyOrgChartView_e65f28e98792aa2420374271baa4b802,
   '/components/login/LoginView#LoginView': LoginView_7af18470411f801d2687404387d2db4e,
+  '/components/admin/ViewAllMenusNavLink#ViewAllMenusNavLink': ViewAllMenusNavLink_2c3e0f1a9b7d4468,
   '/components/standardization/StandardizationNavLink#StandardizationNavLink':
     StandardizationNavLink_8a1a0001,
   '/components/standardization/CodeSpecView#CodeSpecView': CodeSpecView_8a1a0002,

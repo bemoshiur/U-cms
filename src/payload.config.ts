@@ -377,6 +377,11 @@ export default buildConfig({
         // Phase 8 (Task 8.1a): nav link to the Code Specification report view
         // (ref 1-74), grant-gated on standardization.codeSpec (the DBA grant).
         '/components/standardization/StandardizationNavLink#StandardizationNavLink',
+        // Audit fix 3 (ref 3-11): the "전체 메뉴 보기" full-menu sitemap overlay,
+        // reachable from every admin page. Reads the FULL adminMenus tree
+        // server-side and re-filters every node through hasMenuAccessSync before
+        // it ever reaches the client. See src/components/admin/ViewAllMenusNavLink.tsx.
+        '/components/admin/ViewAllMenusNavLink#ViewAllMenusNavLink',
       ],
       views: {
         // Task 5D (TODO 5.7; refs 1-7/1-8): the permission-filtered admin landing
