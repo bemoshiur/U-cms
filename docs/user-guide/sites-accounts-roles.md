@@ -307,3 +307,4 @@ The seeded super admin holds `ROLE_ADMIN` **and** `ROLE_PRIVACY_OFFICER`.
 
 - The legacy **checkbox-tree UI** for menu grants (open-all/close-all, per-node checkboxes across the whole hierarchy, ref 1-13) is deferred — for now Menu Grants uses Payload's standard multi-select.
 - The legacy **bulk "remove selected users from role"** control on the role-users view is deferred — the Users list is read-only.
+- The legacy **System Information** screen (ref 1-79 — a read-only dump of the runtime's JVM/OS environment and version info) is intentionally not built. It has no equivalent in this stack (no JVM to introspect) and no operator-facing value beyond what `docs/ops/monitoring.md` and the `/health` probe already surface (app version, DB reachability) — decided as a deliberate won't-build rather than a gap.
