@@ -56,6 +56,7 @@ import { BatchApplyForm as BatchApplyForm_8b1b0006 } from '../../../components/s
 import { AccessibilityDiagnosisView as AccessibilityDiagnosisView_8c20001 } from '../../../components/statistics/AccessibilityDiagnosisView'
 import { AccessibilityStatisticsView as AccessibilityStatisticsView_8c20002 } from '../../../components/statistics/AccessibilityStatisticsView'
 import { CollectionCards as CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1 } from '@payloadcms/next/rsc'
+import { SurveyResultsPanel as SurveyResultsPanel_8d3f0001 } from '../../../components/surveys/SurveyResultsPanel'
 
 /** @type import('payload').ImportMap */
 export const importMap = {
@@ -164,4 +165,5 @@ export const importMap = {
   '/components/statistics/AccessibilityStatisticsView#AccessibilityStatisticsView':
     AccessibilityStatisticsView_8c20002,
   '@payloadcms/next/rsc#CollectionCards': CollectionCards_f9c02e79a4aed9a3924487c0cd4cafb1,
+  '/components/surveys/SurveyResultsPanel#SurveyResultsPanel': SurveyResultsPanel_8d3f0001,
 }
