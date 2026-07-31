@@ -91,12 +91,12 @@ The moment your enrolment is confirmed, the confinement lifts automatically on y
 
 ### To enrol a device
 
-1. Sign in with your email and password. Because you are not yet enrolled, you land on the enrolment surface.
-2. Install a TOTP authenticator app on your phone if you don't have one — **Google Authenticator**, Microsoft Authenticator, 1Password, or Authy all work.
-3. U-CMS shows a **QR code** — and it is shown **once**. In your app choose _Scan a QR code_ and point the camera at it. A new entry named **U-CMS** appears, showing a rotating 6-digit code. (If scanning fails, the enrolment response also includes a secret key you can type in manually.)
-4. Enter the current 6-digit code back on the enrolment screen to confirm. If it's accepted, two-factor authentication is now active on your account and you can use the system normally.
+1. Sign in with your email and password on the normal admin login screen. Because you are not yet enrolled, the login form itself switches to a **"Set up two-factor authentication"** screen right after your password is accepted — you never have to find enrolment yourself.
+2. Install a TOTP authenticator app on your phone if you don't have one — **Google Authenticator**, Microsoft Authenticator, 1Password, or Authy all work. The enrolment screen links to a plain-text install walkthrough (also always available at **`/api/2fa/guide`**).
+3. The enrolment screen shows a **QR code** — and it is shown **once**. In your app choose _Scan a QR code_ and point the camera at it. A new entry named **U-CMS** appears, showing a rotating 6-digit code. (If scanning fails, the same screen also shows the secret key as text so you can type it into your app manually.)
+4. Enter the current 6-digit code into the box on that same screen and submit. If it's accepted, two-factor authentication is now active on your account and you land in the admin panel normally. A wrong code just shows an error and lets you try again — the QR code and secret stay the same until you succeed.
 
-A plain-text install walkthrough is always available at **`/api/2fa/guide`**.
+If you'd rather not enrol right now, the enrolment screen has a **Log out** link so you aren't stuck.
 
 > **The QR code is shown only once.** After you confirm, U-CMS never displays the secret again. If you get a new phone or lose your device, you cannot re-scan yourself — an administrator must reset your 2FA for you (below).
 

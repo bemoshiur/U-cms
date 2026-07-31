@@ -1,7 +1,14 @@
 import { expect, request as apiRequest, test, type APIRequestContext } from '@playwright/test'
 
 import { getAdminToken, jsonAuth } from './helpers/api'
-import { loginAsAdmin, loginAsAdminWithBadOtp, logoutAdmin, totpFor } from './helpers/auth'
+import {
+  loginAsAdmin,
+  loginAsAdminUntilEnrollStep,
+  loginAsAdminWithBadOtp,
+  logoutAdmin,
+  submitEnrollCode,
+  totpFor,
+} from './helpers/auth'
 import { E2E_ADMIN_PASSWORD, E2E_SUPER } from './helpers/credentials'
 import { readFixtures } from './helpers/fixtures'
 
@@ -167,5 +174,72 @@ test.describe('Admin auth + 2FA', () => {
     // login block that would make enrolment impossible.
     await loginAsAdmin(page, { email, password: E2E_ADMIN_PASSWORD })
     await expect(page).toHaveURL(/\/admin(\/|$|\?)/)
+  })
+
+  test('Audit Fix 1: an un-enrolled admin completes Google-OTP enrolment through the browser UI (ref 1-6)', async ({
+    page,
+  }) => {
+    // A fresh throwaway admin, created the same way as the P1 probe above, so
+    // it starts un-enrolled under the (already 2FA-required) back-office site.
+    const suffix = Date.now()
+    const roleRes = await apiCtx.post('/api/roles', {
+      headers: jsonAuth(adminToken),
+      data: {
+        roleId: `ROLE_E2E_ENROLL_${suffix}`,
+        name: `enroll ${suffix}`,
+        description: 'e2e browser-enrolment probe',
+        isSuper: true,
+      },
+    })
+    expect(roleRes.ok(), `create probe role: ${roleRes.status()}`).toBeTruthy()
+    const roleId = ((await roleRes.json()) as { doc: { id: number } }).doc.id
+
+    const email = `e2e-enroll-${suffix}@admin.example.com`
+    const userRes = await apiCtx.post('/api/users', {
+      headers: jsonAuth(adminToken),
+      data: {
+        email,
+        loginId: `e2eenr${suffix}`,
+        name: 'enroll probe',
+        password: E2E_ADMIN_PASSWORD,
+        status: 'active',
+        roles: [roleId],
+      },
+    })
+    expect(userRes.ok(), `create probe admin: ${userRes.status()}`).toBeTruthy()
+
+    // Password-only login through the real browser form reveals the new
+    // enrolment screen instead of redirecting straight into a confined
+    // session (the gap this fix closes) — proves the QR/secret render.
+    const secret = await loginAsAdminUntilEnrollStep(page, { email, password: E2E_ADMIN_PASSWORD })
+    expect(secret, 'enrolment screen exposes a usable TOTP secret').toBeTruthy()
+    await expect(
+      page.locator('img[alt="Scan with your authenticator app"]'),
+      'QR code image renders',
+    ).toBeVisible()
+    await expect(page).toHaveURL(/\/admin\/login/)
+
+    // A wrong code shows an error and lets the admin retry — the QR/secret
+    // stay put (same unconfirmed secret is reused server-side).
+    await submitEnrollCode(page, '000000')
+    await expect(page.getByText(/that code is not valid/i)).toBeVisible()
+    await expect(page.locator('#enroll-secret')).toBeVisible()
+    await expect(page).toHaveURL(/\/admin\/login/)
+
+    // The correct code (computed from the on-screen secret, exactly like a
+    // real authenticator app would) confirms enrolment and lands in /admin —
+    // not confined/blocked.
+    await submitEnrollCode(page, totpFor(secret))
+    await page.waitForURL((url) => !url.pathname.includes('/admin/login'), { timeout: 20000 })
+    await expect(page).toHaveURL(/\/admin(\/|$|\?)/)
+    await expect(page).toHaveTitle(/Dashboard — U-CMS/)
+
+    // Fully enrolled now — a subsequent login goes through the normal OTP
+    // step (not enrolment) and the confinement is lifted.
+    await logoutAdmin(page)
+    await loginAsAdmin(page, { email, password: E2E_ADMIN_PASSWORD, totpSecret: secret })
+    await expect(page).toHaveURL(/\/admin(\/|$|\?)/)
+
+    await logoutAdmin(page)
   })
 })

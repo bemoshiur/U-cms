@@ -88,6 +88,39 @@ export async function loginAsAdminWithBadOtp(
   await page.locator('button[type="submit"]').click()
 }
 
+/**
+ * Logs in to `/admin` with a password-only admin who has NOT yet enrolled a
+ * 2FA device on a site that requires it, and waits for the client-side
+ * enrolment screen (`LoginForm.tsx`'s `'enroll'` step) to appear — i.e. drives
+ * the real browser flow described in `task-audit-fix1-brief.md` rather than
+ * calling `/api/2fa/enroll` directly. Returns the TOTP secret rendered in the
+ * `#enroll-secret` fallback `<code>` block, which the caller can feed to
+ * `totpFor` to compute a valid code the same way a real authenticator app
+ * would.
+ */
+export async function loginAsAdminUntilEnrollStep(
+  page: Page,
+  creds: { email: string; password: string },
+): Promise<string> {
+  await page.goto('/admin/login')
+  await page.locator('#field-email').fill(creds.email)
+  await page.locator('#field-password').fill(creds.password)
+  await page.locator('button[type="submit"]').click()
+
+  await page.locator('#enroll-secret').waitFor({ state: 'visible', timeout: 20000 })
+  const secret = (await page.locator('#enroll-secret').textContent())?.trim()
+  if (!secret) {
+    throw new Error('loginAsAdminUntilEnrollStep: enrolment secret not found on the page')
+  }
+  return secret
+}
+
+/** Fills and submits the 6-digit code on the enrolment screen's `#field-enroll-code` input. */
+export async function submitEnrollCode(page: Page, code: string): Promise<void> {
+  await page.locator('#field-enroll-code').fill(code)
+  await page.locator('button[type="submit"]').click()
+}
+
 /** Logs out of the admin panel and asserts the login form is shown again. */
 export async function logoutAdmin(page: Page): Promise<void> {
   await page.goto('/admin/logout')
