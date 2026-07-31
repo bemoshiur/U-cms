@@ -135,17 +135,14 @@ async function syncDemoSuperAdmin(payload: Payload): Promise<void> {
     const admin = admins.docs[0]
     if (!admin) return
 
-    // No hardcoded default password — reuse SEED_ADMIN_PASSWORD (already set for
-    // the seed). Skip entirely if there is no password to apply.
-    const password = process.env.DEMO_ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD
-    if (!password) {
-      payload.logger.warn(
-        '[demo-admin] DEMO_ADMIN_PASSWORD / SEED_ADMIN_PASSWORD not set — skipping super-admin sync.',
-      )
-      return
-    }
-    const email =
-      process.env.DEMO_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL || 'admin@publicpulse.com.bd'
+    // Fixed demo super-admin credentials (owner-provided, for this demo). Env
+    // vars still take precedence — set DEMO_ADMIN_PASSWORD in Vercel to override
+    // without touching the repo. DEMO-ONLY: this value is committed, so change
+    // the password from Account settings after first login and set
+    // SEED_ON_DEPLOY=false so this stops re-applying on every cold start.
+    const password =
+      process.env.DEMO_ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD || 'TSL@449#'
+    const email = process.env.DEMO_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL || 'owner@ucms.app'
     // Critical step: reset email + password (Payload re-hashes the password).
     // Only guaranteed-valid fields, so nothing can block it.
     await payload.update({
