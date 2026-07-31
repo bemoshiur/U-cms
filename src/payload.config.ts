@@ -339,6 +339,13 @@ const plugins: Plugin[] = [
 export default buildConfig({
   admin: {
     user: Users.slug,
+    // Force the LIGHT theme so the back-office never renders Payload's default
+    // dark canvas. The Korean e-Gov (KRDS) retheme in
+    // `src/app/(payload)/custom.scss` targets the light-theme CSS variables
+    // (white / cool-gray surfaces, gov-blue accents, Pretendard) — pinning the
+    // theme here removes the dark toggle and the prefers-color-scheme dark path
+    // so those overrides always apply. See task-egov-admin-report.md.
+    theme: 'light',
     importMap: {
       baseDir: path.resolve(dirname),
     },

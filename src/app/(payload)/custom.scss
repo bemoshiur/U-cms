@@ -1,47 +1,221 @@
-// ---------------------------------------------------------------------------
-// Admin brand layer
-// ---------------------------------------------------------------------------
-// This file exists to swap Payload's default neutral admin accent for our
-// product's brand color, without redesigning the admin panel. Colors below
-// mirror `branding.colors.primary` / `branding.colors.primaryDark` in
-// src/branding.ts (kept in sync by hand — SCSS can't import the TS module).
-//
-// What we found inspecting node_modules/@payloadcms/ui/dist/scss (v3.86.0):
-// - There is no `--theme-brand-*` custom property in this Payload version.
-// - `--theme-elevation-*` is the neutral gray scale everything defaults to;
-//   it inverts between themes (see scss/vars.scss) and isn't a "brand" hook.
-// - `--theme-success-*` happens to render as blue in Payload's default
-//   palette and drives things like checkboxes, focus rings, and pills — but
-//   it's semantically "success", not "brand". Re-pointing it to our brand
-//   color would recolor unrelated success/confirmation UI, which is a
-//   redesign, not a brand layer, so we deliberately leave it alone.
-// - The actual "primary action" hook is `.btn--style-primary`, which the
-//   Button component defines as local custom properties
-//   (see @payloadcms/ui/dist/elements/Button/index.scss) that otherwise fall
-//   back to the neutral elevation scale. This is the button used for
-//   "Login", "Save", "Publish", and "Create New" — the most visible
-//   interactive surface in the admin — so overriding it here is the highest
-//   -leverage, lowest-risk way to make the brand color show up everywhere it
-//   matters.
-//
-// Set once per theme, since the brand blue does not flip between light/dark
-// the way Payload's neutral elevation tokens do.
+// Korean e-Government (KRDS) admin theme — Pretendard web font.
+// MUST stay the first at-rule in this file: a CSS `@import` is only honoured
+// when it precedes every other rule. Provides the `Pretendard` family the
+// public eGov site uses; loaded from CDN so no local font asset is bundled. If
+// the CDN is unreachable the `--font-body` fallback stack below takes over.
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
+// ---------------------------------------------------------------------------
+// Korean e-Gov (KRDS) admin retheme
+// ---------------------------------------------------------------------------
+// Goal: align the Payload admin back-office with the SAME Korean e-Government
+// look as the public U-CMS site — a LIGHT canvas (never Payload's default dark
+// surfaces), gov-blue `#0B50D0` accents, cool-gray borders, and the Pretendard
+// typeface. `admin.theme: 'light'` in src/payload.config.ts pins the theme, so
+// only the light-theme variables below ever apply.
+//
+// Method (see task-egov-admin-brief.md): this is a STYLESHEET retheme, not a
+// React rebuild. The backbone is overriding Payload's own theme CSS custom
+// properties (read from @payloadcms/ui/dist/scss/{colors,app,type,vars}.scss,
+// v3.86.0); class-scoped rules are added only where variables don't reach
+// (primary buttons, nav active state, list tables, input focus rings).
+//
+// Cascade note: every rule here is UNLAYERED. Payload ships its defaults inside
+// `@layer payload-default, payload`, and unlayered styles beat layered styles
+// regardless of specificity — so these overrides win WITHOUT `!important` or
+// specificity hacks.
+//
+// Tokens (identical to the public site):
+//   primary #0B50D0 · primary-dark #03318C · hover #1968E1 · primary-bg #EAF0FB
+//   point/alert red #E01111
+//   ink #1E2124/#33363D · gray #697077/#8A8F97 · line #DDE1E6/#E8EBEE
+//   surface-muted #F4F5F6 · white surfaces · Pretendard
+
+// ---------------------------------------------------------------------------
+// Global tokens (theme-independent): font, squared corners, focus ring color
+// ---------------------------------------------------------------------------
+:root {
+  // Body font → Pretendard, matching the public eGov site. `--font-body` is the
+  // single font hook Payload feeds into `%body`, headings, buttons and inputs
+  // (see type.scss / app.scss), so overriding it re-fonts the whole panel.
+  --font-body: 'Pretendard', -apple-system, 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif;
+
+  // Squared, authoritative corners (KRDS 2–4px) in place of Payload's rounder
+  // defaults (3/4/8px). Drives buttons, inputs, cards, pills.
+  --style-radius-s: 2px;
+  --style-radius-m: 3px;
+  --style-radius-l: 4px;
+
+  // Keyboard focus outline → gov-blue (Payload defaults it to ink/success). A
+  // visible, brand-colored focus ring on every focusable element (AA).
+  --accessibility-outline: 2px solid #0b50d0;
+}
+
+// ---------------------------------------------------------------------------
+// Light-theme variable overrides (the retheme backbone)
+// ---------------------------------------------------------------------------
+// `theme: 'light'` means <html> always carries data-theme="light", so scoping
+// the surface ramp here is sufficient (and guards against any dark fallback).
 html[data-theme='light'] {
-  .btn--style-primary {
-    --bg-color: #0f62fe; // branding.colors.primary
-    --color: #ffffff;
-    --hover-bg: #0043ce; // one step darker, for hover contrast on a light canvas
-    --hover-color: #ffffff;
+  // --- Elevation / grayscale ramp → eGov cool-gray -------------------------
+  // Payload derives almost every surface, border and muted-text color from this
+  // 0…1000 scale (white → black). Retinted to the eGov cool-grays, keeping the
+  // luminance order intact so component contrast steps still work. This is what
+  // turns borders into #DDE1E6/#E8EBEE, panels into #F4F5F6, and text into ink.
+  --theme-elevation-0: #ffffff; // page bg, inputs, cards (--theme-bg/-input-bg)
+  --theme-elevation-50: #f4f5f6; // surface-muted (nav panel, table header)
+  --theme-elevation-100: #e8ebee; // line-light (nav border, hairlines)
+  --theme-elevation-150: #dde1e6; // line (--theme-border-color, input borders)
+  --theme-elevation-200: #ced3da;
+  --theme-elevation-250: #bec4cd;
+  --theme-elevation-300: #aeb5bf;
+  --theme-elevation-350: #9ea6b1;
+  --theme-elevation-400: #8a8f97; // gray-2 (muted text, placeholders)
+  --theme-elevation-450: #7c818a;
+  --theme-elevation-500: #697077; // gray-1
+  --theme-elevation-550: #5d636a;
+  --theme-elevation-600: #50565d;
+  --theme-elevation-650: #464b52;
+  --theme-elevation-700: #3c4147;
+  --theme-elevation-750: #33363d; // ink-2
+  --theme-elevation-800: #2a2d33; // → --theme-text (body/heading ink)
+  --theme-elevation-850: #1e2124; // ink
+  --theme-elevation-900: #16181b;
+  --theme-elevation-950: #0c0d0f;
+  --theme-elevation-1000: #000000;
+
+  // Border color is derived from elevation-150 in colors.scss; restate it in
+  // case a downstream build reorders declarations.
+  --theme-border-color: #dde1e6;
+
+  // --- Accent / focus / "success" ramp → gov-blue -------------------------
+  // In Payload's palette `--theme-success-*` IS the interactive blue: it drives
+  // the focus ring ($focus-box-shadow → --theme-success-500), the checkbox
+  // focus glow (--theme-success-400), the keyboard outline (--theme-success-600)
+  // and confirmation UI. Repointing the whole ramp to a gov-blue scale makes
+  // every accent/active/focus surface #0B50D0 while keeping the pale steps
+  // (50–150) light enough to back toasts/pills with readable dark-blue text.
+  --theme-success-50: #eaf0fb; // primary-bg
+  --theme-success-100: #d6e2f8;
+  --theme-success-150: #bbd0f2;
+  --theme-success-200: #9ebcec;
+  --theme-success-250: #82a9e7;
+  --theme-success-300: #5e90e4;
+  --theme-success-350: #3b79e2;
+  --theme-success-400: #1968e1; // primary-hover (checkbox focus glow)
+  --theme-success-450: #1259d6;
+  --theme-success-500: #0b50d0; // primary — focus ring / main accent
+  --theme-success-550: #0a48bc;
+  --theme-success-600: #0940a8; // keyboard outline / accent text
+  --theme-success-650: #073a99;
+  --theme-success-700: #06348c; // ≈ primary-dark
+  --theme-success-750: #052e7d;
+  --theme-success-800: #04276b;
+  --theme-success-850: #032059;
+  --theme-success-900: #021a47;
+  --theme-success-950: #011232;
+
+  // --- Error ramp → eGov point/alert red ----------------------------------
+  // Payload's error mid-steps are a muted brick red; nudge them to the crisper
+  // eGov alert red #E01111 (validation borders/text stay high-contrast on
+  // white). Pale steps (50–150) are left as Payload's soft error backgrounds.
+  --theme-error-400: #f04444;
+  --theme-error-450: #e82626;
+  --theme-error-500: #e01111; // point/alert red
+  --theme-error-550: #c50f0f;
+  --theme-error-600: #ab0d0d;
+}
+
+// ---------------------------------------------------------------------------
+// Component polish (class-scoped, where variables don't reach)
+// ---------------------------------------------------------------------------
+
+// Primary action button (Login / Save / Publish / Create New) — solid gov-blue,
+// squared. Payload leaves these local vars pointing at the neutral elevation
+// scale; point them at the brand color. White label passes AA on #0B50D0.
+.btn--style-primary {
+  --bg-color: #0b50d0;
+  --color: #ffffff;
+  --hover-bg: #1968e1; // primary-hover
+  --hover-color: #ffffff;
+
+  &.btn--disabled {
+    --bg-color: #dde1e6;
+    --color: #697077;
+    --hover-bg: #dde1e6;
+    --hover-color: #697077;
   }
 }
 
-html[data-theme='dark'] {
-  .btn--style-primary {
-    --bg-color: #4589ff; // branding.colors.primaryDark — brighter, reads better on a dark canvas
-    --color: #051530;
-    --hover-bg: #78a9ff; // one step lighter, for hover contrast on a dark canvas
-    --hover-color: #051530;
+// Left navigation (LNB) — clean light-gray surface with a gov-blue active state
+// and a gov-blue active-indicator bar (Payload defaults the bar to ink).
+.nav {
+  background: var(--theme-elevation-50); // #F4F5F6 surface-muted
+  border-right-color: var(--theme-elevation-150);
+}
+
+.nav__link {
+  &.active,
+  &:has(.nav__link-indicator) {
+    color: #0b50d0;
+  }
+
+  &:hover {
+    color: #0b50d0;
+  }
+}
+
+.nav__link-indicator {
+  background: #0b50d0;
+}
+
+// List / collection tables — eGov style: light-gray header row with a gov-blue
+// underline, thin cool-gray row separators (replacing Payload's zebra fill),
+// and a subtle hover highlight for scan-ability.
+.table {
+  thead th {
+    background: var(--theme-elevation-50); // #F4F5F6 header row
+    color: var(--theme-elevation-600);
+    font-weight: 600;
+    border-bottom: 2px solid #0b50d0;
+  }
+
+  tbody tr {
+    // Neutralize Payload's odd-row zebra fill in favour of clean row rules.
+    &:nth-child(odd) {
+      background: transparent;
+    }
+
+    &:hover {
+      background: var(--theme-elevation-50);
+    }
+
+    td {
+      border-bottom: 1px solid var(--theme-elevation-100); // #E8EBEE separators
+    }
+  }
+}
+
+// Dashboard / collection cards — white eGov surface with a cool-gray border that
+// turns gov-blue on hover (Payload defaults cards to a gray fill).
+.card {
+  background: var(--theme-elevation-0);
+  border-color: var(--theme-elevation-150);
+
+  &--has-onclick:hover {
+    border-color: #0b50d0;
+  }
+}
+
+// Form inputs — cool-gray border with a gov-blue focus ring. Payload's
+// formInput only darkens the border on focus (no ring), so add an explicit
+// brand ring here across text inputs, textareas and react-select controls.
+.field-type {
+  input:not([type='checkbox']):not([type='radio']):focus,
+  textarea:focus,
+  .rs__control--is-focused {
+    border-color: #0b50d0;
+    box-shadow: 0 0 0 2px rgba(11, 80, 208, 0.25);
   }
 }
 
@@ -83,7 +257,7 @@ html[data-theme='dark'] {
   }
 
   &__tile {
-    color: rgba(15, 98, 254, 0.1); // branding.colors.primary at low opacity
+    color: rgba(11, 80, 208, 0.1); // gov-blue #0B50D0 at low opacity
     font-size: 0.85rem;
     font-weight: 600;
     letter-spacing: 0.02em;
@@ -91,10 +265,6 @@ html[data-theme='dark'] {
     -webkit-user-select: none;
     user-select: none;
   }
-}
-
-html[data-theme='dark'] .pii-watermark__tile {
-  color: rgba(255, 255, 255, 0.09);
 }
 
 @media print {
